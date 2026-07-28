@@ -1,0 +1,362 @@
+[
+  {
+    "id": "Q01",
+    "question": "What documents are required for a German student visa application from India?",
+    "topic": "Student Visa",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 7413.412094116211,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.8168389797210693,
+    "answer": "**German Student Visa Application Documents for Indians**\n\nBased on the retrieved context documents, the following documents are required for a German student visa application from India:\n\n**1. Completed Application Form**\n\n* This is a general requirement mentioned in all the context documents.\n\n**2. Additional Documents (Varies by Location)**\n\n* The specific additional documents required may vary depending on the city or town you reside in, as mentioned in Documents 1 and 2.\n* However, the context does not provide a comprehensive list of these additional documents.\n\n**3. Letter of Admission from a German Study Program**\n\n* This is a key precondition for getting a German Student Visa, as mentioned in Document 5.\n\n**Note:** The context does not provide a complete list of required documents. It is recommended to check the website of the relevant Foreigners' Authority office for specific requirements.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "MyGermanUniversity — Student Visa Germany From India",
+      "Germany Visa — Student Visa from India Guide",
+      "MyGermanUniversity — Student Visa Germany From India",
+      "Germany Visa — Student Visa from India Guide",
+      "MyGermanUniversity — Student Visa Germany From India"
+    ]
+  },
+  {
+    "id": "Q02",
+    "question": "What is the APS certificate for Indian applicants and why is it mandatory?",
+    "topic": "APS Certificate",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 710.9689712524414,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.7647702693939209,
+    "answer": "**APS Certificate for Indian Applicants**\n\n**What is the APS Certificate?**\n\nThe APS (Akademische Prüfstelle) certificate is a verification process to confirm the authenticity of your academic documents for Indian students applying to German universities.\n\n**Why is the APS Certificate Mandatory for Indian Applicants?**\n\nThe APS certificate is mandatory for Indian students in most cases, as stated by APS India. However, there are exceptions:\n\n1. **Scholarship Holders**: Students funded by Germany- or EU-based public funds (e.g., DAAD scholarships) are exempt from the requirement of providing the APS certificate.\n\n**Key Facts about the APS Certificate**\n\n1. **Issued by**: APS India\n2. **Purpose**: To confirm the authenticity of your academic documents and eligibility to study in Germany\n3. **Processing Time**: 4-8 weeks\n4. **Fee**: ₹18,000 (approximately)\n5. **Validity**: Unlimited (for the verified documents)\n6. **Interview**: May be required for some applicants\n\n**How to Apply for the APS Certificate**\n\nTo apply for the APS certificate, follow these 5 simple steps:\n\n1. **Review Requirements**: Review the requirements relevant to your case.\n2. **Gather Documents**: Gather all necessary documents.\n3. **Register Online**: Register online and fill out the application form.\n4. **Pay Processing Fee**: Pay the processing fee (₹18,000) online via CCAvenue.\n5. **Submit Application Package**: Submit your application package by courier (printed, signed, and complete).\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "Uni-Assist Application Process for Indian Students",
+      "MyGermanUniversity — Student Visa Germany From India",
+      "Germany Visa — Student Visa from India Guide",
+      "APS India — Process for Indian Applicants",
+      "APS India — Process for Indian Applicants"
+    ]
+  },
+  {
+    "id": "Q03",
+    "question": "What is the minimum Class XII score required for Indian students applying for Bachelor's studies in Germany?",
+    "topic": "APS Eligibility",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 614.6361827850342,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.8946909308433533,
+    "answer": "**Minimum Class XII Score Requirement for Indian Students**\n\nTo determine the minimum Class XII score required for Indian students applying for Bachelor's studies in Germany, we will follow these steps:\n\n1. **Check the Eligibility Criteria**: According to **Document 1 (APS India — Process for Indian Applicants)**, Indian applicants seeking admission to a Bachelor's program in Germany must achieve a minimum overall score of 70% of the maximum achievable marks in the Class XII certificate.\n\n2. **Verify the Requirement**: This requirement applies to admissions starting from **Winter Semester 2026/2027**, as stated in **Document 1 (APS India — Process for Indian Applicants)**.\n\n3. **Confirm the Requirement**: There is no other document that contradicts or modifies this requirement.\n\n**Conclusion**\n\nThe minimum Class XII score required for Indian students applying for Bachelor's studies in Germany is **70% of the maximum achievable marks**.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "APS India — Process for Indian Applicants",
+      "TU Berlin — International Applicants Overview",
+      "TU Berlin — International Applicants Overview",
+      "APS India — Process for Indian Applicants",
+      "Uni-Assist Application Process for Indian Students"
+    ]
+  },
+  {
+    "id": "Q04",
+    "question": "What is the N-Verfahren procedure for university-specific admission under state law?",
+    "topic": "Landesrecht Procedure",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 894.9460983276367,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.6882568597793579,
+    "answer": "**N-Verfahren Procedure for University-Specific Admission under State Law**\n\n**I. Overview**\n\nThe N-Verfahren procedure is a university-specific admission process under state law, applicable only for participating German higher education institutions.\n\n**II. Eligibility**\n\nTo be eligible for the N-Verfahren procedure, applicants must meet the following criteria:\n\n* Participating German higher education institutions must be involved.\n* The applicant's academic background and intended studies in Germany must be considered.\n\n**III. Application Process**\n\nThe N-Verfahren procedure is not a general individual APS procedure, but rather a specific process for participating German higher education institutions. The following steps outline the general process:\n\n1. **Get information in advance**: Check the APS India website to identify the procedure that applies to your academic background and intended studies in Germany.\n2. **Formal Überprüfung**: The formal verification of the applicant's documents is carried out by the German higher education institution.\n3. **Fachliche und sprachliche Auswahl**: The German higher education institution is responsible for the academic and language selection of the applicant.\n\n**IV. Key Documents**\n\n* The N-Verfahren procedure is based on the decision of the Kultusministerkonferenz (Conference of Ministers of Education) from 17 March 2006, as amended on 10 December 2015.\n* The procedure is outlined in the Merkblatt Verfahren Landesrecht (State Law Procedure) document.\n\n**V. Important Notes**\n\n* The N-Verfahren procedure does not replace the admission decision of the German higher education institution or the visa decision of the competent German mission.\n* The procedure is only applicable for participating German higher education institutions.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "APS India — Document Checklists",
+      "APS India — Document Checklists",
+      "APS India — Official Homepage",
+      "APS India — Merkblatt Verfahren Landesrecht (State Law Procedure)",
+      "APS India — Leaflet Process P (Partnership Universities)"
+    ]
+  },
+  {
+    "id": "Q05",
+    "question": "What are the rules and document requirements for APS Process-P partnership university applicants?",
+    "topic": "APS Partnership",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 867.2630786895752,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.7700222730636597,
+    "answer": "**APS Process-P Partnership University Applicants: Rules and Document Requirements**\n\n**Eligibility Criteria:**\n\n1. **Admission to German Universities**: Students must have been granted admission to German universities for a long-term (double) degree program within the framework of an Indo-German university cooperation.\n2. **Selection Process**: Applicants must be selected by German university representatives based on a subject knowledge test through an interview.\n\n**Submission of Documents:**\n\n1. **Collective Application**: Applications must be submitted collectively for all students of the group.\n2. **Required Documents**:\n\t* Copy of the partnership agreement (MOU)\n\t* The interview minutes including details of the subject specific selection process\n\t* List of selected candidates along with their university enrollment number and date of birth\n\t* Contact details of the representatives from both the German and Indian universities (Address, e-mail id, and telephone number)\n\t* Printout or a copy of the banking transaction details\n\n**Result of the APS Verification Procedure:**\n\n1. **No Individual APS Certificate**: Applicants of \"Process-P\" will not receive an individual APS certificate.\n2. **Result Notification**: The concerned German university will be informed about the result of the verification process by APS India via email.\n\n**Visa Application:**\n\n1. **Eligibility**: Applicants may apply for their student visa via VFS once the verification result has been issued.\n2. **Exceptions**: Candidates who have failed to obtain an APS certificate through the individual application process due to fraudulent documents may not apply for 'Process P'.\n\n**Changing from Process-P to Individual Application:**\n\n1. **Deregistration Notice**: In case a candidate registered under \"Process-P\" wishes to discontinue studies in the partnership program before completion of the intended study course, the following documents will have to be presented to APS India:\n\t* Deregistration notice (including reason for deregistration) from the German university or declaration by the German university about the time and reason for leaving the partnership program.\n\t* Certificate of deregistration from the Alien's Office in Germany.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "APS India — Leaflet Process P (Partnership Universities)",
+      "APS India — Leaflet Process P (Partnership Universities)",
+      "APS India — Leaflet Process P (Partnership Universities)",
+      "APS India — Leaflet Process P (Partnership Universities)",
+      "APS India — Leaflet Process P (Partnership Universities)"
+    ]
+  },
+  {
+    "id": "Q06",
+    "question": "Who is exempt from the APS dMAT examination for Indian students?",
+    "topic": "APS dMAT Exam",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 7043.526172637939,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.7166412472724915,
+    "answer": "**Exemptions from the APS dMAT Examination**\n\nBased on the retrieved context documents, the following groups of Indian students are exempt from the APS dMAT examination:\n\n**1. Applicants who completed their APS online registration before 29 June 2026**\n\n* This exemption applies to students who completed their online registration before the specified date.\n* They are not required to take the dMAT examination.\n\n**2. Applicants who shipped their complete APS application documents before 29 June 2026**\n\n* This exemption applies to students who shipped their complete application documents before the specified date.\n* They are not required to take the dMAT examination.\n\n**3. Applicants who have already completed the APS procedure and have received their APS certificate**\n\n* This exemption applies to students who have already completed the APS procedure and have received their APS certificate.\n* They are not required to take the dMAT examination for that completed APS procedure.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official APS India or g.a.s.t.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "APS India — dMAT Exam Details",
+      "APS India — dMAT Exam Details",
+      "APS India — dMAT Exam Details",
+      "APS India — dMAT Exam Details",
+      "APS India — dMAT Exam Details"
+    ]
+  },
+  {
+    "id": "Q07",
+    "question": "How does a blocked account (Sperrkonto) work and what is the Expatrio process?",
+    "topic": "Blocked Account",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 11077.059030532837,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.8384455442428589,
+    "answer": "**Blocked Account (Sperrkonto) Overview**\n\nA Blocked Account (Sperrkonto) is a special type of bank account required by German law for many internationals to secure their German visa. It is used to show the German authorities that you have enough money to live in Germany.\n\n**Key Characteristics of a Blocked Account:**\n\n1. **Blocked funds**: The money in a Blocked Account is 'blocked,' meaning you cannot use it until you arrive in Germany.\n2. **Required for visa**: A Blocked Account is necessary to secure a German visa.\n3. **Different from a Bank Account**: A Blocked Account and a Bank Account are two different types of accounts.\n\n**Expatrio Process for Opening a Blocked Account:**\n\n1. **Online application**: Open your Blocked Account entirely online in just a few minutes through the Expatrio User Portal.\n2. **Required documents**: You will need your:\n\t* Passport\n\t* Proof of address\n\t* Proof of residency\n3. **Easy access to information**: On your profile in the Expatrio User Portal, you have easy access to detailed information about your Blocked Account and other Expatrio services.\n4. **Customer Support**: Should you have any questions, Expatrio's Customer Support team is happy to help you throughout your entire journey.\n\n**Additional Benefits of Expatrio's Blocked Account:**\n\n1. **Free Travel Health Insurance**: Included with the Value Package benefit.\n2. **German Health Insurance**: Included with the Value Package benefit.\n3. **Free German Bank Account**: You will receive a free German Bank Account alongside your Blocked Account.\n4. **Instant payouts**: Your monthly Blocked Account payouts will be transferred instantly into your Bank Account.\n5. **Refund in case of visa rejection**: In case of visa rejection, Expatrio will transfer you back the whole amount from your Blocked Account as well as the service fees.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "Germany Visa — Expatrio Blocked Account Guide",
+      "Germany Visa — Expatrio Blocked Account Guide",
+      "Germany Visa — Expatrio Blocked Account Guide",
+      "Germany Visa — Expatrio Blocked Account Guide",
+      "Germany Visa — Expatrio Blocked Account Guide"
+    ]
+  },
+  {
+    "id": "Q08",
+    "question": "What is the estimated monthly cost of living for international students in Germany?",
+    "topic": "Cost of Living",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 12970.223188400269,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.8084127902984619,
+    "answer": "**Estimated Monthly Cost of Living for International Students in Germany**\n\n**Step 1: Determine the Average Monthly Living Expenses**\n\nAccording to **Document 3**, the average monthly living expenses for students in Germany are estimated at around **850-1,200 EUR**.\n\n**Step 2: Consider the Cost of Food**\n\nAccording to **Document 1**, food costs for international students in Germany are around **200-250 EUR per month**.\n\n**Step 3: Calculate the Total Estimated Monthly Cost of Living**\n\nTo calculate the total estimated monthly cost of living, we can add the average monthly living expenses and the cost of food.\n\n- **Low-end estimate**: 850 EUR (average living expenses) + 200 EUR (food) = **1,050 EUR**\n- **High-end estimate**: 1,200 EUR (average living expenses) + 250 EUR (food) = **1,450 EUR**\n\n**Step 4: Consider the Cost of Accommodation**\n\nAccording to **Document 2**, the cost of accommodation varies depending on the type of accommodation. However, we can use the estimated monthly cost of living to determine the required financial resources.\n\n**Step 5: Determine the Required Financial Resources**\n\nAccording to **Document 4** and **Document 5**, the German government requires international students to demonstrate that they can cover all their living costs while in Germany, which is **934 EUR per month**.\n\n**Conclusion**\n\nThe estimated monthly cost of living for international students in Germany can range from **1,050 EUR** (low-end estimate) to **1,450 EUR** (high-end estimate). However, the German government requires international students to demonstrate that they can cover **934 EUR per month**.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "Studying in Germany — Cost of Living in Germany",
+      "Studying in Germany — Cost of Living in Germany",
+      "Studying in Germany — Cost of Living in Germany",
+      "MyGermanUniversity — Student Visa Germany From India",
+      "Germany Visa — Student Visa from India Guide"
+    ]
+  },
+  {
+    "id": "Q09",
+    "question": "What health insurance coverage is required for international students in Germany?",
+    "topic": "Health Insurance",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 14058.803081512451,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.848423421382904,
+    "answer": "**Health Insurance Coverage for International Students in Germany**\n\n**Step 1: Eligibility for Public Health Insurance**\n\n* International students under 30 years old are eligible to apply for Public Health Insurance.\n* However, students over 30, PhD students, students in preparatory courses, language courses, and guest scientists may need to opt for Private Health Insurance.\n\n**Step 2: Mandatory Health Insurance Coverage**\n\n* International students are required by law to have some form of healthcare cover before moving to Germany.\n* Healthcare cover is mandatory for all residents in Germany, including those staying for one semester.\n\n**Step 3: Types of Health Insurance**\n\n* There are two types of health insurance in Germany: Public Health Insurance and Private Health Insurance.\n* International students can choose between these two options, depending on their eligibility and personal preferences.\n\n**Step 4: Proof of Health Insurance for Student Visa**\n\n* International students will not be granted a student visa without proof of either public or private insurance (or insurance from their home country if applicable).\n\n**Step 5: Cost of Health Insurance**\n\n* Public Health Insurance costs:\n + For students under 23 years old: €141 per month\n + For students over 30 years old: €275 per month\n* Private Health Insurance costs vary depending on the provider, tariff, age, and health status.\n\n**Conclusion**\n\nInternational students in Germany are required to have some form of healthcare cover, which can be either Public Health Insurance or Private Health Insurance. The choice of insurance depends on the student's eligibility and personal preferences. It is essential to have proof of health insurance before applying for a student visa.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "Germany Visa — International Student Health Insurance",
+      "Germany Visa — International Student Health Insurance",
+      "Germany Visa — International Student Health Insurance",
+      "Germany Visa — International Student Health Insurance",
+      "Germany Visa — International Student Health Insurance"
+    ]
+  },
+  {
+    "id": "Q10",
+    "question": "How does statutory health insurance with Techniker Krankenkasse (TK) work for students?",
+    "topic": "TK Health Insurance",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 12848.371267318726,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.8027864694595337,
+    "answer": "**Statutory Health Insurance with Techniker Krankenkasse (TK) for Students**\n\n**Step 1: Eligibility**\n- International students in Germany are required by law to have some form of healthcare cover.\n- Most university students are eligible to apply for statutory health insurance with TK.\n\n**Step 2: Choosing the Right Plan**\n- As a student, you can choose from various TK plans, but the contribution rate for students is not specified in the provided context.\n\n**Step 3: Benefits of TK**\n- TK offers online and phone support seven days a week.\n- TK boasts an English-language support portal and an English-language application form.\n- You can activate your TK-Flex and receive up to €90 annually.\n\n**Step 4: Activation and Benefits**\n- The process of activating TK-Flex and receiving up to €90 annually is not specified in the provided context.\n\n**Additional Information**\n- TK is one of the biggest healthcare funds in Germany, administering public healthcare cover for over 8.8 million people.\n- Most residents in Germany are enrolled in the public healthcare system, but some individuals qualify for both public and private health insurance.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "Expatrio — TK International Student Health Insurance",
+      "Germany Visa — International Student Health Insurance",
+      "Expatrio — TK International Student Health Insurance",
+      "Germany Visa — International Student Health Insurance",
+      "Expatrio — TK International Student Health Insurance"
+    ]
+  },
+  {
+    "id": "Q11",
+    "question": "How do I register my housing address (Anmeldung) after arriving in Germany?",
+    "topic": "Housing & Registration",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 11143.89681816101,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.8258886337280273,
+    "answer": "**Registering Your Housing Address (Anmeldung) in Germany**\n\n**Step 1: Gather Required Documents**\n\n1. **Filled-out registration form**: You will need to obtain a registration form from the local citizens' office (Bürgeramt) or download it from their website.\n2. **ID or passport**: You will need to provide a valid ID or passport as proof of identity.\n3. **Wohnungsgeberbestatigung from your landlord**: Your landlord will need to provide a confirmation of your rental agreement (Wohnungsgeberbestatigung).\n4. **Rental contract**: It is recommended to bring a copy of your rental contract.\n\n**Step 2: Book an Appointment at the Bürgeramt**\n\n1. **Contact the Bürgeramt**: Reach out to the local citizens' office (Bürgeramt) to book an appointment for the Anmeldung process.\n2. **Schedule an appointment**: Book an appointment within the first two weeks of arriving in Germany.\n\n**Step 3: Complete the Anmeldung Process**\n\n1. **Attend the appointment**: Attend the scheduled appointment at the Bürgeramt with all required documents.\n2. **Submit the registration form**: Submit the filled-out registration form and supporting documents.\n3. **Receive the Meldebescheinigung**: After completing the Anmeldung process, you will receive a paper confirming your registration (Meldebescheinigung).\n\n**Step 4: Use the Meldebescheinigung for Student Residence Permit Application**\n\n1. **Use the Meldebescheinigung**: The Meldebescheinigung is required for your student residence permit application.\n2. **Submit the Meldebescheinigung**: Submit the Meldebescheinigung as part of your student residence permit application.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "Make it in Germany — Housing & Address Registration (Anmeldung)",
+      "Make it in Germany — Housing & Address Registration (Anmeldung)",
+      "Make it in Germany — Housing & Address Registration (Anmeldung)",
+      "MyGermanUniversity — Student Visa Germany From India",
+      "Germany Visa — Student Visa from India Guide"
+    ]
+  },
+  {
+    "id": "Q12",
+    "question": "What is the uni-assist application process for Indian students applying to German universities?",
+    "topic": "Uni-Assist Application",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 11919.711112976074,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.8248026967048645,
+    "answer": "**Uni-Assist Application Process for Indian Students**\n\n**Step 1: Check University Requirements**\n- Not all German universities use uni-assist. \n- Check your target university's specific requirements on their official website or the DAAD database.\n\n**Step 2: Determine Application Type**\n- Uni-Assist acts as an intermediary between you and the universities, ensuring your documents meet German academic standards.\n\n**Step 3: Uni-Assist Fees**\n- Uni-Assist Fees 2026: Complete Breakdown is available, but the exact fees are not specified in the provided context.\n\n**Step 4: Application Process**\n- Uni-Assist (Arbeits- und Servicestelle für Internationale Studienbewerbungen) is the central application service for international students applying to German universities.\n- It processes applications for over 170 German universities, evaluates foreign educational credentials, and converts grades to the German grading scale.\n\n**Step 5: Application Submission**\n- Uni-Assist Application Guide: Step-by-Step Process Explained is available, but the exact steps are not specified in the provided context.\n\n**Step 6: Application Evaluation**\n- Uni-Assist evaluates foreign educational credentials and converts grades to the German grading scale.\n\n**Step 7: University Admission**\n- After uni-assist evaluation, the application is forwarded to the respective German university for admission.\n\n**Additional Information**\n- For Indian students applying to German universities through an Indo-German university cooperation, the German partner university must inform APS India about the planned study program and attach a copy of the partnership agreement.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "Uni-Assist Application Process for Indian Students",
+      "Uni-Assist Application Process for Indian Students",
+      "APS India — Leaflet Process P (Partnership Universities)",
+      "MyGermanUniversity — Student Visa Germany From India",
+      "Germany Visa — Student Visa from India Guide"
+    ]
+  },
+  {
+    "id": "Q13",
+    "question": "What are the Master's degree application requirements for international students at RWTH Aachen?",
+    "topic": "RWTH Aachen",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 12993.247032165527,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.7321968078613281,
+    "answer": "**RWTH Aachen Master's Degree Application Requirements for International Students**\n\n**Step 1: Required Documents**\n\n1. **Resume (list format)**\n2. **Additional documents may be required by the examination board of your master’s program**, such as:\n\t* Proof of the Graduate Record Examination (GRE), Test AS (if required by the program)\n\t\t+ You must enable your test results to be verified online\n\t\t+ For the GRE, instruct ETS to accept RWTH Aachen University as the recipient (institution code: 8504)\n\t\t+ Select the code for “all departments” if asked for a department code\n\n**Step 2: Application Process**\n\n1. **Prepare all required documents as PDF files**\n2. **Fill out the online application form** (access the form by clicking the yellow box labeled Online Application)\n3. **Submit your application** during the specified application periods (check the application deadlines listed on the RWTH Aachen website)\n\n**Step 3: Language Requirements**\n\n1. **English language proficiency**: No specific requirements mentioned in the context, but it is recommended to check the program-specific requirements\n2. **German language proficiency**: Not required for English-taught programs, but may be required for German-taught programs (check the program-specific requirements)\n\n**Step 4: Additional Requirements**\n\n1. **Check program-specific requirements**: Some programs may require additional documents, such as a portfolio (e.g., architecture), work experience, or interviews\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "RWTH Aachen — Master Application for International Students",
+      "TU Berlin — International Applicants Overview",
+      "Uni-Assist Application Process for Indian Students",
+      "RWTH Aachen — Master Application for International Students",
+      "TU Berlin — International Applicants Overview"
+    ]
+  },
+  {
+    "id": "Q14",
+    "question": "What are the international application guidelines for Technical University of Berlin (TU Berlin)?",
+    "topic": "TU Berlin",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 10919.431209564209,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.8199876546859741,
+    "answer": "**International Application Guidelines for Technical University of Berlin (TU Berlin)**\n\n**Step 1: Understand the Admission Requirements**\n\n* TU Berlin evaluates international students based on academic merit and language skills.\n* The university offers a highly structured and transparent admission process.\n\n**Step 2: Choose the Right Program**\n\n* TU Berlin offers bachelor's, master's, and PhD programs in various fields, including engineering, natural sciences, and technology.\n* IB students must pay close attention to subject choices and minimum scores to satisfy the Technical University Berlin admission requirements for direct entry into bachelor's programs.\n\n**Step 3: Check the Language Proficiency Standards**\n\n* The International Baccalaureate (IB) Diploma is globally recognized and accepted at TU Berlin, provided it meets the university entrance qualification criteria defined by German standards.\n\n**Step 4: Prepare Your Documents**\n\n* Ensure all documents are submitted correctly, including:\n\t+ Academic transcripts and certificates\n\t+ Language proficiency test results (if required)\n\t+ Standardized test results (if required)\n\n**Step 5: Check the Application Deadlines**\n\n* TU Berlin has two primary intakes: Winter Semester (October) and Summer Semester (April).\n* The application deadlines are as follows:\n\t+ Bachelor's programs (via uni-assist):\n\t\t- Winter Semester: April 15 – July 15\n\t+ Master's programs (direct to TU Berlin or uni-assist):\n\t\t- Winter Semester: April 15 – May 31\n\n**Step 6: Submit Your Application**\n\n* Submit your application and supporting documents within the specified deadlines.\n* Ensure timely submission to meet the Technical University Berlin admission requirements and secure your place for the desired semester.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "TU Berlin — International Applicants Overview",
+      "TU Berlin — International Applicants Overview",
+      "TU Berlin — International Applicants Overview",
+      "TU Berlin — International Applicants Overview",
+      "TU Berlin — International Applicants Overview"
+    ]
+  },
+  {
+    "id": "Q15",
+    "question": "What are the DAAD study scholarship requirements for foreign nationals?",
+    "topic": "Scholarships",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 11948.011875152588,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.7112443447113037,
+    "answer": "**DAAD Study Scholarship Requirements for Foreign Nationals**\n\n**Step 1: Eligibility Criteria**\n\n* The DAAD scholarship is aimed at graduates, doctoral students, and researchers.\n* The scholarship is primarily awarded for study and research visits to universities and non-university research institutions in Germany.\n* In some programs, students are also funded.\n\n**Step 2: Nomination Process**\n\n* Potential candidates cannot themselves apply for participation in the scholarship programme.\n* They must be nominated by an institution or organisation that is a legal entity domiciled in Germany.\n\n**Step 3: Eligible Groups**\n\n* **Scholarship Holders**: Students funded by Germany- or EU-based public funds (e.g., DAAD scholarships).\n* **PhD or PostDoc Candidates**: If their dissertation supervisor or host institution does not require APS certification.\n* **International Qualification Holders**: Students whose highest qualification is a non-Indian degree (e.g., A-Levels, IB, foreign Bachelor's from outside India).\n* **Non-German Degree in Germany**: Students who obtained a non-German degree (e.g., a UK degree) while studying in Germany.\n\n**Step 4: Scholarship Benefits**\n\n* DAAD scholarships do not have to be paid back.\n* They usually consist of:\n\t1. A monthly scholarship payment (currently, for example, € 992 for students and € 1,300 for doctoral/PhD students).\n\t2. A flat-rate travel allowance.\n\t3. Health insurance (in many cases).\n\t4. Additional benefits such as a one-off research allowance, family benefits, or funds for language courses (depending on the scholarship programme).\n\n**Step 5: Application Process**\n\n* Suitable candidates will be contacted by the DAAD and invited to apply via the DAAD application portal.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "DAAD Study Scholarships for Foreign Nationals",
+      "APS India — Process for Indian Applicants",
+      "DAAD Study Scholarships for Foreign Nationals",
+      "DAAD Study Scholarships for Foreign Nationals",
+      "DAAD Study Scholarships for Foreign Nationals"
+    ]
+  },
+  {
+    "id": "Q16",
+    "question": "What are the BAMF guidelines for higher education and studying in Germany?",
+    "topic": "BAMF Guidelines",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 13028.76901626587,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.6370111703872681,
+    "answer": "**Higher Education and Studying in Germany: BAMF Guidelines**\n\n**Step 1: Eligibility and Requirements**\n\n*   Students must possess an educational qualification equivalent to the German Abitur (HZB).\n*   For Indian students, successful completion of 12 years of schooling with specific subject combinations or clearing JEE Advanced may be required.\n*   Prior education should combine engineering and basic economics for MSc Industrial Engineering and Management.\n*   Familiarity with engineering mathematics, business operations, and industrial processes is required for MSc Industrial Engineering and Management.\n\n**Step 2: Language Requirements**\n\n*   German-taught programs require a German language certificate, such as:\n    *   TestDaF (TDN 4)\n    *   DSH-2\n    *   Goethe C1\n\n**Step 3: Additional Documents (If Applicable)**\n\n*   GRE Score (310+ recommended) for some technical universities\n*   Work Experience Letters for programs requiring professional experience\n*   CV/Resume in Europass format\n*   Statement of Purpose (SOP) or Motivation Letter\n*   Letters of Recommendation (usually 2, from professors or employers)\n*   Portfolio for design, architecture, or art programs\n\n**Step 4: APS Certificate (Mandatory for Indians)**\n\n*   APS is required for Indian students applying to German universities.\n*   APS is not required for short courses lasting less than 90 days.\n\n**Step 5: University-Specific Requirements**\n\n*   MSc Architecture:\n    *   Portfolio: Mandatory, including architectural designs, planning documents, and creative work.\n    *   GPA Requirement: Minimum 2.5 (German scale) or equivalent.\n*   MSc Industrial Engineering and Management:\n    *   Interdisciplinary Degree Required: Prior education should combine engineering and basic economics.\n    *   Skill Set: Familiarity with engineering mathematics, business operations, and industrial processes.\n\n**Step 6: Application Process**\n\n*   Submit application through Uni-Assist or directly to the university.\n*   Ensure all required documents are submitted, including certified copies of previous academic records, preferably translated into German or English.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "TU Berlin — International Applicants Overview",
+      "APS India — Merkblatt Verfahren Landesrecht (State Law Procedure)",
+      "Uni-Assist Application Process for Indian Students",
+      "APS India — Process for Indian Applicants",
+      "TU Berlin — International Applicants Overview"
+    ]
+  },
+  {
+    "id": "Q17",
+    "question": "Can international students work part-time while studying on a German student visa?",
+    "topic": "Work Rights",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 13081.13408088684,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.8130030632019043,
+    "answer": "**Working Part-Time as an International Student in Germany**\n\n**Eligibility to Work Part-Time**\n\n1. **Yes, international students can work part-time while studying on a German student visa.**\n2. **The student visa allows part-time work for 280 days per year (up to 20 hours per week) or 140 days per year (more than 20 hours per week).**\n\n**Restrictions on Part-Time Work**\n\n1. **Indian students are not allowed to work on a self-employed or freelance basis in Germany.**\n2. **However, working as a student assistant at a university is allowed without any limit on the number of days.**\n3. **In both cases, the student must inform the foreigners authority about the job.**\n\n**Additional Information**\n\n1. **After completing their studies in Germany, Indian students can apply for a German job-seeker visa (18-month visa).**\n2. **Most foreign students in Germany choose to take part-time work or internships without harming their subsidized health insurance situation.**\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "MyGermanUniversity — Student Visa Germany From India",
+      "Germany Visa — Student Visa from India Guide",
+      "MyGermanUniversity — Student Visa Germany From India",
+      "Germany Visa — Student Visa from India Guide",
+      "Expatrio — TK International Student Health Insurance"
+    ]
+  },
+  {
+    "id": "Q18",
+    "question": "What is the processing fee and payment method for the APS India application?",
+    "topic": "APS Fees",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 11877.144813537598,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.7660102844238281,
+    "answer": "**APS India Application Processing Fee and Payment Method**\n\n**Step 1: Determine the Processing Fee**\n\n* The APS verification fee is 18,000 INR per applicant.\n\n**Step 2: Payment Method Options**\n\n* Applicants can pay the processing fee through the following methods:\n  1. **Online Payment**: Pay through the CCAvenue portal during registration.\n  2. **Bank Transfer**: Transfer the fee to the APS bank account.\n\n**Step 3: Payment Details**\n\n* When paying collectively for a group, mention the specific group number.\n* Ensure that the fees are credited to the APS account for processing.\n\n**Important Note**\n\n* The APS processing fee is non-refundable once paid, regardless of the outcome of the verification procedure.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "APS India — Process for Indian Applicants",
+      "APS India — Official Homepage",
+      "APS India — Process for Indian Applicants",
+      "APS India — Leaflet Process P (Partnership Universities)",
+      "APS India — Leaflet Class XII Procedure"
+    ]
+  },
+  {
+    "id": "Q19",
+    "question": "What is the student visa process for applying to universities in Japan?",
+    "topic": "Out-of-Scope (Japan)",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 10137.409925460815,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.6800822019577026,
+    "answer": "**I do not have sufficient information in my knowledge base to answer this question reliably.**\n\nThe provided context documents do not contain any information about the student visa process for applying to universities in Japan. The documents only discuss the German student visa process and requirements for studying in Germany.\n\nHowever, I can provide a general outline of the steps involved in the German student visa process, which might be helpful:\n\n**German Student Visa Process:**\n\n1. **Apply to a German university**: Receive a letter of admission (also known as a letter of acceptance) from a German university.\n2. **Choose the correct visa type**: Depending on your situation, you may need to apply for a German student visa or a German student applicant visa.\n3. **Gather required documents**: Make sure you have all the necessary documents, such as a valid passport, proof of language proficiency, and proof of financial resources.\n4. **Submit your application**: Submit your application for a student visa at the German embassy in your country.\n5. **Wait for processing**: It usually takes around 25 days to process the application if all the documents are error-free. Sometimes it may take up to three months to receive the final approval.\n6. **Register with the Foreign Registration Office**: Once you arrive in Germany, register yourself in the Foreign Registration Office near the place of your residence within two weeks to get a residence permit.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "MyGermanUniversity — Student Visa Germany From India",
+      "Germany Visa — Student Visa from India Guide",
+      "Make it in Germany — Student Visa",
+      "Make it in Germany — Student Visa",
+      "Germany Visa — Student Visa from India Guide"
+    ]
+  },
+  {
+    "id": "Q20",
+    "question": "How do I write a Python script for algorithmic stock trading?",
+    "topic": "Out-of-Scope (Python)",
+    "engine": "BASELINE_SINGLE_DENSE",
+    "latency_ms": 12191.287755966187,
+    "chunks_retrieved": 5,
+    "top_similarity_score": 0.481668084859848,
+    "answer": "**I do not have sufficient information in my knowledge base to answer this question reliably.**\n\nThe provided context documents do not contain any information related to writing a Python script for algorithmic stock trading. The documents appear to be related to German immigration, student visas, and university admission processes.\n\nHowever, I can provide a general outline on how to approach writing a Python script for algorithmic stock trading:\n\n**Step 1: Define the Problem and Requirements**\n\n* Identify the specific trading strategy or algorithm you want to implement\n* Determine the data sources and APIs you will use to retrieve market data\n* Define the performance metrics and evaluation criteria for your trading strategy\n\n**Step 2: Choose a Programming Language and Libraries**\n\n* Select a suitable programming language (e.g., Python) and libraries (e.g., Pandas, NumPy, Matplotlib, Scikit-learn)\n* Familiarize yourself with the libraries and their APIs\n\n**Step 3: Collect and Preprocess Market Data**\n\n* Retrieve historical market data from a reliable source (e.g., Quandl, Alpha Vantage)\n* Clean and preprocess the data using Pandas and NumPy\n\n**Step 4: Implement the Trading Strategy**\n\n* Use Scikit-learn to implement the trading strategy or algorithm\n* Use Matplotlib to visualize the results and performance metrics\n\n**Step 5: Backtest and Evaluate the Strategy**\n\n* Use a backtesting framework (e.g., Backtrader) to evaluate the performance of the strategy\n* Analyze the results and refine the strategy as needed\n\n**Step 6: Deploy and Monitor the Trading Strategy**\n\n* Deploy the trading strategy using a cloud-based platform (e.g., AWS, Google Cloud)\n* Monitor the performance of the strategy and make adjustments as needed\n\nPlease note that this is a general outline, and the specific steps and requirements will vary depending on the complexity of the trading strategy and the resources available.\n\n⚠️ Disclaimer: This is general information only. Always verify critical decisions with the official German Embassy, DAAD, or BAMF.",
+    "is_grounded": true,
+    "retrieved_sources": [
+      "Germany Visa — Expatrio Blocked Account Guide",
+      "Germany Visa — Expatrio Blocked Account Guide",
+      "RWTH Aachen — Master Application for International Students",
+      "APS India — Leaflet Process P (Partnership Universities)",
+      "TU Berlin — International Applicants Overview"
+    ]
+  }
+]

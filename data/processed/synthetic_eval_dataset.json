@@ -1,0 +1,92 @@
+[
+  {
+    "id": "SYN-01",
+    "source_id": "mig-002",
+    "source_name": "Germany Visa — Student Visa from India Guide",
+    "source_url": "https://www.mygermanuniversity.com/articles/Student-Visa-Germany-From-India",
+    "ground_truth_context": "Biometric photos. Indian students should provide 3 biometric photos not older than half a year. The size of the photo should be 35(W) x 45(H). Your face in this photo should be clearly visible and should occupy 70-80% of the picture. This equals to 32-36mm of height. The background should be without shadows, bright and unicolored, preferably in neutral grey. Further details regarding the photo quality, head position and the rest can be found here.",
+    "question": "What are the specific dimensions and requirements for the biometric photos of Indian students?",
+    "ground_truth_answer": "Indian students should provide 3 biometric photos not older than half a year, with dimensions of 35(W) x 45(H) mm. The face should be clearly visible and occupy 70-80% of the picture, which equals 32-36mm in height. The background should be without shadows, bright, unicolored, and preferably in neutral grey."
+  },
+  {
+    "id": "SYN-02",
+    "source_id": "fin-002",
+    "source_name": "Studying in Germany — Cost of Living in Germany",
+    "source_url": "https://www.mastersportal.com/articles/358/university-tuition-fees-and-living-costs-in-germany-low-cost-german-degrees.html",
+    "ground_truth_context": "Here are some examples of private universities and their tuition fees. Keep in mind that the fees may depend on the programme:\n| University name | State | Fees for Bachelor’s | Fees for Master’s |\n| Multiple locations in Germany | Around 7,000 per year | Around 10,000 per year | |\n| Berlin | Around 10,000 per year | Around 15,000 per year | |\n| Brandenburg | Around 14,000 per year | Around 20,000 per year | |\n| Multiple locations in Germany | Starting from 1,000 EUR per month | Starting from 1,000 EUR per month | |\n| Berlin | Around 8,000 EUR per year | Around 9,000 per year |",
+    "question": "What is the tuition fee for a Master’s programme at a private university in Brandenburg?",
+    "ground_truth_answer": "Around 20,000 per year"
+  },
+  {
+    "id": "SYN-03",
+    "source_id": "app-003",
+    "source_name": "TU Berlin — International Applicants Overview",
+    "source_url": "https://www.successcribe.com/technical-university-berlin-admission-requirements/",
+    "ground_truth_context": "- Language Proficiency: Applicants must demonstrate sufficient German or English language skills, depending on the language of instruction.\nIt is essential for applicants to use the “uni-assist” portal to apply for most TU Berlin programs. This portal verifies international documents and forwards valid applications to the university.\nPro Tip: Always verify whether your chosen course is restricted (numerus clausus) or non-restricted, as this affects the admission process and deadlines.",
+    "question": "What is the importance of the \"uni-assist\" portal for applicants to TU Berlin programs?",
+    "ground_truth_answer": "The \"uni-assist\" portal is essential for applicants to TU Berlin programs as it verifies international documents and forwards valid applications to the university."
+  },
+  {
+    "id": "SYN-04",
+    "source_id": "aps-004",
+    "source_name": "APS India — dMAT Exam Details",
+    "source_url": "https://aps-india.de/dmat/",
+    "ground_truth_context": "For questions regarding the APS procedure, document verification, affected applicant groups, exemptions and APS documentation, please contact APS India:\n info@aps-india.de\n\n Whom should I contact for dMAT-related questions?\n\n For questions regarding dMAT registration, payment, test center booking, test format, technical requirements, test day procedures and result download, please contact g.a.s.t.:\n kontakt@gast.de\n\nDocument history",
+    "question": "What email address should I contact for questions about the APS procedure and document verification?",
+    "ground_truth_answer": "info@aps-india.de"
+  },
+  {
+    "id": "SYN-05",
+    "source_id": "aps-002",
+    "source_name": "APS India — Official Homepage",
+    "source_url": "https://aps-india.de/",
+    "ground_truth_context": "The APS certificate can only be issued after the required dMAT certificate has been submitted and checked. All other documents required by the applicable APS checklist must be included in the initial submission.\nAcademic Evaluation Center India (APS)\nScience Section of the German Embassy New Delhi\nAPS India verifies academic documents and educational qualifications issued by Indian educational institutions for applicants who intend to study in Germany. The APS certificate is part of the documentation generally required for the German student visa procedure.",
+    "question": "What must be submitted before the APS certificate can be issued?",
+    "ground_truth_answer": "The required dMAT certificate must be submitted and checked before the APS certificate can be issued."
+  },
+  {
+    "id": "SYN-06",
+    "source_id": "health-001",
+    "source_name": "Germany Visa — International Student Health Insurance",
+    "source_url": "https://www.expatrio.com/about-germany/health-insurance-international-students",
+    "ground_truth_context": "Note for students from EU countries\nDo not always assume that because you are from an EU country (or Norway, Lichtenstein, or Switzerland) that you are automatically covered. Often, you need to actually register with the national health service in your home country, who will issue you with an EHIC card. Without this card, you will not be able to access medical treatment in Germany.\nHealth insurance for exchange students in Germany",
+    "question": "What document do students from EU countries need to access medical treatment in Germany?",
+    "ground_truth_answer": "An EHIC card issued by the national health service in their home country."
+  },
+  {
+    "id": "SYN-07",
+    "source_id": "health-002",
+    "source_name": "Expatrio — TK International Student Health Insurance",
+    "source_url": "https://www.expatrio.com/about-germany/tk-international-students",
+    "ground_truth_context": "TK for PhD Students\nWhile undergraduates are covered by BAföG and other subsidies, the situation is slightly different for doctoral candidates\nIn Germany, PhD students cannot receive state subsidies during their studies. However, this doesn't mean that your healthcare costs need to spiral. Instead, most PhD candidates opt for health insurance with providers like TK, which cost relatively little and suit their lifestyles.",
+    "question": "What is a common option for health insurance for PhD students in Germany?",
+    "ground_truth_answer": "Most PhD candidates opt for health insurance with providers like TK, which cost relatively little and suit their lifestyles."
+  },
+  {
+    "id": "SYN-08",
+    "source_id": "aps-004",
+    "source_name": "APS India — dMAT Exam Details",
+    "source_url": "https://aps-india.de/dmat/",
+    "ground_truth_context": "No. The dMAT certificate does not replace university grades, transcripts or degree certificates.\nIt provides an additional academic test result and should be understood as one element of the overall application documentation.\n Will I automatically be denied an APS certificate if I submit a low dMAT score?",
+    "question": "Does the dMAT certificate replace university grades, transcripts, or degree certificates?",
+    "ground_truth_answer": "No, the dMAT certificate does not replace university grades, transcripts, or degree certificates."
+  },
+  {
+    "id": "SYN-09",
+    "source_id": "mig-002",
+    "source_name": "Germany Visa — Student Visa from India Guide",
+    "source_url": "https://www.mygermanuniversity.com/articles/Student-Visa-Germany-From-India",
+    "ground_truth_context": "Germany Student visa Requirements for Indians\nWhen applying for a German student visa, it is of utmost importance to present the right documents to the German Embassy/Consulates in India. If your student visa application is not complete, this can lead to the rejection of your application. Hence, you should take the requirements seriously! Here is the list of the documents that Indians need to submit to apply for a German study visa:\nGerman student visa checklist for Indians",
+    "question": "What can lead to the rejection of a German student visa application for Indians?",
+    "ground_truth_answer": "If the student visa application is not complete, it can lead to the rejection of the application."
+  },
+  {
+    "id": "SYN-10",
+    "source_id": "health-002",
+    "source_name": "Expatrio — TK International Student Health Insurance",
+    "source_url": "https://www.expatrio.com/about-germany/tk-international-students",
+    "ground_truth_context": "Students are completely covered by their TK health policy, whether they take out an eHealth card or not. So it's not essential to do so. However, it's a useful addition to anyone's wallet.\nThe electronic health card\nLearn more about the TK eHealth card while watching the video. The TK eHealth card is your identification card when you visit a doctor. It makes it easier for you to utilise medical services in Germany and abroad. Simply present the handy chip card when you receive medical treatment by doctors, in hospitals or by approved therapists.",
+    "question": "What is the purpose of the TK eHealth card when visiting a doctor?",
+    "ground_truth_answer": "The TK eHealth card serves as your identification card when you visit a doctor, making it easier to utilise medical services in Germany and abroad."
+  }
+]

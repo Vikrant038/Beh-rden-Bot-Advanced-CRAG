@@ -1,0 +1,205 @@
+[
+  {
+    "id": "aps-001",
+    "name": "APS India — Process for Indian Applicants",
+    "url": "https://www.mygermanuniversity.com/articles/APS-India",
+    "type": "web",
+    "language": "en",
+    "topic": "APS Certificate",
+    "date_accessed": "2026-07-02",
+    "stability": "high"
+  },
+  {
+    "id": "daad-001",
+    "name": "DAAD Study Scholarships for Foreign Nationals",
+    "url": "https://www.daad.de/en/study-and-research-in-germany/scholarships/daad-scholarships/",
+    "type": "web",
+    "language": "en",
+    "topic": "Scholarships",
+    "date_accessed": "2026-07-02",
+    "stability": "medium"
+  },
+  {
+    "id": "mig-001",
+    "name": "Make it in Germany — Student Visa",
+    "url": "https://www.ue-germany.com/blog/how-to-get-a-student-visa-for-germany",
+    "type": "web",
+    "language": "en",
+    "topic": "Student Visa",
+    "date_accessed": "2026-07-02",
+    "stability": "high"
+  },
+  {
+    "id": "mig-002",
+    "name": "Germany Visa — Student Visa from India Guide",
+    "url": "https://www.mygermanuniversity.com/articles/Student-Visa-Germany-From-India",
+    "type": "web",
+    "language": "en",
+    "topic": "Student Visa",
+    "date_accessed": "2026-07-02",
+    "stability": "high"
+  },
+  {
+    "id": "mig-003",
+    "name": "MyGermanUniversity — Student Visa Germany From India",
+    "url": "https://www.mygermanuniversity.com/articles/Student-Visa-Germany-From-India",
+    "type": "web",
+    "language": "en",
+    "topic": "Student Visa",
+    "date_accessed": "2026-07-02",
+    "stability": "high"
+  },
+  {
+    "id": "aps-002",
+    "name": "APS India — Official Homepage",
+    "url": "https://aps-india.de/",
+    "type": "web",
+    "language": "en",
+    "topic": "APS Certificate",
+    "date_accessed": "2026-07-02",
+    "stability": "high"
+  },
+  {
+    "id": "aps-003",
+    "name": "APS India — Document Checklists",
+    "url": "https://aps-india.de/checklists/",
+    "type": "web",
+    "language": "en",
+    "topic": "APS Document Checklist",
+    "date_accessed": "2026-07-02",
+    "stability": "high"
+  },
+  {
+    "id": "aps-004",
+    "name": "APS India — dMAT Exam Details",
+    "url": "https://aps-india.de/dmat/",
+    "type": "web",
+    "language": "en",
+    "topic": "APS dMAT Exam",
+    "date_accessed": "2026-07-02",
+    "stability": "high"
+  },
+  {
+    "id": "bamf-001",
+    "name": "BAMF — Study in Germany Guide",
+    "url": "https://www.bamf.de/EN/Themen/MigrationAufenthalt/ZuwandererDrittstaaten/Bildung/Studium/studium-node.html",
+    "type": "web",
+    "language": "en",
+    "topic": "Study in Germany",
+    "date_accessed": "2026-07-02",
+    "stability": "high"
+  },
+  {
+    "id": "app-001",
+    "name": "Uni-Assist Application Process for Indian Students",
+    "url": "https://www.studde.app/blog/uni-assist-application-guide",
+    "type": "web",
+    "language": "en",
+    "topic": "Uni-Assist Application",
+    "date_accessed": "2026-07-02",
+    "stability": "high"
+  },
+  {
+    "id": "app-002",
+    "name": "RWTH Aachen — Master Application for International Students",
+    "url": "https://www.rwth-aachen.de/cms/root/studium/vor-dem-studium/bewerbung-um-einen-studienplatz/master-bewerbung/~dqml/bewerbung-master-internationale/?lidx=1",
+    "type": "web",
+    "language": "en",
+    "topic": "RWTH Aachen Application",
+    "date_accessed": "2026-07-02",
+    "stability": "high"
+  },
+  {
+    "id": "app-003",
+    "name": "TU Berlin — International Applicants Overview",
+    "url": "https://www.successcribe.com/technical-university-berlin-admission-requirements/",
+    "type": "web",
+    "language": "en",
+    "topic": "TU Berlin Application",
+    "date_accessed": "2026-07-02",
+    "stability": "high"
+  },
+  {
+    "id": "fin-001",
+    "name": "Germany Visa — Expatrio Blocked Account Guide",
+    "url": "https://www.expatrio.com/blocked-account",
+    "type": "web",
+    "language": "en",
+    "topic": "Blocked Account",
+    "date_accessed": "2026-07-02",
+    "stability": "high"
+  },
+  {
+    "id": "fin-002",
+    "name": "Studying in Germany — Cost of Living in Germany",
+    "url": "https://www.mastersportal.com/articles/358/university-tuition-fees-and-living-costs-in-germany-low-cost-german-degrees.html",
+    "type": "web",
+    "language": "en",
+    "topic": "Cost of Living",
+    "date_accessed": "2026-07-02",
+    "stability": "high"
+  },
+  {
+    "id": "health-001",
+    "name": "Germany Visa — International Student Health Insurance",
+    "url": "https://www.expatrio.com/about-germany/health-insurance-international-students",
+    "type": "web",
+    "language": "en",
+    "topic": "Health Insurance",
+    "date_accessed": "2026-07-02",
+    "stability": "high"
+  },
+  {
+    "id": "health-002",
+    "name": "Expatrio — TK International Student Health Insurance",
+    "url": "https://www.expatrio.com/about-germany/tk-international-students",
+    "type": "web",
+    "language": "en",
+    "topic": "TK Health Insurance",
+    "date_accessed": "2026-07-02",
+    "stability": "high"
+  },
+  {
+    "id": "prac-001",
+    "name": "Make it in Germany — Housing & Address Registration (Anmeldung)",
+    "url": "https://www.expatrio.com/about-germany/how-register-apartment-germany",
+    "type": "web",
+    "language": "en",
+    "topic": "Housing & Registration",
+    "date_accessed": "2026-07-02",
+    "stability": "high"
+  },
+  {
+    "id": "pdf-001",
+    "name": "APS India — Merkblatt Verfahren Landesrecht (State Law Procedure)",
+    "url": "local:data/Landesrecht procedure_Merkblatt_Verfahren_Landesrecht.pdf",
+    "filename": "Landesrecht procedure_Merkblatt_Verfahren_Landesrecht.pdf",
+    "type": "pdf",
+    "language": "de/en",
+    "topic": "APS Landesrecht Procedure",
+    "date_accessed": "2026-07-27",
+    "stability": "high"
+  },
+  {
+    "id": "pdf-002",
+    "name": "APS India — Leaflet Process P (Partnership Universities)",
+    "url": "local:data/Partnership procedures_Leaflet-Process-P_English.pdf",
+    "filename": "Partnership procedures_Leaflet-Process-P_English.pdf",
+    "type": "pdf",
+    "language": "en",
+    "topic": "APS Partnership Process P",
+    "date_accessed": "2026-07-27",
+    "stability": "high"
+  },
+  {
+    "id": "pdf-003",
+    "name": "APS India — Leaflet Class XII Procedure",
+    "url": "local:data/Partnership procedures_Leaflet_XII-Grade-1.pdf",
+    "filename": "Partnership procedures_Leaflet_XII-Grade-1.pdf",
+    "type": "pdf",
+    "language": "en",
+    "topic": "APS Class 12 Procedure",
+    "date_accessed": "2026-07-27",
+    "stability": "high"
+  }
+]
