@@ -3,8 +3,9 @@ import json
 import random
 from pathlib import Path
 from dotenv import load_dotenv
-from huggingface_hub import InferenceClient
 from pydantic import BaseModel, Field
+
+from src.llm_client import call_llm
 
 load_dotenv()
 
@@ -23,27 +24,17 @@ class SyntheticEvalItem(BaseModel):
 
 
 def generate_synthetic_eval_dataset(num_questions: int = 15):
-    """
-    Generate synthetic (Question, Ground_Truth_Context, Ground_Truth_Answer) triples
-    from actual document chunks using Qwen-72B LLM.
-    """
-    token = os.environ.get("HF_TOKEN")
-    if not token:
-        raise ValueError("HF_TOKEN not found in environment!")
-
     if not os.path.exists(CHUNKS_PATH):
         raise FileNotFoundError(f"{CHUNKS_PATH} not found. Run chunking first!")
 
     with open(CHUNKS_PATH, "r", encoding="utf-8") as f:
         chunks = json.load(f)
 
-    # Sample diverse chunks across sources
     sampled_chunks = random.sample(chunks, min(num_questions, len(chunks)))
-    client = InferenceClient(token=token)
 
     eval_items = []
     print(f"==================================================")
-    print(f"🤖 GENERATING {len(sampled_chunks)} SYNTHETIC GROUND-TRUTH TEST PAIRS")
+    print(f"GENERATING {len(sampled_chunks)} SYNTHETIC GROUND-TRUTH TEST PAIRS")
     print(f"==================================================\n")
 
     for i, chunk in enumerate(sampled_chunks, 1):
@@ -61,16 +52,9 @@ def generate_synthetic_eval_dataset(num_questions: int = 15):
         )
 
         try:
-            response = client.chat.completions.create(
-                model="meta-llama/Llama-3.1-8B-Instruct",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=250,
-                temperature=0.4
-            )
+            messages = [{"role": "user", "content": prompt}]
+            content = call_llm(messages, max_tokens=250, temperature=0.4)
 
-            content = response.choices[0].message.content.strip()
-            
-            # Parse output
             q_part = ""
             a_part = ""
             for line in content.split("\n"):
@@ -90,17 +74,16 @@ def generate_synthetic_eval_dataset(num_questions: int = 15):
                     ground_truth_answer=a_part
                 )
                 eval_items.append(item.model_dump())
-                print(f"   • Q: {q_part[:60]}...")
+                print(f"   - Q: {q_part[:60]}...")
 
         except Exception as e:
             print(f"   [WARN] Failed to generate for item {i}: {e}")
 
-    # Save to disk
     Path("data/processed").mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_DATASET_PATH, "w", encoding="utf-8") as f:
         json.dump(eval_items, f, ensure_ascii=False, indent=2)
 
-    print(f"\n✅ Synthetic Dataset Created! Saved {len(eval_items)} pairs → {OUTPUT_DATASET_PATH}")
+    print(f"\nSynthetic Dataset Created! Saved {len(eval_items)} pairs -> {OUTPUT_DATASET_PATH}")
     return eval_items
 
 

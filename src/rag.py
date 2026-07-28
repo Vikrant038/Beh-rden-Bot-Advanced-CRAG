@@ -4,44 +4,9 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 from dotenv import load_dotenv
 
+from src.llm_client import call_llm
+
 load_dotenv()
-
-DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant"
-DEFAULT_HF_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
-
-
-def call_llm(messages: list[dict], max_tokens: int = 600, temperature: float = 0.1) -> str:
-    groq_key = os.environ.get("GROQ_API_KEY")
-    if groq_key:
-        try:
-            from groq import Groq
-            client = Groq(api_key=groq_key)
-            response = client.chat.completions.create(
-                model=DEFAULT_GROQ_MODEL,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            print(f"[WARN] Groq API failed ({e}), attempting HuggingFace fallback...")
-
-    hf_token = os.environ.get("HF_TOKEN")
-    if hf_token:
-        try:
-            from huggingface_hub import InferenceClient
-            client = InferenceClient(token=hf_token)
-            response = client.chat.completions.create(
-                model=DEFAULT_HF_MODEL,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            print(f"[ERROR] Hugging Face API fallback failed: {e}")
-            
-    raise RuntimeError("No working LLM API keys found! Add GROQ_API_KEY or HF_TOKEN to your .env file.")
 
 
 class SourceModel(BaseModel):
@@ -74,9 +39,6 @@ class RAGResponse(BaseModel):
     clarification_options: List[str] = []
 
 
-# ==========================================
-# LEAN & FOCUSED SYSTEM PROMPT (NO BLOAT)
-# ==========================================
 SYSTEM_PROMPT = """You are Behoerden-Bot, an expert informational assistant specializing in German immigration, student visas, and university admission processes.
 
 RULES:
@@ -136,7 +98,6 @@ def rag_answer(request: RAGQueryRequest) -> RAGResponse:
     
     start_time = time.time()
 
-    # Step 0: Check Query Ambiguity Node
     ambiguity_res = detect_query_ambiguity(request.question)
     if ambiguity_res.get("is_ambiguous", False):
         total_latency = (time.time() - start_time) * 1000
@@ -151,7 +112,6 @@ def rag_answer(request: RAGQueryRequest) -> RAGResponse:
             clarification_options=ambiguity_res.get("options", [])
         )
 
-    # Step 1: Execute CRAG Retrieval
     retrieval_res = advanced_crag_retrieve(request.question, final_top_k=request.top_k)
     raw_chunks = retrieval_res.get("chunks", [])
     needs_fallback = retrieval_res.get("needs_web_fallback", False)
@@ -209,12 +169,11 @@ def rag_answer(request: RAGQueryRequest) -> RAGResponse:
 
 if __name__ == "__main__":
     req = RAGQueryRequest(
-        question="When I move into germany for pursuing masters",
+        question="What documents are required for a German student visa application from India?",
         top_k=5
     )
     res = rag_answer(req)
     print(f"\n==================================================")
     print(f"QUESTION: {res.question}")
-    print(f"IS AMBIGUOUS: {res.is_ambiguous}")
-    print(f"CLARIFICATION OPTIONS: {res.clarification_options}")
+    print(f"PATH USED: {res.retrieval_path} | LATENCY: {res.latency_ms:.1f}ms")
     print(f"ANSWER:\n{res.answer}")

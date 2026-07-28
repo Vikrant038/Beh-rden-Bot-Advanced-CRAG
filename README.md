@@ -1,3 +1,14 @@
+---
+title: Behoerden Bot German Immigration Assistant
+emoji: 🇩🇪
+colorFrom: indigo
+colorTo: blue
+sdk: streamlit
+sdk_version: 1.41.0
+app_file: app.py
+pinned: false
+---
+
 # Behoerden-Bot — German Immigration Assistant (Advanced CRAG)
 
 > An enterprise-grade, open-source High-Precision Corrective RAG (CRAG) system built over official German immigration, student visa, and university application documentation.
@@ -38,36 +49,30 @@ flowchart TD
 
 ---
 
-## Detailed Pipeline Stage Explanations
+## 🏛️ 3-Tier Enterprise RAG Evaluation & Observability Architecture
 
-### Stage 0: Query Disambiguation Classifier Node
-- **Function:** Evaluates user query intent using a lightweight heuristic + LLM check before triggering expensive vector search.
-- **Why it matters:** If a user types a broad 5-word phrase (*"When I move into Germany for pursuing Master's"*), the system intercepts the query and offers 3 interactive choices (*Entry Timeline vs. Arrival Address Registration vs. Residence Permit*) instead of wasting tokens guessing.
-
-### Stage 1: Multi-Query Expansion
-- **Function:** Generates 3 domain-specific rephrasings of the user query using `llama-3.1-8b-instant`.
-- **Why it matters:** Users frame legal questions in casual terms; expansion converts casual phrasing into official German administrative vocabulary (*"Anmeldung"*, *"Meldebescheinigung"*, *"Auslaenderbehoerde"*).
-
-### Stage 2: Hybrid Dual Retrieval (Dense + Sparse)
-- **Dense Vector Search (`BAAI/bge-base-en-v1.5` 768d):** Captures high-level semantic intent using exact inner-product cosine similarity via `faiss.IndexFlatIP`.
-- **Sparse Keyword Search (`rank_bm25`):** Captures exact legal acronyms, proper nouns, and specific university terms (*"APS"*, *"dMAT"*, *"Sperrkonto"*, *"RWTH Aachen"*).
-
-### Stage 3: Reciprocal Rank Fusion (RRF)
-- **Function:** Merges the ranked candidate lists from Dense FAISS and Sparse BM25 into a single deduplicated list of 20 top candidates using:
-  $$\text{RRF\_Score}(d) = \sum_{m \in M} \frac{1}{60 + r_m(d)}$$
-
-### Stage 4: Cross-Encoder Re-Ranking (`BAAI/bge-reranker-base`)
-- **Function:** Performs full token-to-token cross-attention between the user query and all 20 candidate chunks.
-- **Why it matters:** Bi-encoders (vector search) score query and document independently. Cross-Encoders evaluate query-document pairs jointly, achieving top precision scores (up to `0.9998`).
-
-### Stage 5: Corrective RAG (CRAG) Adaptive Loop & Thresholding
-- **Confidence Evaluation:** Evaluates top candidate cross-score against a strict $0.50$ precision threshold.
-- **Adaptive Fallback:** If the top score is below $0.50$, CRAG triggers Stage 1 re-expansion focusing on legal terms. If confidence remains low after 2 retries, the engine safely flags `needs_web_fallback = True` to prevent hallucination.
-
-### Stage 6: Multi-Provider LLM Synthesis & Pydantic Validation
-- **Primary Engine:** Groq (`llama-3.1-8b-instant`) delivering sub-second response synthesis at **800 tokens/second**.
-- **Fallback Engine:** Hugging Face Inference API.
-- **Type Safety:** Validated end-to-end via Pydantic `RAGQueryRequest` and `RAGResponse` models.
+```
+                  ┌────────────────────────────────────────┐
+                  │    LAYER 3: PRODUCTION OBSERVABILITY   │
+                  │              (LangSmith)               │
+                  │  • Traces live user queries in app.py  │
+                  │  • Logs latency, token cost, fallback   │
+                  └───────────────────┬────────────────────┘
+                                      │
+                  ┌───────────────────┴────────────────────┐
+                  │   LAYER 2: CI/CD AUTOMATED QUALITY GATE│
+                  │        (tests/eval_ragas.py)           │
+                  │  • Runs on every GitHub PR / push      │
+                  │  • Blocks bad code if Faithfulness <3.5│
+                  └───────────────────┬────────────────────┘
+                                      │
+                  ┌───────────────────┴────────────────────┐
+                  │ LAYER 1: LOCAL EXPERIMENTATION & DASH  │
+                  │           (tests/eval_trulens.py)      │
+                  │  • Used during RAG development         │
+                  │  • Compares chunk size 400 vs 600      │
+                  └────────────────────────────────────────┘
+```
 
 ---
 
@@ -129,8 +134,8 @@ python src/embed.py
 # 3. Run Comparative Benchmark (Baseline RAG vs Advanced CRAG)
 python3 src/run_comparative_benchmark.py
 
-# 4. Run RAG Triad Evaluation (LLM-as-a-Judge)
-python3 tests/test_rag_triad.py
+# 4. Run CI/CD Quality Gate Evaluation
+python3 tests/eval_ragas.py
 
 # 5. Launch Streamlit Web UI
 streamlit run app.py

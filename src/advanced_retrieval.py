@@ -8,6 +8,7 @@ from sentence_transformers import CrossEncoder
 from dotenv import load_dotenv
 
 from src.retrieval import retrieve as dense_retrieve
+from src.llm_client import call_llm
 
 load_dotenv()
 
@@ -15,18 +16,10 @@ _bm25_retriever = None
 _cross_encoder = None
 
 
-# ==========================================
-# STAGE 0: QUERY DISAMBIGUATION DETECTOR
-# ==========================================
 def detect_query_ambiguity(user_query: str) -> dict:
-    """
-    Lightweight node to detect underspecified or vague queries.
-    Returns {"is_ambiguous": True, "options": [...]} if ambiguous.
-    """
     q_lower = user_query.strip().lower()
     words = q_lower.split()
     
-    # Fast heuristic checks for vague short queries
     vague_phrases = [
         "when i move into germany",
         "when i move to germany",
@@ -50,7 +43,6 @@ def detect_query_ambiguity(user_query: str) -> dict:
     )
     
     try:
-        from src.rag import call_llm
         messages = [{"role": "user", "content": prompt}]
         response_text = call_llm(messages, max_tokens=150, temperature=0.3)
         
@@ -68,9 +60,6 @@ def detect_query_ambiguity(user_query: str) -> dict:
     return {"is_ambiguous": False, "options": []}
 
 
-# ==========================================
-# STAGE 1: QUERY EXPANSION / MULTI-QUERY
-# ==========================================
 def generate_sub_queries(user_query: str, retry_count: int = 0) -> list[str]:
     sub_queries = [user_query]
     
@@ -88,7 +77,6 @@ def generate_sub_queries(user_query: str, retry_count: int = 0) -> list[str]:
         )
 
     try:
-        from src.rag import call_llm
         messages = [{"role": "user", "content": prompt}]
         response_text = call_llm(messages, max_tokens=100, temperature=0.4)
         

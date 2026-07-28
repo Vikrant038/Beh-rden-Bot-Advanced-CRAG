@@ -26,10 +26,10 @@ def parse_score(line_str: str) -> float | None:
 
 
 def calculate_context_precision(chunks: list[dict]) -> float:
-    """Ratio of retrieved chunks with score > 0.40."""
+    """Ratio of retrieved chunks with score > 0.50."""
     if not chunks:
         return 0.0
-    high_quality_count = sum(1 for c in chunks if c.get("cross_score", c.get("similarity_score", 0.0)) > 0.40)
+    high_quality_count = sum(1 for c in chunks if c.get("cross_score", c.get("similarity_score", 0.0)) > 0.50)
     return high_quality_count / len(chunks)
 
 

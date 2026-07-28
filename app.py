@@ -87,8 +87,6 @@ with st.sidebar:
         "What documents are required for a German student visa application from India?",
         "What is the APS certificate and why is it mandatory for Indian students?",
         "How does a blocked account (Sperrkonto) work and what is the Expatrio process?",
-        "What health insurance is required for international students in Germany?",
-        "How do I register my housing address (Anmeldung) after arriving in Germany?",
         "What is uni-assist and how do Indian students apply through it?"
     ]
     
