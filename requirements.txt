@@ -9,3 +9,4 @@ huggingface_hub>=0.20.0
 numpy>=1.24.0
 trafilatura>=1.6.0
 pdfplumber>=0.10.0
+ddgs>=0.1.0

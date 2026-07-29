@@ -1,4 +1,5 @@
 import os
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -38,38 +39,44 @@ def get_hf_client():
 
 def call_llm(messages: list[dict], max_tokens: int = 600, temperature: float = 0.1) -> str:
     """
-    Centralized Resilient LLM Caller:
-    1. Tries Groq API (llama-3.1-8b-instant) first.
-    2. Falls back to Hugging Face InferenceClient if Groq is unavailable or fails.
+    Centralized Resilient LLM Caller with 3-retry backoff:
+    1. Tries Groq API (llama-3.1-8b-instant) with auto-retries on connection blips.
+    2. Falls back to Hugging Face InferenceClient if Groq is unavailable.
     """
-    # 1. Primary: Groq API
+    # 1. Primary: Groq API with 3 retries
     groq_client = get_groq_client()
     if groq_client:
-        try:
-            response = groq_client.chat.completions.create(
-                model=DEFAULT_GROQ_MODEL,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            print(f"[WARN] Groq API call failed ({e}). Attempting HuggingFace fallback...")
+        for attempt in range(1, 4):
+            try:
+                response = groq_client.chat.completions.create(
+                    model=DEFAULT_GROQ_MODEL,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature
+                )
+                return response.choices[0].message.content.strip()
+            except Exception as e:
+                print(f"[WARN] Groq API call attempt {attempt}/3 failed ({e}).")
+                if attempt < 3:
+                    time.sleep(1.5 * attempt)
 
     # 2. Fallback: Hugging Face API
     hf_client = get_hf_client()
     if hf_client:
-        try:
-            response = hf_client.chat.completions.create(
-                model=DEFAULT_HF_MODEL,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            print(f"[ERROR] Hugging Face API fallback failed: {e}")
+        for attempt in range(1, 3):
+            try:
+                response = hf_client.chat.completions.create(
+                    model=DEFAULT_HF_MODEL,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature
+                )
+                return response.choices[0].message.content.strip()
+            except Exception as e:
+                print(f"[WARN] HuggingFace API attempt {attempt}/2 failed: {e}")
+                if attempt < 2:
+                    time.sleep(1.5)
 
     raise RuntimeError(
-        "No working LLM provider available! Please ensure GROQ_API_KEY or HF_TOKEN is set in your .env file."
+        "No working LLM provider available! Please ensure GROQ_API_KEY or HF_TOKEN is set in your environment."
     )

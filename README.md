@@ -9,19 +9,19 @@ app_file: app.py
 pinned: false
 ---
 
-# Behoerden-Bot — German Immigration Assistant (Advanced CRAG)
+# Behoerden-Bot — German Immigration Assistant (Advanced CRAG & 3-Agent ReAct RAG)
 
-> An enterprise-grade, open-source High-Precision Corrective RAG (CRAG) system built over official German immigration, student visa, and university application documentation.
+> An enterprise-grade, open-source High-Precision Corrective RAG (CRAG) and 3-Agent ReAct Orchestrator system built over official German immigration, student visa, APS certification, and university application documentation.
 
 ---
 
-## Comprehensive System Architecture
+## 🏛️ System Architecture: 3-Agent ReAct RAG & Advanced CRAG Pipeline
 
 ```mermaid
 flowchart TD
     A[User Input Query] --> B[Stage 0: Query Disambiguation Node]
     
-    B -->|is_ambiguous == True| C[Return 3 Interactive Options to User]
+    B -->|is_ambiguous == True| C[Return Interactive Topic Options to User]
     B -->|is_ambiguous == False| D[Stage 1: Multi-Query Expansion via Groq]
     
     D -->|3 Sub-Queries| E[Stage 2: Hybrid Dual Retrieval]
@@ -41,15 +41,32 @@ flowchart TD
     J -->|Best Score >= 0.50| K[Stage 5A: High-Confidence CRAG Context Assembly]
     J -->|Best Score < 0.50| L[Stage 5B: CRAG Query Deconstruction & Retry Loop Max 2]
     
-    L -->|Retry Limit Exceeded| M[Web Fallback Flag & Domain Portals]
+    L -->|Retry Limit Exceeded| M[Tool 2: Live Web Search ddgs Fallback]
     
-    K --> N[Stage 6: Multi-Provider LLM Synthesis Groq Llama 3.1 8B]
-    N --> O[Validated Pydantic RAGResponse + Source Attribution UI]
+    K --> N[Agent 1: ReAct Research Agent Tool Selection]
+    M --> N
+    
+    N --> O[Agent 2: Analyst Agent 5-Dimension Feature Matrix]
+    O --> P[Agent 3: Executive Writer Agent Markdown Synthesis]
+    
+    P --> Q[Validated Pydantic RAGResponse + Source Attribution UI]
 ```
 
 ---
 
-## 🏛️ 3-Tier Enterprise RAG Evaluation & Observability Architecture
+## 🔬 Multi-Agent Collaborative Execution Architecture
+
+The system supports two execution pipelines selectable via the UI:
+
+1. **Standard Advanced CRAG Engine:** Fast, high-precision hybrid retrieval with cross-encoder re-ranking.
+2. **3-Agent ReAct Orchestrator Engine:**
+   - **Agent 1 (ReAct Research Agent):** Executes iterative Thought $\rightarrow$ Action $\rightarrow$ Observation loops dynamically calling `tool_vector_search`, `tool_web_search`, and `tool_visa_calculator`.
+   - **Agent 2 (Analyst Agent):** Performs side-by-side feature extraction across 5 policy dimensions (*Verification Method, Required Exams, Fees, Timeline, Exemptions*) using `safe_parse_json()` to build a Pydantic `AnalystComparisonMatrix`.
+   - **Agent 3 (Executive Writer Agent):** Renders executive Markdown output with clean side-by-side comparison tables, bold headings, and verified source citations.
+
+---
+
+## 📊 3-Tier Enterprise RAG Evaluation Architecture
 
 ```
                   ┌────────────────────────────────────────┐
@@ -76,9 +93,9 @@ flowchart TD
 
 ---
 
-## Empirical Evaluation & Benchmark Results (Phase 19)
+## 📈 Empirical Evaluation & Benchmark Results (Phase 19)
 
-### 1. RAG Triad Scorecard (20 Synthetic Benchmark Triples)
+### 1. RAG Triad Scorecard (Synthetic Benchmark Triples)
 
 | Metric | Score | Industry Target | Result |
 |---|---|---|---|
@@ -98,15 +115,15 @@ flowchart TD
 
 ---
 
-## Architectural Decisions & Tradeoff Rationale
+## 📋 Architectural Decisions & Tradeoff Rationale
 
-### 1. Query Disambiguation Classifier Node vs. System Prompt Bloat
+### 1. 3-Agent ReAct Architecture (Research -> Analyst -> Writer)
+- **Decision:** Decoupled data gathering, comparative analysis, and response formatting into specialized sub-agents.
+- **Rationale:** Prevents single-prompt cognitive overload, enforces structured analytical output (comparison tables along 5 dimensions), and allows dynamic tool selection (FAISS, live web search, visa calculator).
+
+### 2. Query Disambiguation Classifier Node vs. System Prompt Bloat
 - **Decision:** Built a Stage 0 Query Disambiguation Node to catch vague queries (*"When I move into Germany for pursuing Master's"*) and present 3 clickable options instead of packing complex rules into `SYSTEM_PROMPT`.
 - **Rationale:** Prevents system prompt bloat, saves 90% of wasted retrieval tokens, and delivers 100% user intent precision.
-
-### 2. Data Ingestion: Web Scraping (`trafilatura`) + PDF Extraction (`pdfplumber`)
-- **Decision:** Combined web page scraping (`trafilatura`) and local PDF parsing (`pdfplumber`).
-- **Rationale:** `trafilatura` automatically strips navigation bars, headers, and footers without requiring custom CSS selectors. `pdfplumber` handles multi-column tables cleanly without losing sentence ordering.
 
 ### 3. Vector Embedding Model: `BAAI/bge-base-en-v1.5` (768 Dimensions)
 - **Decision:** Upgraded from `all-MiniLM-L6-v2` (384d) to `BAAI/bge-base-en-v1.5` (768d).
@@ -117,12 +134,12 @@ flowchart TD
 - **Rationale:** For 472 vectors, brute-force exact search takes 0.3 milliseconds with **100% recall (zero accuracy loss)**.
 
 ### 5. Resilient Multi-Provider LLM Wrapper (Groq Primary + HF Fallback)
-- **Decision:** Built `call_llm()` to route requests to **Groq API (`llama-3.1-8b-instant`)** with fallback to **Hugging Face**.
+- **Decision:** Built `call_llm()` to route requests to **Groq API (`llama-3.1-8b-instant`)** with 3-retry backoff and fallback to **Hugging Face**.
 - **Rationale:** Groq provides **14,400 FREE requests/day** at **800 tokens/second**, eliminating quota errors while delivering sub-second response synthesis.
 
 ---
 
-## Quickstart
+## 🛠️ Quickstart
 
 ```bash
 # 1. Process sources & generate chunks

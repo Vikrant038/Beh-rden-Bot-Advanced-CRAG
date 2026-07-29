@@ -4,6 +4,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from src.rag import rag_answer, RAGQueryRequest, RAGResponse
+from src.agentic_rag import run_agentic_rag_pipeline, AgenticRAGResponse
 
 load_dotenv()
 
@@ -56,9 +57,7 @@ if "messages" not in st.session_state:
             "role": "assistant",
             "content": "Welcome. I am **Behoerden-Bot**, an automated informational assistant specializing in German immigration, student visa requirements, APS certification, blocked accounts, and university admission regulations.\n\nHow may I assist you with your academic plans in Germany?",
             "sources": [],
-            "metadata": {},
-            "is_ambiguous": False,
-            "clarification_options": []
+            "metadata": {}
         }
     ]
 
@@ -69,25 +68,34 @@ if "messages" not in st.session_state:
 st.markdown("""
 <div class="header-container">
     <div class="header-title">Behoerden-Bot — German Visa & Study Assistant</div>
-    <div class="header-subtitle">Enterprise Corrective RAG (CRAG) | BGE 768d Dense Vectors | BM25 Keyword Search | Cross-Encoder Re-Ranking</div>
+    <div class="header-subtitle">Enterprise 3-Agent ReAct RAG Orchestrator | BGE 768d Dense Vectors | BM25 Keyword Search | Cross-Encoder Re-Ranking</div>
 </div>
 """, unsafe_allow_html=True)
 
 
 # ==========================================
-# SIDEBAR NAVIGATION & TOPIC EXPLORER
+# SIDEBAR NAVIGATION & MODE SELECTION
 # ==========================================
 with st.sidebar:
-    st.title("Navigation & Explorer")
+    st.title("Navigation & Settings")
+    
+    st.markdown("---")
+    st.subheader("Engine Mode")
+    rag_mode = st.radio(
+        "Select Pipeline Mode:",
+        ["3-Agent ReAct RAG (Research -> Analyst -> Writer)", "Standard Advanced CRAG RAG"],
+        index=0
+    )
     
     st.markdown("---")
     st.subheader("Sample Queries")
     
     sample_queries = [
+        "Compare APS certificate requirements for Indian students vs Chinese students.",
         "What documents are required for a German student visa application from India?",
-        "What is the APS certificate and why is it mandatory for Indian students?",
-        "How does a blocked account (Sperrkonto) work and what is the Expatrio process?",
-        "What is uni-assist and how do Indian students apply through it?"
+        "How does a blocked account (Sperrkonto) work and calculate 12 months cost at 90 INR/EUR?",
+        "What health insurance is required for international students in Germany?",
+        "How do I register my housing address (Anmeldung) after arriving in Germany?"
     ]
     
     selected_sample = None
@@ -96,14 +104,11 @@ with st.sidebar:
             selected_sample = q
 
     st.markdown("---")
-    st.subheader("Pipeline Architecture")
+    st.subheader("Multi-Agent Architecture")
     st.markdown("""
-    - **Query Disambiguation Node:** Active
-    - **Vector Embeddings:** BAAI/bge-base-en-v1.5 (768d)
-    - **Sparse Search:** BM25 Okapi (rank_bm25)
-    - **Fusion Algorithm:** Reciprocal Rank Fusion (RRF)
-    - **Re-Ranker:** BAAI/bge-reranker-base (Cross-Encoder)
-    - **LLM Engine:** Groq (llama-3.1-8b-instant)
+    - **Agent 1 (Research):** ReAct Iterative Tool Calling (FAISS + Web + Calculator)
+    - **Agent 2 (Analyst):** Comparative Matrix Extractor
+    - **Agent 3 (Writer):** Executive Synthesis & Formatting
     """)
     
     st.markdown("---")
@@ -119,20 +124,19 @@ for idx, msg in enumerate(st.session_state["messages"]):
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         
-        # Render Clarification Buttons if Ambiguous
-        if msg.get("is_ambiguous") and msg.get("clarification_options"):
-            st.write("Please select your intended topic below:")
-            for opt_idx, opt in enumerate(msg["clarification_options"]):
-                if st.button(f"-> {opt}", key=f"opt_{idx}_{opt_idx}"):
-                    selected_option_click = opt
-        
-        # Render Sources Expander ONLY if sources exist
+        # Collapsed by default for clean UX
+        if msg.get("research_steps"):
+            with st.expander("Developer Debug: ReAct Execution Steps", expanded=False):
+                for step in msg["research_steps"]:
+                    st.markdown(f"**Iteration {step['iteration']}** ({step['action']})")
+                    st.markdown(f"- *Thought:* {step['thought']}")
+                    st.markdown(f"- *Observation:* {step['observation']}")
+
         if msg.get("sources"):
             with st.expander("Verified Official Sources Used", expanded=False):
                 for s in msg["sources"]:
                     st.markdown(f"- [{s['name']}]({s['url']}) (Relevance Score: {s.get('score', 0):.4f})")
                     
-        # Render Latency & Path Metadata
         meta = msg.get("metadata", {})
         if meta:
             col1, col2 = st.columns(2)
@@ -157,36 +161,45 @@ if user_query:
         "role": "user",
         "content": user_query,
         "sources": [],
-        "metadata": {},
-        "is_ambiguous": False,
-        "clarification_options": []
+        "metadata": {}
     })
     with st.chat_message("user"):
         st.markdown(user_query)
 
     with st.chat_message("assistant"):
-        with st.spinner("Analyzing Query Intent & Executing CRAG Pipeline..."):
+        with st.spinner("Executing 3-Agent ReAct Pipeline (Research -> Analyst -> Writer)..."):
             try:
-                req = RAGQueryRequest(question=user_query, top_k=5)
-                response: RAGResponse = rag_answer(req)
-                
-                answer_text = response.answer
-                sources_list = [s.model_dump() for s in response.sources]
-                metadata_info = {
-                    "path": response.retrieval_path,
-                    "latency": response.latency_ms,
-                    "is_grounded": response.is_grounded
-                }
+                if "3-Agent ReAct" in rag_mode:
+                    agentic_res: AgenticRAGResponse = run_agentic_rag_pipeline(user_query)
+                    answer_text = agentic_res.final_answer
+                    sources_list = agentic_res.sources
+                    research_steps_list = agentic_res.research_steps
+                    metadata_info = {
+                        "path": "3_AGENT_REACT_ORCHESTRATOR",
+                        "latency": agentic_res.total_latency_ms,
+                        "is_grounded": True
+                    }
+                else:
+                    req = RAGQueryRequest(question=user_query, top_k=5)
+                    crag_res: RAGResponse = rag_answer(req)
+                    answer_text = crag_res.answer
+                    sources_list = [s.model_dump() for s in crag_res.sources]
+                    research_steps_list = []
+                    metadata_info = {
+                        "path": crag_res.retrieval_path,
+                        "latency": crag_res.latency_ms,
+                        "is_grounded": crag_res.is_grounded
+                    }
 
                 st.markdown(answer_text)
-                
-                # Render Clarification Buttons if Disambiguation Triggered
-                if response.is_ambiguous and response.clarification_options:
-                    st.write("Please select your intended topic below:")
-                    for opt_idx, opt in enumerate(response.clarification_options):
-                        if st.button(f"-> {opt}", key=f"opt_new_{opt_idx}"):
-                            selected_option_click = opt
-                
+
+                if research_steps_list:
+                    with st.expander("Developer Debug: ReAct Execution Steps", expanded=False):
+                        for step in research_steps_list:
+                            st.markdown(f"**Iteration {step['iteration']}** ({step['action']})")
+                            st.markdown(f"- *Thought:* {step['thought']}")
+                            st.markdown(f"- *Observation:* {step['observation']}")
+
                 if sources_list:
                     with st.expander("Verified Official Sources Used", expanded=True):
                         for s in sources_list:
@@ -194,17 +207,16 @@ if user_query:
 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.caption(f"Engine Path: `{response.retrieval_path}`")
+                    st.caption(f"Engine Path: `{metadata_info['path']}`")
                 with col2:
-                    st.caption(f"Latency: `{response.latency_ms:.1f} ms`")
+                    st.caption(f"Latency: `{metadata_info['latency']:.1f} ms`")
 
                 st.session_state["messages"].append({
                     "role": "assistant",
                     "content": answer_text,
                     "sources": sources_list,
-                    "metadata": metadata_info,
-                    "is_ambiguous": response.is_ambiguous,
-                    "clarification_options": response.clarification_options
+                    "research_steps": research_steps_list,
+                    "metadata": metadata_info
                 })
 
             except Exception as e:
