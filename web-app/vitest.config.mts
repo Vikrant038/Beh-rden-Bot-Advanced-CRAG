@@ -6,7 +6,13 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx", "tests/unit/**/*.test.ts"],
+    setupFiles: ["tests/setup.ts"],
+    include: [
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "tests/unit/**/*.test.ts",
+      "tests/integration/**/*.test.ts",
+    ],
     globals: true,
     coverage: {
       provider: "v8",
