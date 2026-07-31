@@ -25,14 +25,14 @@ describe("CircuitBreaker", () => {
     await expect(breaker.execute(async () => "ok")).rejects.toThrow(/OPEN/);
   });
 
-  it("should transition to HALF_OPEN after resetTimeout", () => {
+  it("should transition to HALF_OPEN after resetTimeout", async () => {
     const breaker = new CircuitBreaker({ failureThreshold: 3, resetTimeoutMs: 50 });
     breaker.onFailure();
     breaker.onFailure();
     breaker.onFailure();
     expect(breaker.getState()).toBe("OPEN");
 
-    vi.waitFor(
+    await vi.waitFor(
       () => {
         expect(breaker.getState()).toBe("HALF_OPEN");
         expect(breaker.allowRequest()).toBe(true);
@@ -41,13 +41,13 @@ describe("CircuitBreaker", () => {
     );
   });
 
-  it("should close on successful probe, reopen on failed probe", () => {
+  it("should close on successful probe, reopen on failed probe", async () => {
     const breaker = new CircuitBreaker({ failureThreshold: 3, resetTimeoutMs: 50 });
     breaker.onFailure();
     breaker.onFailure();
     breaker.onFailure();
 
-    vi.waitFor(
+    await vi.waitFor(
       () => {
         expect(breaker.getState()).toBe("HALF_OPEN");
       },
@@ -60,7 +60,7 @@ describe("CircuitBreaker", () => {
     breaker.onFailure();
     breaker.onFailure();
     breaker.onFailure();
-    vi.waitFor(
+    await vi.waitFor(
       () => {
         expect(breaker.getState()).toBe("HALF_OPEN");
       },
@@ -102,12 +102,12 @@ describe("CircuitBreaker", () => {
     await expect(breaker.execute(async () => "never")).rejects.toThrow(/OPEN/);
   });
 
-  it("getState should transition OPEN to HALF_OPEN after reset", () => {
+  it("getState should transition OPEN to HALF_OPEN after reset", async () => {
     const breaker = new CircuitBreaker({ failureThreshold: 2, resetTimeoutMs: 10 });
     breaker.onFailure();
     breaker.onFailure();
     expect(breaker.getState()).toBe("OPEN");
-    vi.waitFor(
+    await vi.waitFor(
       () => {
         expect(breaker.getState()).toBe("HALF_OPEN");
       },

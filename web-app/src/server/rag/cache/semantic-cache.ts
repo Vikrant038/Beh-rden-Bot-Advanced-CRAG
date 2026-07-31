@@ -115,7 +115,7 @@ export class SemanticCache {
       await prisma.$executeRaw`
         INSERT INTO semantic_cache (id, "queryHash", "queryText", "queryVector", "responseJson", "parentDocIds", "createdAt", "expiresAt")
         VALUES (
-          nextval('semantic_cache_id_seq'),
+          nextval(pg_get_serial_sequence('semantic_cache', 'id')),
           ${qHash},
           ${query},
           ${`[${queryVector.join(",")}]`}::vector,

@@ -62,6 +62,7 @@ export async function agentResearchReact(
         name: chunk.sourceName,
         url: chunk.sourceUrl,
         score: chunk.crossScore ?? chunk.similarityScore ?? 0.85,
+        documentId: chunk.documentId,
       });
     }
   } else {

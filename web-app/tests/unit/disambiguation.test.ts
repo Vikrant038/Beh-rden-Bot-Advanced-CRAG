@@ -43,4 +43,25 @@ describe("QueryDisambiguator (Stage 0B)", () => {
     expect(result.options).toEqual([]);
     expect(mockedCallLLMJson).not.toHaveBeenCalled();
   });
+
+  it("should flag pronoun-led queries with no concrete entity as vague (m2)", async () => {
+    mockedCallLLMJson.mockResolvedValue(["opt1", "opt2", "opt3"]);
+    const result = await disambiguateQuery("when do i move to germany");
+    expect(result.isAmbiguous).toBe(true);
+    expect(result.options).toHaveLength(3);
+  });
+
+  it("should not treat vague function words as concrete entities (m2)", async () => {
+    mockedCallLLMJson.mockResolvedValue(["opt1", "opt2", "opt3"]);
+    const result = await disambiguateQuery("i want to know when that there works");
+    expect(result.isAmbiguous).toBe(true);
+  });
+
+  it("should keep clear queries with domain entities unambiguous even with pronouns", async () => {
+    const result = await disambiguateQuery(
+      "Which documents do I need for the APS certificate in Germany?",
+    );
+    expect(result.isAmbiguous).toBe(false);
+    expect(mockedCallLLMJson).not.toHaveBeenCalled();
+  });
 });

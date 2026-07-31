@@ -124,14 +124,37 @@ model ConversationMemory {
 
 // ─── Knowledge Base ─────────────────────────────────────────────
 
+// @ai-exception: Document model added beyond WEB_APP_PLAN §5 to give
+// DocumentChunk a stable parent identifier. Semantic-cache invalidation
+// (invalidateForDocument) requires real document IDs in parentDocIds —
+// source names are not unique/stable (C2 fix).
+
+model Document {
+  id         String          @id @default(cuid())
+  title      String
+  url        String          @unique
+  hash       String
+  chunkCount Int             @default(0)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  chunks DocumentChunk[]
+
+  @@map("documents")
+}
+
 model DocumentChunk {
   id         Int      @id @default(autoincrement())
+  documentId String
   sourceName String
   sourceUrl  String
   text       String
   embedding  Unsupported("vector(768)")
   createdAt  DateTime @default(now())
 
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
   @@index([sourceName])
   @@map("document_chunks")
 }
@@ -148,7 +171,6 @@ model SemanticCacheEntry {
   createdAt    DateTime @default(now())
   expiresAt    DateTime
 
-  @@index([queryHash])
   @@index([expiresAt])
   @@map("semantic_cache")
 }

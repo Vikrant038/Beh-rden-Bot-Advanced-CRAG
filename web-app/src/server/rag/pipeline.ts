@@ -119,14 +119,21 @@ export async function runStandardCrag(
     name: chunk.sourceName,
     url: chunk.sourceUrl,
     score: chunk.crossScore ?? chunk.similarityScore ?? 0,
+    documentId: chunk.documentId,
   }));
 
-  if (!bypassCache) {
+  const parentDocIds = Array.from(
+    new Set(sources.map((source) => source.documentId).filter((id): id is string => Boolean(id))),
+  );
+
+  // M1: never cache ungrounded fallback/error answers — a transient failure
+  // (e.g. web-search timeout) must not be persisted as a 7-day cached reply.
+  if (!bypassCache && isGrounded) {
     await cache.addToCache(
       maskedQuestion,
       queryVector,
       { answer: answerText, sources },
-      sources.map((source) => source.name),
+      parentDocIds,
     );
   }
   await memory.addTurn(question, answerText);

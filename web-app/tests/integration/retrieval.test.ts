@@ -47,18 +47,21 @@ const mockReranker: Reranker = {
 const corpus: Chunk[] = [
   {
     id: "1",
+    documentId: "doc-a",
     sourceName: "doc-a",
     sourceUrl: "https://a.example",
     text: "Blocked account for German student visa is 11904 EUR per year.",
   },
   {
     id: "2",
+    documentId: "doc-b",
     sourceName: "doc-b",
     sourceUrl: "https://b.example",
     text: "APS certificate required for Indian students.",
   },
   {
     id: "3",
+    documentId: "doc-c",
     sourceName: "doc-c",
     sourceUrl: "https://c.example",
     text: "University admission requirements in Germany.",
@@ -73,6 +76,7 @@ describe("HybridRetriever (pgvector + BM25 + RRF)", () => {
     mockedFindMany.mockResolvedValue(
       corpus.map((chunk) => ({
         id: Number(chunk.id),
+        documentId: chunk.documentId,
         sourceName: chunk.sourceName,
         sourceUrl: chunk.sourceUrl,
         text: chunk.text,
@@ -81,6 +85,7 @@ describe("HybridRetriever (pgvector + BM25 + RRF)", () => {
     mockedQueryRaw.mockResolvedValue([
       {
         id: 1,
+        documentId: "doc-a",
         sourceName: "doc-a",
         sourceUrl: "https://a.example",
         text: corpus[0].text,

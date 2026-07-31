@@ -62,6 +62,7 @@ const mockHybridRetriever = {
     chunks: [
       {
         id: "1",
+        documentId: "doc-1",
         sourceName: "doc",
         sourceUrl: "https://example.com",
         text: "Blocked account total for 2026 is EUR 11904.",
@@ -86,6 +87,7 @@ describe("RAG Pipeline Orchestrators", () => {
       chunks: [
         {
           id: "1",
+          documentId: "doc-1",
           sourceName: "doc",
           sourceUrl: "https://example.com",
           text: "Blocked account total for 2026 is EUR 11904.",
@@ -114,8 +116,45 @@ describe("RAG Pipeline Orchestrators", () => {
     expect(result.isCached).toBe(false);
     expect(result.answer).toContain("Blocked Account");
     expect(result.sources[0].name).toBe("doc");
+    expect(result.sources[0].documentId).toBe("doc-1");
     expect(mockCache.addToCache).toHaveBeenCalled();
+    expect(mockCache.addToCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({ answer: expect.any(String) }),
+      ["doc-1"],
+    );
     expect(mockedCallLLM).toHaveBeenCalled();
+  });
+
+  it("standard CRAG: does NOT cache ungrounded fallback answers (M1)", async () => {
+    mockedRunCragGate.mockResolvedValue({
+      chunks: [
+        {
+          id: "1",
+          documentId: "doc-1",
+          sourceName: "doc",
+          sourceUrl: "https://example.com",
+          text: "Blocked account total for 2026 is EUR 11904.",
+          crossScore: 0.1,
+        },
+      ],
+      contextText: "",
+      needsWebFallback: true,
+      pathUsed: "CRAG_CONFIDENCE_GATE_WEB_FALLBACK",
+      webResults: [],
+    });
+
+    const memory = new SummaryBufferMemory("conv-5", 8);
+    const result = await runStandardCrag("unverifiable question", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    expect(result.isGrounded).toBe(false);
+    expect(result.answer).toContain("do not have sufficient official information");
+    expect(mockCache.addToCache).not.toHaveBeenCalled();
   });
 
   it("agentic: research -> analyst matrix -> writer markdown", async () => {

@@ -119,10 +119,14 @@ export class BM25Okapi {
   }
 }
 
+export interface Bm25Search {
+  search(query: string, topK: number): Chunk[];
+}
+
 export function buildBm25(
   chunks: Chunk[],
   tokenizer: (text: string) => string[] = defaultTokenizer,
-) {
+): Bm25Search {
   const corpus = chunks.map((chunk) => tokenizer(chunk.text));
   const bm25 = new BM25Okapi(corpus);
   return {

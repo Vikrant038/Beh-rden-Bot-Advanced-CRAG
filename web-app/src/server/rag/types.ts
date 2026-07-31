@@ -1,5 +1,6 @@
 export interface Chunk {
   id: string;
+  documentId?: string;
   sourceName: string;
   sourceUrl: string;
   text: string;
@@ -13,6 +14,7 @@ export interface Source {
   name: string;
   url: string;
   score: number;
+  documentId?: string;
 }
 
 export interface RetrievedContext {

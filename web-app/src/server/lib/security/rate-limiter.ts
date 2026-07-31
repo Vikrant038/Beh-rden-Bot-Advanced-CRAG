@@ -17,6 +17,8 @@ export interface RateLimitResult {
 export class RateLimiter {
   private readonly upstashLimit: Ratelimit | null;
   private readonly memBuckets = new Map<string, number[]>();
+  private readonly lastSeen = new Map<string, number>();
+  private static readonly MAX_MEM_BUCKETS = 10_000;
 
   constructor(
     private readonly maxRequests: number,
@@ -43,11 +45,22 @@ export class RateLimiter {
       };
     }
 
+    // m5: bound memory — drop the least-recently-seen bucket once the map
+    // grows past the cap, and evict buckets that fell out of the window.
+    if (this.memBuckets.size >= RateLimiter.MAX_MEM_BUCKETS) {
+      this.evictStaleBuckets();
+    }
+    this.lastSeen.set(identifier, Date.now());
+
     const now = Date.now();
     const windowStart = now - this.windowSeconds * 1000;
     const timestamps = (this.memBuckets.get(identifier) ?? []).filter(
       (timestamp) => timestamp > windowStart,
     );
+
+    if (timestamps.length === 0) {
+      this.memBuckets.delete(identifier);
+    }
 
     if (timestamps.length >= this.maxRequests) {
       this.memBuckets.set(identifier, timestamps);
@@ -68,6 +81,23 @@ export class RateLimiter {
       remaining: this.maxRequests - timestamps.length,
       reset: this.windowSeconds,
     };
+  }
+
+  private evictStaleBuckets(): void {
+    const now = Date.now();
+    const staleCutoff = now - this.windowSeconds * 1000;
+    const candidates = [...this.lastSeen.entries()].sort(([, seenA], [, seenB]) => seenA - seenB);
+
+    for (const [key] of candidates) {
+      if (this.memBuckets.size < RateLimiter.MAX_MEM_BUCKETS) {
+        break;
+      }
+      const timestamps = this.memBuckets.get(key);
+      if (timestamps === undefined || timestamps[timestamps.length - 1] < staleCutoff) {
+        this.memBuckets.delete(key);
+        this.lastSeen.delete(key);
+      }
+    }
   }
 
   async enforce(identifier: string): Promise<RateLimitResult> {

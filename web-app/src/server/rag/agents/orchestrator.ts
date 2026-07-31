@@ -104,11 +104,18 @@ export async function runAgenticRag(
   const finalAnswer = await agentWriterSynthesis(maskedQuery, research, analysis);
 
   if (!bypassCache) {
+    const parentDocIds = Array.from(
+      new Set(
+        research.sources
+          .map((source) => source.documentId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
     await cache.addToCache(
       maskedQuery,
       queryVector,
       { answer: finalAnswer, sources: research.sources },
-      research.sources.map((source) => source.name),
+      parentDocIds,
     );
   }
   await memory.addTurn(userQuery, finalAnswer);

@@ -1,3 +1,6 @@
+# Build-script allowlist. pnpm v11 reads `allowBuilds`; pnpm v9/v10 read
+# `onlyBuiltDependencies`. Both are listed so installs work across the
+# supported pnpm majors (each version ignores the key it does not know).
 allowBuilds:
   sharp: true
   unrs-resolver: true
@@ -5,3 +8,11 @@ allowBuilds:
   '@prisma/engines': true
   prisma: true
   '@prisma/client': true
+
+onlyBuiltDependencies:
+  - sharp
+  - unrs-resolver
+  - esbuild
+  - '@prisma/engines'
+  - prisma
+  - '@prisma/client'

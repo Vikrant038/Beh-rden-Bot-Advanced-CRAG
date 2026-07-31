@@ -12,6 +12,7 @@ export const LLM_SEMAPHORE_LIMIT = 10;
 export const GROQ_MAX_RETRIES = 3;
 export const HF_MAX_RETRIES = 2;
 export const GROQ_BASE_DELAY_MS = 1500;
+export const HF_BASE_DELAY_MS = 1500;
 
 export interface LlmMessage {
   role: "system" | "user" | "assistant";
@@ -175,7 +176,7 @@ async function callHfWithRetry(
     } catch (error) {
       lastError = error;
       if (attempt < HF_MAX_RETRIES) {
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await new Promise((resolve) => setTimeout(resolve, HF_BASE_DELAY_MS * attempt));
       }
     }
   }

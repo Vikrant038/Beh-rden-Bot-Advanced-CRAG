@@ -8,13 +8,18 @@ import {
   SPARSE_TOP_K,
 } from "@/server/rag/types";
 import { denseRetrieve } from "@/server/rag/retrieval/dense";
-import { buildBm25 } from "@/server/rag/retrieval/bm25";
+import { buildBm25, type Bm25Search } from "@/server/rag/retrieval/bm25";
 import { reciprocalRankFusion } from "@/server/rag/retrieval/rrf";
 import type { Reranker } from "@/server/rag/retrieval/reranker";
 import type { EmbeddingClient } from "@/server/embeddings/client";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("hybrid-retrieval");
+
+// m3: BM25 index is memoized per corpus instance. PrismaCorpusProvider caches
+// the corpus array for 60s and returns the same reference, so the index is
+// rebuilt at most once per corpus lifetime instead of on every retrieve().
+const bm25IndexCache = new WeakMap<Chunk[], Bm25Search>();
 
 export interface CorpusProvider {
   loadChunks(): Promise<Chunk[]>;
@@ -47,7 +52,12 @@ export class HybridRetriever {
 
   async retrieve(query: string, queries: string[]): Promise<HybridRetrievalResult> {
     const corpus = await this.options.corpusProvider.loadChunks();
-    const bm25 = buildBm25(corpus);
+
+    let bm25 = bm25IndexCache.get(corpus);
+    if (!bm25) {
+      bm25 = buildBm25(corpus);
+      bm25IndexCache.set(corpus, bm25);
+    }
 
     const denseRankings: Chunk[][] = [];
     const sparseRankings: Chunk[][] = [];
