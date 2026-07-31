@@ -1,6 +1,13 @@
 .env
-data/raw/
+.venv/
+venv/
+data/
+models/
+checkpoints/
 *.faiss
+*.bin
+*.safetensors
+*.npy
+*.jsonl
 __pycache__/
 .DS_Store
-venv/

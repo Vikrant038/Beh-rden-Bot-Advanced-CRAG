@@ -1,36 +1,50 @@
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
+"""
+Embedding Model Sanity & Semantic Ranking Unit Tests (test_embeddings.py)
+Complies with AGENTS.md §2 & Gotcha #10, and CODING_STANDARDS.md.
+"""
 
-def test_semantic_similarity():
-    """Verify vector similarity ranking using sentence-transformers."""
-    print("[TEST] Loading local embedding model (all-MiniLM-L6-v2)...")
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+import os
+import sys
+import pytest
+import numpy as np
+from typing import List
+from sklearn.metrics.pairwise import cosine_similarity
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from src.embed import load_embedding_model
+from src.logging_config import logger
+from src.tracing import observe
+
+
+@observe(name="test_semantic_similarity", as_type="evaluator")
+def test_semantic_similarity() -> None:
+    """Verify vector similarity ranking using local sentence-transformers model."""
+    logger.info("[TEST] Loading local embedding model...")
+    model = load_embedding_model()
     
-    sentences = [
+    sentences: List[str] = [
         "What documents do I need for a German student visa?",          # Query (Index 0)
         "Required papers for studying in Germany as an international",   # High similarity
         "How to apply for APS certificate from India",                   # Medium similarity
         "The best recipe for authentic Italian pizza",                  # Unrelated
     ]
     
-    # Encode all 4 sentences into 384-dimensional vectors
     embeddings = model.encode(sentences, normalize_embeddings=True)
-    
     query_vector = embeddings[0].reshape(1, -1)
     
-    print("\n=== Cosine Similarity to Query ===")
-    labels = ["[QUERY]", "[HIGH SIMILARITY]", "[MEDIUM SIMILARITY]", "[UNRELATED]"]
+    labels: List[str] = ["[QUERY]", "[HIGH SIMILARITY]", "[MEDIUM SIMILARITY]", "[UNRELATED]"]
+    sims: List[float] = []
     
-    sims = []
     for label, emb in zip(labels, embeddings):
-        sim = cosine_similarity(query_vector, emb.reshape(1, -1))[0][0]
+        sim: float = float(cosine_similarity(query_vector, emb.reshape(1, -1))[0][0])
         sims.append(sim)
-        print(f"  {label:<20}: {sim:.4f}")
+        logger.info(f"  {label:<20}: {sim:.4f}")
         
     assert sims[1] > sims[2] > sims[3], "Vector ranking failed — check model"
-    print("\n✅ Similarity test passed successfully!")
-    print(f"   Embedding vector shape: {embeddings.shape}")
+    assert embeddings.shape[1] in [384, 768, 1024], f"Unexpected embedding dimension: {embeddings.shape[1]}"
+    logger.info(f" ✅ Similarity test passed successfully! Embedding dimension: {embeddings.shape[1]}")
+
 
 if __name__ == "__main__":
     test_semantic_similarity()

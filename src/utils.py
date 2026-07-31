@@ -1,8 +1,24 @@
+import os
 import re
 import unicodedata
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pathlib import Path
+from typing import Optional
+from pydantic import BaseModel, Field, field_validator
+from src.logging_config import logger
+
+def get_project_root() -> Path:
+    """Returns the absolute root directory path of the repository."""
+    return Path(__file__).resolve().parent.parent
+
+def get_data_dir() -> Path:
+    """Returns the data directory path, creating it if it doesn't exist."""
+    data_dir = get_project_root() / os.environ.get("DATA_DIR", "data")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
 
 class ChunkModel(BaseModel):
+    """Pydantic model validating text chunk attributes."""
+
     text: str = Field(..., min_length=50, description="The chunk content text")
     source_id: str = Field(..., description="Unique source identifier")
     source_name: str = Field(..., description="Human readable document title")
@@ -25,8 +41,7 @@ def clean_text(text: str) -> str:
     if not text:
         return ""
     
-    # Step 1: Normalize unicode (but keep German umlauts — they're meaningful)
-    # NFC normalization composes characters (ä stays ä, not a + combining umlaut)
+    # Step 1: Normalize unicode (keep German umlauts compostaion)
     text = unicodedata.normalize("NFC", text)
     
     # Step 2: Remove common PDF artifacts
@@ -35,7 +50,6 @@ def clean_text(text: str) -> str:
     text = re.sub(r'\uf06c', '', text)         # common PDF artifact
     
     # Step 3: Remove repeated page headers/footers
-    # Pattern: lines that appear 3+ times across the document (likely headers)
     lines = text.split('\n')
     line_counts = {}
     for line in lines:
@@ -43,7 +57,7 @@ def clean_text(text: str) -> str:
         if len(stripped) > 5:   # ignore very short lines
             line_counts[stripped] = line_counts.get(stripped, 0) + 1
     
-    # Remove lines that appear more than 3 times (they're boilerplate)
+    # Remove lines that appear more than 3 times (boilerplate)
     cleaned_lines = []
     for line in lines:
         stripped = line.strip()
@@ -54,7 +68,7 @@ def clean_text(text: str) -> str:
     
     # Step 4: Normalize whitespace (collapse multiple blank lines to max 2)
     text = re.sub(r'\n{3,}', '\n\n', text)
-    text = re.sub(r'[ \t]+', ' ', text)    # multiple spaces → single space
+    text = re.sub(r'[ \t]+', ' ', text)    # multiple spaces -> single space
     text = re.sub(r' \n', '\n', text)      # trailing spaces before newline
     
     # Step 5: Remove very short lines that are likely noise
@@ -63,17 +77,15 @@ def clean_text(text: str) -> str:
     
     return '\n'.join(lines).strip()
 
-
 def count_tokens_approx(text: str) -> int:
-    """Approximate token count (1 token ≈ 4 chars for English text)."""
+    """Approximate token count (1 token ≈ 4 chars for English/German text)."""
     return len(text) // 4
-
 
 def print_text_stats(text: str, source_id: str):
     """Print statistics about extracted text for quality check."""
     lines = text.split('\n')
     words = len(text.split())
     tokens = count_tokens_approx(text)
-    print(f"[STATS] {source_id}: {len(text)} chars | {words} words | ~{tokens} tokens | {len(lines)} lines")
-
-
+    logger.info(
+        f"[STATS] {source_id}: {len(text)} chars | {words} words | ~{tokens} tokens | {len(lines)} lines"
+    )

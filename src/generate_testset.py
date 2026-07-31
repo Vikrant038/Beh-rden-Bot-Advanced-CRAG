@@ -1,16 +1,25 @@
+"""
+Synthetic Evaluation Ground-Truth Dataset Generator
+Complies with AGENTS.md §2 & Gotcha #10, and CODING_STANDARDS.md.
+"""
+
 import os
 import json
 import random
 from pathlib import Path
+from typing import List, Dict
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 from src.llm_client import call_llm
+from src.logging_config import logger
+from src.utils import get_data_dir
+from src.errors import NotFoundError
 
 load_dotenv()
 
-OUTPUT_DATASET_PATH = "data/processed/synthetic_eval_dataset.json"
-CHUNKS_PATH = "data/processed/all_chunks.json"
+OUTPUT_DATASET_PATH = os.path.join(get_data_dir(), "processed", "synthetic_eval_dataset.json")
+CHUNKS_PATH = os.path.join(get_data_dir(), "processed", "all_chunks.json")
 
 
 class SyntheticEvalItem(BaseModel):
@@ -23,9 +32,9 @@ class SyntheticEvalItem(BaseModel):
     ground_truth_answer: str
 
 
-def generate_synthetic_eval_dataset(num_questions: int = 15):
+async def generate_synthetic_eval_dataset(num_questions: int = 15) -> List[dict]:
     if not os.path.exists(CHUNKS_PATH):
-        raise FileNotFoundError(f"{CHUNKS_PATH} not found. Run chunking first!")
+        raise NotFoundError(f"Chunks file missing: {CHUNKS_PATH}. Run src/ingest.py first.")
 
     with open(CHUNKS_PATH, "r", encoding="utf-8") as f:
         chunks = json.load(f)
@@ -33,12 +42,10 @@ def generate_synthetic_eval_dataset(num_questions: int = 15):
     sampled_chunks = random.sample(chunks, min(num_questions, len(chunks)))
 
     eval_items = []
-    print(f"==================================================")
-    print(f"GENERATING {len(sampled_chunks)} SYNTHETIC GROUND-TRUTH TEST PAIRS")
-    print(f"==================================================\n")
+    logger.info(f"GENERATING {len(sampled_chunks)} SYNTHETIC GROUND-TRUTH TEST PAIRS")
 
     for i, chunk in enumerate(sampled_chunks, 1):
-        print(f"[{i}/{len(sampled_chunks)}] Generating Q&A pair from source: {chunk['source_id']}...")
+        logger.info(f"[{i}/{len(sampled_chunks)}] Generating Q&A pair from source: {chunk.get('source_id', 'unknown')}...")
         
         prompt = (
             f"Given the following official document text:\n"
@@ -53,7 +60,7 @@ def generate_synthetic_eval_dataset(num_questions: int = 15):
 
         try:
             messages = [{"role": "user", "content": prompt}]
-            content = call_llm(messages, max_tokens=250, temperature=0.4)
+            content = await call_llm(messages, max_tokens=250, temperature=0.4)
 
             q_part = ""
             a_part = ""
@@ -66,26 +73,27 @@ def generate_synthetic_eval_dataset(num_questions: int = 15):
             if q_part and a_part:
                 item = SyntheticEvalItem(
                     id=f"SYN-{i:02d}",
-                    source_id=chunk["source_id"],
-                    source_name=chunk["source_name"],
-                    source_url=chunk["source_url"],
+                    source_id=chunk.get("source_id", "unknown"),
+                    source_name=chunk.get("source_name", "Unknown"),
+                    source_url=chunk.get("source_url", ""),
                     ground_truth_context=chunk["text"],
                     question=q_part,
                     ground_truth_answer=a_part
                 )
                 eval_items.append(item.model_dump())
-                print(f"   - Q: {q_part[:60]}...")
+                logger.info(f"   - Q: {q_part[:60]}...")
 
         except Exception as e:
-            print(f"   [WARN] Failed to generate for item {i}: {e}")
+            logger.warning(f"[WARN] Failed to generate for item {i}: {e}")
 
-    Path("data/processed").mkdir(parents=True, exist_ok=True)
+    Path(os.path.dirname(OUTPUT_DATASET_PATH)).mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_DATASET_PATH, "w", encoding="utf-8") as f:
         json.dump(eval_items, f, ensure_ascii=False, indent=2)
 
-    print(f"\nSynthetic Dataset Created! Saved {len(eval_items)} pairs -> {OUTPUT_DATASET_PATH}")
+    logger.info(f"Synthetic Dataset Created! Saved {len(eval_items)} pairs -> {OUTPUT_DATASET_PATH}")
     return eval_items
 
 
 if __name__ == "__main__":
-    generate_synthetic_eval_dataset(num_questions=10)
+    import asyncio
+    asyncio.run(generate_synthetic_eval_dataset(num_questions=10))
