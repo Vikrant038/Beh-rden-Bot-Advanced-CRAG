@@ -2,6 +2,7 @@ import { env } from "@/server/env";
 import { createLogger } from "@/server/lib/logger";
 import { QUERY_EMBEDDING_PREFIX } from "@/server/rag/types";
 import { LLMProviderError } from "@/server/llm/errors";
+import { observeGeneration } from "@/server/tracing";
 
 const logger = createLogger("embeddings");
 
@@ -30,6 +31,11 @@ export class HfEmbeddingClient implements EmbeddingClient {
       throw new LLMProviderError("HF_TOKEN not configured; cannot embed");
     }
 
+    const generation = observeGeneration("embed", {
+      model: this.model,
+      metadata: { input: texts },
+    });
+
     let response: Response;
     try {
       const url = `${this.inferenceUrl}/pipeline/feature-extraction/${encodeURIComponent(this.model)}`;
@@ -43,25 +49,31 @@ export class HfEmbeddingClient implements EmbeddingClient {
       });
     } catch (error) {
       logger.warn({ error: String(error) }, "[EMBED] HF API fetch failed");
-      throw new LLMProviderError(`HuggingFace API is unreachable (Network/DNS error). Please check your connection to ${this.inferenceUrl}`);
+      generation.endError(error);
+      throw new LLMProviderError(
+        `HuggingFace API is unreachable (Network/DNS error). Please check your connection to ${this.inferenceUrl}`,
+      );
     }
 
     if (!response.ok) {
       const detail = await response.text();
       logger.warn({ status: response.status }, `[EMBED] HF error: ${detail}`);
+      generation.endError(new Error(`Embedding API error ${response.status}: ${detail}`));
       throw new LLMProviderError(`Embedding API error ${response.status}: ${detail}`);
     }
 
     const data = (await response.json()) as number[][] | number[][][];
-    const vectors =
-      Array.isArray(data) && Array.isArray(data[0]) ? (data as number[][]) : null;
+    const vectors = Array.isArray(data) && Array.isArray(data[0]) ? (data as number[][]) : null;
 
     if (!vectors || vectors.length !== texts.length) {
       logger.warn("[EMBED] HF returned malformed response");
+      generation.endError(new Error("Embedding API returned malformed response"));
       throw new LLMProviderError("Embedding API returned malformed response");
     }
 
-    return vectors.map((vector) => normalize(vector));
+    const normalized = vectors.map((vector) => normalize(vector));
+    generation.end({ count: normalized.length, dim: normalized[0]?.length ?? 0 });
+    return normalized;
   }
 
   async embedQuery(query: string): Promise<number[]> {

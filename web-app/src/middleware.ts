@@ -4,7 +4,7 @@ import { authConfig } from "@/auth.config";
 
 const { auth } = NextAuth(authConfig);
 
-const PROTECTED_PREFIXES = ["/chat", "/history", "/settings"];
+const PROTECTED_PREFIXES = ["/chat", "/history", "/settings", "/sources"];
 const ADMIN_PREFIXES = ["/admin"];
 
 export default auth((request) => {
@@ -32,5 +32,5 @@ export default auth((request) => {
 });
 
 export const config = {
-  matcher: ["/chat/:path*", "/history", "/settings", "/admin/:path*"],
+  matcher: ["/chat/:path*", "/history", "/settings", "/sources", "/admin/:path*"],
 };

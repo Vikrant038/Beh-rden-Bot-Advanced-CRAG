@@ -22,6 +22,7 @@ const serverEnvSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
+  CRON_SECRET: z.string().optional(),
 });
 
 function loadServerEnv(): z.infer<typeof serverEnvSchema> {

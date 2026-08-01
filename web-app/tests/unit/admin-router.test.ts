@@ -103,4 +103,79 @@ describe("admin router", () => {
     expect(result[0].conversationCount).toBe(4);
     expect(result[0].role).toBe("USER");
   });
+
+  it("dailyQueries: returns a time series of user queries", async () => {
+    prismaMock.$queryRaw.mockResolvedValue([
+      { date: "2026-07-28", count: 3 },
+      { date: "2026-07-29", count: 5 },
+    ] as never);
+    const caller = makeCaller();
+    const result = await caller.admin.dailyQueries();
+    expect(result).toEqual([
+      { date: "2026-07-28", count: 3 },
+      { date: "2026-07-29", count: 5 },
+    ]);
+  });
+
+  it("dailyQueries: falls back to empty list on aggregation failure", async () => {
+    prismaMock.$queryRaw.mockRejectedValue(new Error("db down"));
+    const caller = makeCaller();
+    const result = await caller.admin.dailyQueries();
+    expect(result).toEqual([]);
+  });
+
+  it("modeSplit: groups assistant messages by engine mode", async () => {
+    prismaMock.$queryRaw.mockResolvedValue([
+      { mode: "agentic", count: 8 },
+      { mode: "standard", count: 2 },
+    ] as never);
+    const caller = makeCaller();
+    const result = await caller.admin.modeSplit();
+    expect(result).toEqual([
+      { mode: "agentic", count: 8 },
+      { mode: "standard", count: 2 },
+    ]);
+  });
+
+  it("modeSplit: falls back to empty list on aggregation failure", async () => {
+    prismaMock.$queryRaw.mockRejectedValue(new Error("db down"));
+    const caller = makeCaller();
+    const result = await caller.admin.modeSplit();
+    expect(result).toEqual([]);
+  });
+
+  it("recentQueries: returns the latest queries with pipeline outcome", async () => {
+    prismaMock.$queryRaw.mockResolvedValue([
+      {
+        id: "m1",
+        query: "How do I open a blocked account?",
+        createdAt: new Date("2026-07-31T10:00:00Z"),
+        mode: "agentic",
+        latencyMs: 812.5,
+        isCached: false,
+        retrievalPath: "AGENTIC_3_AGENT_REACT",
+      },
+      {
+        id: "m2",
+        query: "Visa fee?",
+        createdAt: new Date("2026-07-31T09:00:00Z"),
+        mode: "standard",
+        latencyMs: 1.2,
+        isCached: true,
+        retrievalPath: "TIER_2_VECTOR_CACHE_HIT (Sim: 0.980)",
+      },
+    ] as never);
+    const caller = makeCaller();
+    const result = await caller.admin.recentQueries();
+    expect(result).toHaveLength(2);
+    expect(result[0].mode).toBe("agentic");
+    expect(result[1].isCached).toBe(true);
+  });
+
+  it("recentQueries: falls back to empty list on aggregation failure", async () => {
+    prismaMock.$queryRaw.mockRejectedValue(new Error("db down"));
+    const caller = makeCaller();
+    const result = await caller.admin.recentQueries();
+    expect(result).toEqual([]);
+  });
 });

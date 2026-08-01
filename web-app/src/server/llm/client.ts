@@ -3,6 +3,7 @@ import { env } from "@/server/env";
 import { CircuitBreaker } from "@/server/llm/circuit-breaker";
 import { createLogger } from "@/server/lib/logger";
 import { LLMProviderError } from "@/server/llm/errors";
+import { observeGeneration } from "@/server/tracing";
 
 const logger = createLogger("llm");
 
@@ -197,10 +198,17 @@ export async function callLLM(
   const temperature = options.temperature ?? 0.1;
   const { signal } = options;
 
+  const generation = observeGeneration("llm.call", {
+    model: env.GROQ_MODEL ?? DEFAULT_GROQ_MODEL,
+    metadata: { input: messages, maxTokens, temperature },
+  });
+
   try {
-    return await groqBreaker.execute(() =>
+    const groqResult = await groqBreaker.execute(() =>
       callGroqWithRetry(messages, maxTokens, temperature, signal),
     );
+    generation.end(groqResult);
+    return groqResult;
   } catch (error) {
     logger.warn(
       { error: String(error) },
@@ -209,9 +217,14 @@ export async function callLLM(
   }
 
   try {
-    return await hfBreaker.execute(() => callHfWithRetry(messages, maxTokens, temperature, signal));
+    const hfResult = await hfBreaker.execute(() =>
+      callHfWithRetry(messages, maxTokens, temperature, signal),
+    );
+    generation.end(hfResult);
+    return hfResult;
   } catch (error) {
     logger.warn({ error: String(error) }, "[CIRCUIT BREAKER] HuggingFace also failed");
+    generation.endError(error);
   }
 
   throw new LLMProviderError(

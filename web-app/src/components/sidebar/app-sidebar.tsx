@@ -1,13 +1,15 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { History, Plus, Settings } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { FileStack, History, Plus, Settings, ShieldAlert } from "lucide-react";
 import { api } from "@/lib/trpc/client";
 import { ConversationItem } from "@/components/sidebar/conversation-item";
 
 export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { data: session } = useSession();
   const createMutation = api.conversation.create.useMutation();
   const conversations = api.conversation.list.useInfiniteQuery(
     { limit: 30 },
@@ -61,6 +63,17 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
           type="button"
           onClick={() => {
             onNavigate?.();
+            router.push("/sources");
+          }}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-surface-hover hover:text-foreground"
+        >
+          <FileStack className="h-4 w-4" />
+          Knowledge base
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            onNavigate?.();
             router.push("/history");
           }}
           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-surface-hover hover:text-foreground"
@@ -79,6 +92,19 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
           <Settings className="h-4 w-4" />
           Settings
         </button>
+        {session?.user?.role === "ADMIN" && (
+          <button
+            type="button"
+            onClick={() => {
+              onNavigate?.();
+              router.push("/admin/dashboard");
+            }}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-surface-hover hover:text-foreground"
+          >
+            <ShieldAlert className="h-4 w-4" />
+            Admin
+          </button>
+        )}
       </div>
     </div>
   );

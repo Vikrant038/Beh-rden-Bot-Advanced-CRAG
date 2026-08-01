@@ -12,7 +12,7 @@ async function main() {
       conversationId: convId,
       userId,
       query: "hi again",
-      mode: "agentic"
+      mode: "agentic",
     })) {
       console.log("EVENT:", JSON.stringify(event));
     }
@@ -21,7 +21,7 @@ async function main() {
     const messages = await prisma.message.findMany({
       where: { conversationId: convId },
       orderBy: { createdAt: "desc" },
-      take: 2
+      take: 2,
     });
     console.log("DB MESSAGES:", messages);
   } catch (err) {

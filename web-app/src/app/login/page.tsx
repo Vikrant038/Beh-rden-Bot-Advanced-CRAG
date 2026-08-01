@@ -26,7 +26,7 @@ export default function LoginPage() {
               Continue with GitHub
             </button>
           </form>
-          
+
           <form
             action={async () => {
               "use server";

@@ -3,7 +3,9 @@ import { router, adminProcedure } from "@/server/trpc/t";
 import { prisma } from "@/server/db";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { getCorpusProvider } from "@/server/rag/instance";
-import { NotFoundError, ValidationError } from "@/server/lib/errors";
+import { ingestUrl, syncAllDocuments, type IngestResult } from "@/server/ingest/pipeline";
+import { assertSafeUrl } from "@/server/lib/security/url-validator";
+import { NotFoundError } from "@/server/lib/errors";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("document-router");
@@ -30,17 +32,21 @@ export const documentRouter = router({
     return { success: true, deletedChunks: document.chunkCount, cacheInvalidated: invalidated };
   }),
 
-  sync: adminProcedure.input(z.object({ url: z.string().url().optional() })).mutation(async () => {
-    throw new ValidationError(
-      "sync",
-      "document sync is provided by the admin data-pipeline update (Phase D)",
-    );
-  }),
+  sync: adminProcedure
+    .input(z.object({ force: z.boolean().default(false) }))
+    .mutation(async ({ input }): Promise<{ results: IngestResult[]; failed: number }> => {
+      const results = await syncAllDocuments({ force: input.force });
+      const failed = results.filter((result) => result.status === "failed").length;
+      logger.info({ total: results.length, failed }, "[DOCUMENT] sync complete");
+      return { results, failed };
+    }),
 
-  ingestUrl: adminProcedure.input(z.object({ url: z.string().url() })).mutation(async () => {
-    throw new ValidationError(
-      "ingestUrl",
-      "URL ingestion is provided by the admin data-pipeline update (Phase D)",
-    );
-  }),
+  ingestUrl: adminProcedure
+    .input(z.object({ url: z.string().url() }))
+    .mutation(async ({ input }): Promise<IngestResult> => {
+      await assertSafeUrl(input.url);
+      const result = await ingestUrl(input.url);
+      logger.info({ url: input.url, status: result.status }, "[DOCUMENT] ingest complete");
+      return result;
+    }),
 });

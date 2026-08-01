@@ -11,6 +11,26 @@ interface MessageStatsRow {
   avgLatencyMs: number | null;
 }
 
+interface DailyQueryRow {
+  date: string;
+  count: number;
+}
+
+interface ModeSplitRow {
+  mode: string;
+  count: number;
+}
+
+interface RecentQueryRowRaw {
+  id: string;
+  query: string;
+  createdAt: Date;
+  mode: string;
+  latencyMs: number;
+  isCached: boolean;
+  retrievalPath: string | null;
+}
+
 export interface AdminMetrics {
   totalUsers: number;
   totalConversations: number;
@@ -29,6 +49,29 @@ export interface AdminUserRow {
   createdAt: Date;
   conversationCount: number;
 }
+
+export interface DailyQueryPoint {
+  date: string;
+  count: number;
+}
+
+export interface ModeSplitPoint {
+  mode: string;
+  count: number;
+}
+
+export interface RecentQueryRow {
+  id: string;
+  query: string;
+  createdAt: Date;
+  mode: string;
+  latencyMs: number;
+  isCached: boolean;
+  retrievalPath: string | null;
+}
+
+const DAILY_QUERY_WINDOW_DAYS = 14;
+const RECENT_QUERY_LIMIT = 10;
 
 export const adminRouter = router({
   metrics: adminProcedure.query(async (): Promise<AdminMetrics> => {
@@ -99,5 +142,76 @@ export const adminRouter = router({
       createdAt: row.createdAt,
       conversationCount: row._count.conversations,
     }));
+  }),
+
+  dailyQueries: adminProcedure.query(async (): Promise<DailyQueryPoint[]> => {
+    return prisma.$queryRaw<DailyQueryRow[]>`
+      SELECT to_char("createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date, COUNT(*)::int AS count
+      FROM messages
+      WHERE role = 'USER'
+        AND "createdAt" >= NOW() - (${DAILY_QUERY_WINDOW_DAYS} || ' days')::interval
+      GROUP BY date
+      ORDER BY date ASC
+    `
+      .then((rows) => rows.map((row) => ({ date: row.date, count: Number(row.count ?? 0) })))
+      .catch((error) => {
+        logger.warn({ error: String(error) }, "[ADMIN] dailyQueries aggregation failed");
+        return [];
+      });
+  }),
+
+  modeSplit: adminProcedure.query(async (): Promise<ModeSplitPoint[]> => {
+    return prisma.$queryRaw<ModeSplitRow[]>`
+      SELECT COALESCE(metadata->>'mode', 'standard') AS mode, COUNT(*)::int AS count
+      FROM messages
+      WHERE role = 'ASSISTANT' AND metadata->>'mode' IS NOT NULL
+      GROUP BY mode
+      ORDER BY count DESC
+    `
+      .then((rows) => rows.map((row) => ({ mode: row.mode, count: Number(row.count ?? 0) })))
+      .catch((error) => {
+        logger.warn({ error: String(error) }, "[ADMIN] modeSplit aggregation failed");
+        return [];
+      });
+  }),
+
+  recentQueries: adminProcedure.query(async (): Promise<RecentQueryRow[]> => {
+    return prisma.$queryRaw<RecentQueryRowRaw[]>`
+      SELECT m."id",
+             m.content AS query,
+             m."createdAt" AS "createdAt",
+             COALESCE(a.metadata->>'mode', 'standard') AS mode,
+             COALESCE((a.metadata->>'latencyMs')::float, 0) AS "latencyMs",
+             COALESCE(a.metadata->>'isCached', 'false') = 'true' AS "isCached",
+             a.metadata->>'retrievalPath' AS "retrievalPath"
+      FROM messages m
+      CROSS JOIN LATERAL (
+        SELECT "metadata"
+        FROM messages a
+        WHERE a."conversationId" = m."conversationId"
+          AND a.role = 'ASSISTANT'
+          AND a."createdAt" > m."createdAt"
+        ORDER BY a."createdAt" ASC
+        LIMIT 1
+      ) a
+      WHERE m.role = 'USER'
+      ORDER BY m."createdAt" DESC
+      LIMIT ${RECENT_QUERY_LIMIT}
+    `
+      .then((rows) =>
+        rows.map((row) => ({
+          id: row.id,
+          query: row.query,
+          createdAt: row.createdAt,
+          mode: row.mode,
+          latencyMs: Number(row.latencyMs ?? 0),
+          isCached: Boolean(row.isCached),
+          retrievalPath: row.retrievalPath ?? null,
+        })),
+      )
+      .catch((error) => {
+        logger.warn({ error: String(error) }, "[ADMIN] recentQueries aggregation failed");
+        return [];
+      });
   }),
 });

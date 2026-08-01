@@ -8,6 +8,7 @@ import { disambiguateQuery } from "@/server/rag/disambiguation";
 import { isQueryOutOfDomain } from "@/server/rag/guardrail";
 import { getHybridRetriever } from "@/server/rag/instance";
 import { maskPii } from "@/server/pii/masker";
+import { runWithTraceGen, setTraceInput } from "@/server/tracing";
 import { NotFoundError } from "@/server/lib/errors";
 import { createLogger } from "@/server/lib/logger";
 import type {
@@ -90,6 +91,20 @@ async function findOrCreateUserMessage(
  * then revealed token-by-token so the status bar + typing indicator stay live.
  */
 export async function* runChatStream(input: ChatStreamInput): AsyncGenerator<ChatStreamEvent> {
+  const { conversationId, userId, query, mode } = input;
+  yield* runWithTraceGen(
+    {
+      name: "chat-turn",
+      userId,
+      sessionId: conversationId,
+      metadata: { mode },
+      input: query.trim().slice(0, 200),
+    },
+    () => runChatStreamInner(input),
+  );
+}
+
+async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatStreamEvent> {
   const { conversationId, userId, query, mode, bypassCache = false, signal } = input;
   const trimmedQuery = query.trim().slice(0, MAX_QUERY_LENGTH);
 
@@ -110,6 +125,7 @@ export async function* runChatStream(input: ChatStreamInput): AsyncGenerator<Cha
   yield { type: "status", stage: "guardrail" };
 
   const { text: maskedQuery } = maskPii(trimmedQuery);
+  setTraceInput(maskedQuery);
   const disambiguation = await disambiguateQuery(maskedQuery);
   if (disambiguation.isAmbiguous && disambiguation.options.length >= 2) {
     yield { type: "disambiguation", options: disambiguation.options };

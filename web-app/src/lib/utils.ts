@@ -26,3 +26,27 @@ export function formatRelativeTime(date: Date | string): string {
   }
   return count === 0 ? "now" : `${count}${unit}`;
 }
+
+/**
+ * Formats a `YYYY-MM-DD` string as a short day label for charts.
+ * Shows the weekday when the date falls within the current week.
+ */
+export function formatRelativeDay(date: string): string {
+  const target = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(target.getTime())) {
+    return date;
+  }
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const diffDays = Math.floor((today.getTime() - target.getTime()) / 86_400_000);
+  if (diffDays === 0) {
+    return "Today";
+  }
+  if (diffDays === 1) {
+    return "Yesterday";
+  }
+  if (diffDays < 7) {
+    return target.toLocaleDateString("en-US", { weekday: "short" });
+  }
+  return target.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}

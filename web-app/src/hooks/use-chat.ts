@@ -47,7 +47,11 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
   const sendMessageMutation = api.chat.sendMessage.useMutation();
   const regenerateMutation = api.chat.regenerate.useMutation();
 
-  const { data: conversation, isLoading, isError } = api.conversation.getById.useQuery(
+  const {
+    data: conversation,
+    isLoading,
+    isError,
+  } = api.conversation.getById.useQuery(
     { id: conversationId ?? "" },
     { enabled: Boolean(conversationId) },
   );
@@ -239,7 +243,9 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
         setError(err instanceof Error ? err.message : "Streaming request failed");
         setMessages((prev) =>
           prev.map((message) =>
-            message.id === STREAMING_ID ? { ...message, content: "Streaming request failed." } : message,
+            message.id === STREAMING_ID
+              ? { ...message, content: "Streaming request failed." }
+              : message,
           ),
         );
       } finally {

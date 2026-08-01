@@ -15,12 +15,15 @@ export async function GET() {
       memory,
     });
     return NextResponse.json({ success: true, result });
-  } catch (error: any) {
-    return NextResponse.json({ 
-      success: false, 
-      error: error.message, 
-      cause: error.cause ? String(error.cause) : null,
-      stack: error.stack 
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    const cause = error instanceof Error && error.cause ? String(error.cause) : null;
+    const stack = error instanceof Error ? error.stack : undefined;
+    return NextResponse.json({
+      success: false,
+      error: message,
+      cause,
+      stack,
     });
   }
 }
