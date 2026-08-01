@@ -1,0 +1,81 @@
+name: Web App E2E (Playwright)
+
+on:
+  push:
+    branches: [main, web-app]
+    paths:
+      - "web-app/**"
+      - ".github/workflows/e2e-web-app.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "web-app/**"
+      - ".github/workflows/e2e-web-app.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-web-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: behoerden_app
+          POSTGRES_PASSWORD: behoerden_password
+          POSTGRES_DB: behoerden_bot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U behoerden_app -d behoerden_bot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://behoerden_app:behoerden_password@localhost:5432/behoerden_bot
+      MIGRATION_DATABASE_URL: postgresql://behoerden_app:behoerden_password@localhost:5432/behoerden_bot
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: e2e-placeholder-secret-1234567890abcdef
+    defaults:
+      run:
+        working-directory: web-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-app/pnpm-lock.yaml
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm prisma generate
+
+      - name: Apply migrations
+        run: pnpm prisma migrate deploy
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: web-app/playwright-report
+          retention-days: 7

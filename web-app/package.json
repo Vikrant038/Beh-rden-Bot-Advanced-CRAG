@@ -17,7 +17,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
-    "ingest": "tsx src/server/ingest/cli.ts"
+    "ingest": "tsx src/server/ingest/cli.ts",
+    "prepare": "husky"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
@@ -68,7 +69,9 @@
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "15.5.22",
+    "husky": "^9.1.7",
     "jsdom": "^30.0.1",
+    "lint-staged": "^17.3.0",
     "prettier": "^3.9.6",
     "prisma": "^6.19.3",
     "tailwindcss": "^4",

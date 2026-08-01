@@ -1,0 +1,5 @@
+cd "$(git rev-parse --show-toplevel)/web-app" || exit 1
+
+pnpm exec lint-staged
+pnpm typecheck
+node scripts/scan-secrets.mjs

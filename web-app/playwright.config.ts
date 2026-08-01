@@ -1,4 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
+import { config as loadEnv } from "dotenv";
+import { existsSync } from "node:fs";
+
+// Load local env so the dev server and the session-token helper share the
+// same NEXTAUTH_SECRET. CI provides its own env (see e2e-web-app.yml).
+if (existsSync(".env")) {
+  loadEnv({ path: ".env" });
+}
+process.env.NEXTAUTH_SECRET ??= "e2e-local-secret-not-for-production";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -22,5 +31,10 @@ export default defineConfig({
     url: "http://localhost:3000",
     reuseExistingServer: true,
     timeout: 120_000,
+    env: Object.fromEntries(
+      Object.entries(process.env).filter(
+        (entry): entry is [string, string] => entry[1] !== undefined,
+      ),
+    ),
   },
 });

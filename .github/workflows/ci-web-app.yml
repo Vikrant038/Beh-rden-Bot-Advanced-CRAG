@@ -1,0 +1,69 @@
+name: Web App CI
+
+on:
+  push:
+    branches: [main, web-app]
+    paths:
+      - "web-app/**"
+      - ".github/workflows/ci-web-app.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "web-app/**"
+      - ".github/workflows/ci-web-app.yml"
+
+concurrency:
+  group: ci-web-app-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Placeholders so env.ts zod validation passes; tests mock Prisma/network.
+  DATABASE_URL: postgresql://behoerden_app:behoerden_password@localhost:5432/behoerden_bot
+  MIGRATION_DATABASE_URL: postgresql://behoerden_migrator:behoerden_password@localhost:5432/behoerden_bot
+  NEXTAUTH_SECRET: ci-placeholder-secret-not-used-by-tests
+
+defaults:
+  run:
+    working-directory: web-app
+
+jobs:
+  test:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-app/pnpm-lock.yaml
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm prisma generate
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit + integration tests
+        run: pnpm test
+
+      - name: Coverage gate
+        run: pnpm vitest run --coverage
+
+      - name: Production build
+        run: pnpm build

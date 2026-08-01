@@ -1,36 +1,139 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Behörden-Bot (Web App)
 
-## Getting Started
+AI assistant for German immigration, student visas, APS certification, blocked
+accounts, and university applications. A Next.js 15 (App Router) frontend backed
+by the [Repo-2](https://github.com/anomalyco/behoerden-bot) 3-Agent ReAct RAG
+pipeline.
 
-First, run the development server:
+## Stack
+
+- **Framework:** Next.js 15 (App Router), React 19, TypeScript 5
+- **UI:** Tailwind CSS 4, framer-motion, lucide-react, recharts, next-themes
+- **Data:** Prisma 6 + PostgreSQL (pgvector), tRPC 11 + TanStack Query
+- **Auth:** Auth.js v5 (GitHub, Google, Resend magic link; JWT sessions)
+- **AI/LLM:** SSE streaming chat, 3-agent ReAct pipeline, hybrid retrieval
+- **Observability:** Langfuse tracing, pino logging
+- **Quality:** Vitest (unit + integration, ≥80% coverage), Playwright E2E,
+  ESLint, Prettier, Husky pre-commit hooks, GitHub Actions CI
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+# 1. Install dependencies
+pnpm install
+
+# 2. Configure environment (copy template, fill in secrets)
+cp .env.example .env
+
+# 3. Generate the Prisma client and apply migrations
+pnpm prisma generate
+pnpm prisma migrate deploy
+
+# 4. Run the dev server
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+> `.env` is gitignored. Never commit real secrets — the pre-commit hook scans
+> staged files for credential patterns and CI runs Gitleaks.
 
-This project uses [`@fontsource-variable/inter`](https://fontsource.org) to load [Inter](https://rsms.me/inter/), the font family used across the app.
+## Scripts
 
-## Learn More
+| Script                               | Description                      |
+| ------------------------------------ | -------------------------------- |
+| `pnpm dev`                           | Start the dev server (port 3000) |
+| `pnpm build`                         | Production build                 |
+| `pnpm start`                         | Serve the production build       |
+| `pnpm lint`                          | ESLint (Next config)             |
+| `pnpm typecheck`                     | `tsc --noEmit`                   |
+| `pnpm test`                          | Vitest unit + integration suite  |
+| `pnpm test:watch`                    | Vitest watch mode                |
+| `pnpm test:e2e`                      | Playwright E2E suite             |
+| `pnpm format` / `pnpm format:check`  | Prettier write / check           |
+| `pnpm db:migrate` / `pnpm db:deploy` | Prisma migrate dev / deploy      |
+| `pnpm db:seed`                       | Seed the database                |
+| `pnpm ingest`                        | Run the document ingest CLI      |
 
-To learn more about Next.js, take a look at the following resources:
+### Quality gate (must pass before merge)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+pnpm format:check && pnpm lint && pnpm typecheck && pnpm test
+pnpm exec vitest run --coverage   # ≥80% lines/functions/statements
+pnpm build
+pnpm test:e2e                     # requires Playwright browsers
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project structure
 
-## Deploy on Vercel
+```
+src/
+├── app/              # App Router pages, API routes (chat stream, trpc, auth, cron)
+├── components/       # UI components (chat, admin, history, sources)
+├── hooks/            # Client hooks (use-chat, theme, …)
+├── lib/              # Shared client libraries (chat types, tRPC client)
+├── server/           # Server code (trpc routers, rag pipeline, auth, db, env)
+└── styles/           # Global CSS
+prisma/               # Schema + migrations
+tests/
+├── unit/             # Vitest unit tests
+├── integration/      # Vitest integration tests
+├── e2e/              # Playwright E2E specs + helpers
+└── helpers/          # Shared test fixtures (mock-prisma, …)
+scripts/              # Developer tooling (secret scan, …)
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Key flows
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Chat** — `POST /api/chat/stream` (SSE) drives the streaming UI; messages are
+  persisted via the `chat.sendMessage` tRPC mutation. Vague queries surface
+  Stage-0 disambiguation cards.
+- **Admin** — `/admin/*` is restricted to the `ADMIN` role; the dashboard shows
+  usage metrics, cache health, mode split, and recent queries (raw SQL against
+  `messages`/`conversations`).
+- **Ingest** — `pnpm ingest` runs the URL/PDF ingestion pipeline; a nightly cron
+  (`/api/cron/cleanup-cache`) clears the semantic cache.
+
+## Environment variables
+
+See `.env.example` for the full list with comments. Key ones:
+
+| Variable          | Required | Purpose                                 |
+| ----------------- | -------- | --------------------------------------- |
+| `DATABASE_URL`    | Yes      | PostgreSQL (pgvector) connection string |
+| `NEXTAUTH_SECRET` | Yes      | Signs Auth.js session JWTs              |
+| `NEXTAUTH_URL`    | No (dev) | Canonical app URL                       |
+| `GROQ_API_KEY`    | No*      | Primary LLM provider                    |
+| `HF_TOKEN`        | No*      | Fallback LLM provider + embeddings      |
+| `CRON_SECRET`     | No*      | Bearer guard for cron endpoints         |
+| `LANGFUSE_*`      | No       | LLM tracing                             |
+
+\* Required at runtime for LLM features; CI uses placeholders.
+
+## CI/CD
+
+GitHub Actions (`.github/workflows/`) runs on the `main`/`web-app` branches for
+`web-app/**` paths:
+
+- `ci-web-app.yml` — format, lint, typecheck, unit/integration tests, coverage,
+  and production build.
+- `e2e-web-app.yml` — boots PostgreSQL (pgvector service), applies migrations,
+  installs Playwright browsers, runs the E2E suite.
+- `security-web-app.yml` — Gitleaks (secrets), Semgrep + CodeQL (SAST), and SBOM.
+- `deploy-web-app.yml` — deploys to Vercel (`--prod`).
+
+Local pre-commit hooks (Husky) run lint-staged (ESLint + Prettier), `tsc`, and
+a lightweight secret scan. Full secret/SBOM/SAST audits run in CI.
+
+## Deploy
+
+The app is built for **Vercel + Neon PostgreSQL**. Configure the
+`VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` secrets in the repo and
+push to `web-app` (or `main`); `deploy-web-app.yml` handles the rest. Set all
+non-secret variables in the Vercel project and mark the secrets.
+
+## Documentation
+
+- `docs/STARTUP.md` — local startup walkthrough
+- `docs/status/` — phase delivery reports
+- `CHANGELOG.md` — release history
