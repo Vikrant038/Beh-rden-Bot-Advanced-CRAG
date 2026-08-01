@@ -30,15 +30,21 @@ export class HfEmbeddingClient implements EmbeddingClient {
       throw new LLMProviderError("HF_TOKEN not configured; cannot embed");
     }
 
-    const url = `${this.inferenceUrl}/pipeline/feature-extraction/${encodeURIComponent(this.model)}`;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ inputs: texts, options: { wait_for_model: true } }),
-    });
+    let response: Response;
+    try {
+      const url = `${this.inferenceUrl}/pipeline/feature-extraction/${encodeURIComponent(this.model)}`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ inputs: texts, options: { wait_for_model: true } }),
+      });
+    } catch (error) {
+      logger.warn({ error: String(error) }, "[EMBED] HF API fetch failed");
+      throw new LLMProviderError(`HuggingFace API is unreachable (Network/DNS error). Please check your connection to ${this.inferenceUrl}`);
+    }
 
     if (!response.ok) {
       const detail = await response.text();
@@ -52,6 +58,7 @@ export class HfEmbeddingClient implements EmbeddingClient {
       Array.isArray(data) && Array.isArray(data[0]) ? (data as number[][]) : null;
 
     if (!vectors || vectors.length !== texts.length) {
+      logger.warn("[EMBED] HF returned malformed response");
       throw new LLMProviderError("Embedding API returned malformed response");
     }
 

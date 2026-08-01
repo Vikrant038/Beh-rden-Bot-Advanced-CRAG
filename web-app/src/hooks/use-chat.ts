@@ -42,11 +42,12 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
   const [disambiguationOptions, setDisambiguationOptions] = useState<string[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const currentConvIdRef = useRef<string | null>(null);
 
   const sendMessageMutation = api.chat.sendMessage.useMutation();
   const regenerateMutation = api.chat.regenerate.useMutation();
 
-  const { data: conversation } = api.conversation.getById.useQuery(
+  const { data: conversation, isLoading, isError } = api.conversation.getById.useQuery(
     { id: conversationId ?? "" },
     { enabled: Boolean(conversationId) },
   );
@@ -54,16 +55,20 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
   useEffect(() => {
     if (conversation) {
       setMessages(conversation.messages);
-      setDisambiguationOptions([]);
+      if (currentConvIdRef.current !== conversation.id) {
+        setDisambiguationOptions([]);
+        currentConvIdRef.current = conversation.id;
+      }
       setStatus("idle");
     }
   }, [conversation]);
 
   useEffect(() => {
-    if (conversation?.id === undefined && conversationId) {
+    // Only redirect if query is finished and returned null or errored
+    if (!isLoading && conversationId && (conversation === null || isError)) {
       onNotFound?.();
     }
-  }, [conversation, conversationId, onNotFound]);
+  }, [conversation, isLoading, isError, conversationId, onNotFound]);
 
   const handleEvent = useCallback((event: ChatStreamEvent) => {
     switch (event.type) {
@@ -105,7 +110,7 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
         setError(event.message);
         setMessages((prev) =>
           prev.map((message) =>
-            message.id === STREAMING_ID ? { ...message, id: `error-${Date.now()}` } : message,
+            message.id === STREAMING_ID ? { ...message, content: event.message } : message,
           ),
         );
         setStatus("done");
@@ -228,8 +233,18 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
         return;
       }
 
-      await consumeStream({ query: trimmed, mode });
-      await invalidateConversation();
+      try {
+        await consumeStream({ query: trimmed, mode });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Streaming request failed");
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === STREAMING_ID ? { ...message, content: "Streaming request failed." } : message,
+          ),
+        );
+      } finally {
+        await invalidateConversation();
+      }
     },
     [conversationId, consumeStream, invalidateConversation, isStreaming, sendMessageMutation],
   );

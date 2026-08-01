@@ -1,6 +1,7 @@
 import type { NextAuthConfig } from "next-auth";
 import GitHub from "next-auth/providers/github";
 import Google from "next-auth/providers/google";
+import { env } from "@/server/env";
 
 /**
  * Edge-safe auth config (no adapter / no Node-only providers).
@@ -8,7 +9,16 @@ import Google from "next-auth/providers/google";
  * PrismaAdapter + Resend for the Node runtime.
  */
 export const authConfig = {
-  providers: [GitHub, Google],
+  providers: [
+    GitHub({
+      clientId: env.GITHUB_CLIENT_ID,
+      clientSecret: env.GITHUB_CLIENT_SECRET,
+    }),
+    Google({
+      clientId: env.GOOGLE_CLIENT_ID,
+      clientSecret: env.GOOGLE_CLIENT_SECRET,
+    }),
+  ],
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   callbacks: {

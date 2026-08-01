@@ -1,6 +1,4 @@
-"use client";
-
-import { signIn } from "next-auth/react";
+import { signIn } from "@/server/auth";
 import { AtSign, GitBranch } from "lucide-react";
 
 export default function LoginPage() {
@@ -14,22 +12,35 @@ export default function LoginPage() {
         </p>
 
         <div className="mt-6 space-y-3">
-          <button
-            type="button"
-            onClick={() => void signIn("github", { callbackUrl: "/chat" })}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm transition hover:bg-surface-hover"
+          <form
+            action={async () => {
+              "use server";
+              await signIn("github", { redirectTo: "/chat" });
+            }}
           >
-            <GitBranch className="h-4 w-4" />
-            Continue with GitHub
-          </button>
-          <button
-            type="button"
-            onClick={() => void signIn("google", { callbackUrl: "/chat" })}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition hover:bg-primary-hover"
+            <button
+              type="submit"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm transition hover:bg-surface-hover"
+            >
+              <GitBranch className="h-4 w-4" />
+              Continue with GitHub
+            </button>
+          </form>
+          
+          <form
+            action={async () => {
+              "use server";
+              await signIn("google", { redirectTo: "/chat" });
+            }}
           >
-            <AtSign className="h-4 w-4" />
-            Continue with Google
-          </button>
+            <button
+              type="submit"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition hover:bg-primary-hover"
+            >
+              <AtSign className="h-4 w-4" />
+              Continue with Google
+            </button>
+          </form>
         </div>
 
         <p className="mt-4 text-center text-xs text-muted">
