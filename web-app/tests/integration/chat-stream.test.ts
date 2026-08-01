@@ -1,0 +1,276 @@
+import { vi, describe, it, expect, beforeEach } from "vitest";
+import { runChatStream } from "@/server/rag/chat-pipeline";
+import type { ChatStreamEvent } from "@/lib/chat/types";
+
+vi.mock("@/server/db", () => ({
+  prisma: {
+    conversation: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+    message: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+    },
+  },
+}));
+
+vi.mock("@/server/rag/disambiguation", () => ({
+  disambiguateQuery: vi.fn(),
+}));
+vi.mock("@/server/rag/guardrail", () => ({
+  isQueryOutOfDomain: vi.fn(),
+}));
+vi.mock("@/server/rag/pipeline", () => ({
+  runStandardCrag: vi.fn(),
+}));
+vi.mock("@/server/rag/agents/orchestrator", () => ({
+  runAgenticRag: vi.fn(),
+}));
+vi.mock("@/server/rag/cache/semantic-cache", () => ({
+  semanticCache: { checkCache: vi.fn(async () => null), addToCache: vi.fn(async () => undefined) },
+}));
+vi.mock("@/server/rag/memory/summary-buffer", () => ({
+  createMemory: vi.fn(() => ({
+    addTurn: vi.fn(async () => undefined),
+    getContextFormatted: vi.fn(async () => ""),
+    ensureLoaded: vi.fn(async () => undefined),
+  })),
+}));
+vi.mock("@/server/rag/instance", () => ({
+  getHybridRetriever: vi.fn(() => ({ embedQuery: vi.fn(), retrieve: vi.fn() })),
+}));
+vi.mock("@/server/pii/masker", () => ({
+  maskPii: vi.fn((query: string) => ({ text: query, originalChars: query.length, maskedChars: query.length })),
+}));
+
+import { prisma } from "@/server/db";
+import type { MockPrisma } from "../helpers/mock-prisma";
+import { runStandardCrag } from "@/server/rag/pipeline";
+import { runAgenticRag } from "@/server/rag/agents/orchestrator";
+import { disambiguateQuery } from "@/server/rag/disambiguation";
+import { isQueryOutOfDomain } from "@/server/rag/guardrail";
+
+const prismaMock = prisma as unknown as MockPrisma;
+const mockedStandard = vi.mocked(runStandardCrag);
+const mockedAgentic = vi.mocked(runAgenticRag);
+const mockedDisambiguation = vi.mocked(disambiguateQuery);
+const mockedGuardrail = vi.mocked(isQueryOutOfDomain);
+
+const standardResult = {
+  question: "q",
+  answer: "Blocked account total is EUR 11904 for 2026.",
+  sources: [{ name: "doc", url: "https://example.com", score: 0.9, documentId: "d1" }],
+  retrievalPath: "HYBRID_RRF_CROSS_ENCODER",
+  latencyMs: 120,
+  isGrounded: true,
+  isCached: false,
+};
+
+const agenticResult = {
+  userQuery: "q",
+  finalAnswer: "## Answer\n\n### Actionable Next Steps\n\n1. Step one.",
+  researchSteps: [{ iteration: 1, thought: "t", action: "a", observation: "o" }],
+  analysisMatrix: { summary: "s", structured_table: "", key_insights: [], verified_facts: [] },
+  sources: [{ name: "doc", url: "https://example.com", score: 0.8, documentId: "d1" }],
+  totalLatencyMs: 500,
+};
+
+async function collect(input: Parameters<typeof runChatStream>[0]): Promise<ChatStreamEvent[]> {
+  const events: ChatStreamEvent[] = [];
+  for await (const event of runChatStream(input)) {
+    events.push(event);
+  }
+  return events;
+}
+
+function setupDefaults(): void {
+  prismaMock.conversation.findUnique.mockResolvedValue({
+    id: "conv-1",
+    userId: "user-1",
+    title: "My chat",
+    mode: "STANDARD",
+  } as never);
+  prismaMock.message.findFirst.mockResolvedValue(null as never);
+  prismaMock.message.create.mockImplementation((({ data }: { data: { role: string } }) =>
+    Promise.resolve({ id: data.role === "USER" ? "user-msg-1" : "assistant-msg-1" })) as never);
+  prismaMock.conversation.update.mockResolvedValue({ id: "conv-1" } as never);
+  mockedDisambiguation.mockResolvedValue({ isAmbiguous: false, options: [] });
+  mockedGuardrail.mockResolvedValue(false);
+}
+
+describe("runChatStream (SSE event generation)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    setupDefaults();
+  });
+
+  it("standard mode: emits statuses, tokens, and a done event with sources", async () => {
+    prismaMock.conversation.findUnique.mockResolvedValue({
+      id: "conv-1",
+      userId: "user-1",
+      title: "New conversation",
+      mode: "STANDARD",
+    } as never);
+    mockedStandard.mockResolvedValue(standardResult);
+
+    const events = await collect({
+      conversationId: "conv-1",
+      userId: "user-1",
+      query: "What is the blocked account total?",
+      mode: "standard",
+    });
+
+    expect(mockedStandard).toHaveBeenCalledWith(
+      "What is the blocked account total?",
+      expect.objectContaining({ bypassCache: false }),
+    );
+
+    const stages = events.filter((event) => event.type === "status");
+    expect(stages.map((event) => (event as { stage: string }).stage)).toContain("retrieving");
+
+    const tokens = events.filter((event) => event.type === "token");
+    expect(tokens.length).toBeGreaterThan(0);
+
+    const done = events.find((event) => event.type === "done");
+    expect(done).toBeDefined();
+    if (done && done.type === "done") {
+      expect(done.messageId).toBe("assistant-msg-1");
+      expect(done.sources).toHaveLength(1);
+      expect(done.metadata.retrievalPath).toBe("HYBRID_RRF_CROSS_ENCODER");
+    }
+
+    expect(prismaMock.conversation.update).toHaveBeenCalledWith({
+      where: { id: "conv-1" },
+      data: { title: "What is the blocked account total?" },
+    });
+    expect(prismaMock.message.create).toHaveBeenCalledTimes(2);
+  });
+
+  it("agentic mode: emits agent stage statuses and the final answer tokens", async () => {
+    prismaMock.conversation.findUnique.mockResolvedValue({
+      id: "conv-1",
+      userId: "user-1",
+      title: "My chat",
+      mode: "AGENTIC",
+    } as never);
+    prismaMock.message.findFirst.mockResolvedValue({
+      id: "user-msg-1",
+      role: "USER",
+      content: "Compare blocked account vs scholarship",
+    } as never);
+    mockedAgentic.mockResolvedValue(agenticResult);
+
+    const events = await collect({
+      conversationId: "conv-1",
+      userId: "user-1",
+      query: "Compare blocked account vs scholarship",
+      mode: "agentic",
+    });
+
+    const stages = events.filter((event) => event.type === "status");
+    expect(stages.map((event) => (event as { stage: string }).stage)).toEqual([
+      "guardrail",
+      "agent_research",
+      "agent_analyst",
+      "agent_writer",
+    ]);
+
+    const fullText = events
+      .filter((event) => event.type === "token")
+      .map((event) => (event as { content: string }).content)
+      .join("");
+    expect(fullText).toContain("Actionable Next Steps");
+
+    // user message was reused (findFirst matched) → only assistant is persisted
+    expect(prismaMock.message.create).toHaveBeenCalledTimes(1);
+    expect(mockedAgentic).toHaveBeenCalledWith(
+      "Compare blocked account vs scholarship",
+      expect.objectContaining({ bypassCache: false }),
+    );
+  });
+
+  it("disambiguation: emits clarifying options and stops without persisting an answer", async () => {
+    prismaMock.message.findFirst.mockResolvedValue({
+      id: "user-msg-1",
+      role: "USER",
+      content: "When I move to Germany...",
+    } as never);
+    mockedDisambiguation.mockResolvedValue({
+      isAmbiguous: true,
+      options: ["A", "B", "C"],
+    });
+
+    const events = await collect({
+      conversationId: "conv-1",
+      userId: "user-1",
+      query: "When I move to Germany...",
+      mode: "agentic",
+    });
+
+    const disambiguation = events.find((event) => event.type === "disambiguation");
+    expect(disambiguation).toBeDefined();
+    if (disambiguation && disambiguation.type === "disambiguation") {
+      expect(disambiguation.options).toEqual(["A", "B", "C"]);
+    }
+    expect(events.some((event) => event.type === "done")).toBe(false);
+    expect(mockedAgentic).not.toHaveBeenCalled();
+    expect(mockedStandard).not.toHaveBeenCalled();
+  });
+
+  it("standard mode: guardrail blocks out-of-domain queries with a blocked done event", async () => {
+    mockedGuardrail.mockResolvedValue(true);
+
+    const events = await collect({
+      conversationId: "conv-1",
+      userId: "user-1",
+      query: "cricket scores",
+      mode: "standard",
+    });
+
+    const done = events.find((event) => event.type === "done");
+    expect(done).toBeDefined();
+    if (done && done.type === "done") {
+      expect(done.metadata.blocked).toBe(true);
+      expect(done.sources).toEqual([]);
+    }
+    expect(mockedStandard).not.toHaveBeenCalled();
+  });
+
+  it("persists a graceful error message when the pipeline throws", async () => {
+    mockedStandard.mockRejectedValue(new Error("LLM provider down"));
+
+    const events = await collect({
+      conversationId: "conv-1",
+      userId: "user-1",
+      query: "will fail",
+      mode: "standard",
+    });
+
+    const error = events.find((event) => event.type === "error");
+    expect(error).toBeDefined();
+    const done = events.find((event) => event.type === "done");
+    expect(done).toBeDefined();
+    if (done && done.type === "done") {
+      expect(done.messageId).toBe("assistant-msg-1");
+      expect(done.metadata.retrievalPath).toBe("PIPELINE_ERROR");
+    }
+  });
+
+  it("throws NotFoundError when the conversation is not owned by the user", async () => {
+    prismaMock.conversation.findUnique.mockResolvedValue({
+      id: "conv-1",
+      userId: "someone-else",
+      title: "Theirs",
+      mode: "AGENTIC",
+    } as never);
+
+    const collectPromise = collect({
+      conversationId: "conv-1",
+      userId: "user-1",
+      query: "hello",
+      mode: "agentic",
+    });
+    await expect(collectPromise).rejects.toThrow("not found");
+  });
+});

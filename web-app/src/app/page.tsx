@@ -1,82 +1,83 @@
-import Image from "next/image";
+import Link from "next/link";
 
-export default function Home() {
+const FEATURES = [
+  {
+    title: "3-Agent ReAct",
+    description:
+      "Research, analysis, and writing agents collaborate to build thorough, grounded answers.",
+  },
+  {
+    title: "Hybrid Retrieval",
+    description: "Dense pgvector search fused with BM25 keyword search via reciprocal rank fusion.",
+  },
+  {
+    title: "CRAG Gate",
+    description:
+      "Confidence-gated retrieval that automatically falls back to live web search on weak sources.",
+  },
+  {
+    title: "Semantic Cache",
+    description: "Exact and vector-similarity caching returns repeat answers in milliseconds.",
+  },
+  {
+    title: "PII Masking",
+    description:
+      "Names, emails, and passport numbers are redacted before any query reaches an LLM.",
+  },
+  {
+    title: "Observability",
+    description:
+      "Full tracing of latency, tokens, fallbacks, and cache behaviour for every answer.",
+  },
+];
+
+export default function LandingPage() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">Save and see your changes instantly.</li>
-        </ol>
+    <div className="relative min-h-screen overflow-hidden bg-background">
+      <div className="gradient-mesh pointer-events-none absolute inset-0" />
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      <header className="relative z-10 flex items-center justify-between px-6 py-5">
+        <span className="text-lg font-semibold">Behörden-Bot</span>
+        <Link
+          href="/login"
+          className="rounded-lg border border-border px-3 py-1.5 text-sm transition hover:bg-surface-hover"
+        >
+          Sign in
+        </Link>
+      </header>
+
+      <main className="relative z-10 mx-auto max-w-5xl px-6 pb-24 pt-16 text-center">
+        <div className="mx-auto max-w-2xl rounded-3xl border border-glass-border bg-glass p-10 backdrop-blur">
+          <h1 className="text-4xl font-bold leading-tight sm:text-5xl">
+            Your AI Guide to German Immigration
+          </h1>
+          <p className="mt-4 text-base text-muted">
+            Student visas, APS certification, blocked accounts, and university applications —
+            answered with official sources in seconds.
+          </p>
+          <Link
+            href="/login"
+            className="cta-shimmer mt-8 inline-block rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-white"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            Start asking →
+          </Link>
+        </div>
+
+        <div className="mt-16 grid gap-4 text-left sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((feature) => (
+            <div
+              key={feature.title}
+              className="rounded-2xl border border-border bg-surface/70 p-5 transition hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/10"
+            >
+              <h3 className="font-semibold">{feature.title}</h3>
+              <p className="mt-2 text-sm text-muted">{feature.description}</p>
+            </div>
+          ))}
         </div>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image aria-hidden src="/file.svg" alt="File icon" width={16} height={16} />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image aria-hidden src="/window.svg" alt="Window icon" width={16} height={16} />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image aria-hidden src="/globe.svg" alt="Globe icon" width={16} height={16} />
-          Go to nextjs.org →
-        </a>
+
+      <footer className="relative z-10 border-t border-border px-6 py-6 text-center text-xs text-muted">
+        Built for Indian students navigating the German education system.
       </footer>
     </div>
   );
