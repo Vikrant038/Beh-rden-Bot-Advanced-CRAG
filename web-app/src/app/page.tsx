@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 const FEATURES = [
   {
@@ -47,20 +48,32 @@ export default function LandingPage() {
       </header>
 
       <main className="relative z-10 mx-auto max-w-5xl px-6 pb-24 pt-16 text-center">
-        <div className="mx-auto max-w-2xl rounded-3xl border border-glass-border bg-glass p-10 backdrop-blur">
-          <h1 className="text-4xl font-bold leading-tight sm:text-5xl">
-            Your AI Guide to German Immigration
-          </h1>
-          <p className="mt-4 text-base text-muted">
-            Student visas, APS certification, blocked accounts, and university applications —
-            answered with official sources in seconds.
-          </p>
-          <Link
-            href="/login"
-            className="cta-shimmer mt-8 inline-block rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-white"
-          >
-            Start asking →
-          </Link>
+        <div className="mx-auto max-w-2xl overflow-hidden rounded-3xl border border-glass-border bg-glass backdrop-blur">
+          <div className="relative aspect-video w-full overflow-hidden">
+            <Image
+              src="/Images/hero-banner.jpg"
+              alt="German universities, student visas, and blocked accounts guide"
+              fill
+              priority
+              sizes="(max-width: 768px) 100vw, 42rem"
+              className="object-cover"
+            />
+          </div>
+          <div className="px-10 pb-10 pt-8">
+            <h1 className="text-4xl font-bold leading-tight sm:text-5xl">
+              Your AI Guide to German Immigration
+            </h1>
+            <p className="mt-4 text-base text-muted">
+              Student visas, APS certification, blocked accounts, and university applications —
+              answered with official sources in seconds.
+            </p>
+            <Link
+              href="/login"
+              className="cta-shimmer mt-8 inline-block rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-white"
+            >
+              Start asking →
+            </Link>
+          </div>
         </div>
 
         <div className="mt-16 grid gap-4 text-left sm:grid-cols-2 lg:grid-cols-3">
