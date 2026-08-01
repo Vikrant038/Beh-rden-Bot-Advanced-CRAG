@@ -57,10 +57,10 @@ export class SemanticCache {
       if (queryVector && queryVector.length > 0) {
         const vectorLiteral = `[${queryVector.join(",")}]`;
         const rows = await prisma.$queryRaw<CacheHitRow[]>`
-          SELECT response_json AS "responseJson", 1 - (query_vector <=> ${vectorLiteral}::vector) AS sim
+          SELECT "responseJson", 1 - ("queryVector" <=> ${vectorLiteral}::vector) AS sim
           FROM semantic_cache
-          WHERE expires_at > ${now}
-          ORDER BY query_vector <=> ${vectorLiteral}::vector
+          WHERE "expiresAt" > ${now}
+          ORDER BY "queryVector" <=> ${vectorLiteral}::vector
           LIMIT 1;
         `;
 

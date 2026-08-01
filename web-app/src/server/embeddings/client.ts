@@ -53,8 +53,7 @@ export class HfEmbeddingClient implements EmbeddingClient {
     }
 
     const data = (await response.json()) as number[][] | number[][][];
-
-    const vectors: number[][] | null =
+    const vectors =
       Array.isArray(data) && Array.isArray(data[0]) ? (data as number[][]) : null;
 
     if (!vectors || vectors.length !== texts.length) {
