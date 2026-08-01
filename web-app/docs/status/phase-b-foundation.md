@@ -65,3 +65,7 @@ The core RAG engine is fully ported from the Python reference (`src/{pii_masker,
 ## Verification
 
 Waits on user verification of this push before Phase C begins (TASK-029..036).
+
+### Recent Fixes (2026-08-01)
+- Fixed a raw SQL query bug in `semantic-cache.ts` that used snake_case instead of Prisma's camelCase columns, which threw a 42703 error on cache hit checks.
+- Improved error handling in `HfEmbeddingClient` to throw a clear `LLMProviderError` when the HuggingFace API is blocked by the network/ISP (ENOTFOUND).

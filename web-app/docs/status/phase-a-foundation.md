@@ -53,3 +53,8 @@ Greenfield Next.js 15 + TypeScript web app scaffolded in `web-app/`, with auth (
 ## Verification
 
 Waits on user verification of this push before Phase B begins (TASK-011..028).
+
+### Recent Fixes (2026-08-01)
+- Fixed NextAuth `MissingCSRF` and `404/undefined` client ID issues in the OAuth flow.
+- Fixed an infinite redirect loop caused by unauthenticated users accessing protected routes.
+- Added `src/app/api/health/route.ts` diagnostic endpoint to help test and debug outbound network connectivity blocks.

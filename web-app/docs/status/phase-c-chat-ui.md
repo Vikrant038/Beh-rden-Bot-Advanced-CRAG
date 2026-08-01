@@ -60,3 +60,7 @@ New tests: `tests/unit/{conversation-router,chat-router,source-router,admin-rout
 ## Verification
 
 Waits on user verification of this push before Phase D begins (TASK-037..039).
+
+### Recent Fixes (2026-08-01)
+- Fixed a bug where `useChat` would instantly clear `disambiguationOptions` when TRPC refetched the conversation.
+- Fixed error event parsing in `handleEvent` so that pipeline errors (e.g. LLMProviderError) correctly render as a red error message bubble instead of a blank UI.
