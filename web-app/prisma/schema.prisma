@@ -131,32 +131,52 @@ model ConversationMemory {
 // source names are not unique/stable (C2 fix).
 
 model Document {
-  id         String          @id @default(cuid())
+  id         String                @id @default(cuid())
   title      String
-  url        String          @unique
+  url        String                @unique
   hash       String
-  chunkCount Int             @default(0)
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  chunkCount Int                   @default(0)
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
 
-  chunks DocumentChunk[]
+  chunks  DocumentChunk[]
+  parents DocumentParentChunk[]
 
   @@map("documents")
 }
 
-model DocumentChunk {
-  id         Int      @id @default(autoincrement())
+// True Parent-Child Chunking: parents (~2000 ch) are stored and handed to the
+// LLM as context; children (~200 ch) are embedded and indexed for search. On a
+// child match the retriever joins back to its parent via parentId (§2.5).
+model DocumentParentChunk {
+  id         Int             @id @default(autoincrement())
   documentId String
+  text       String
+  createdAt  DateTime        @default(now())
+
+  document Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  children DocumentChunk[]
+
+  @@index([documentId])
+  @@map("document_parent_chunks")
+}
+
+model DocumentChunk {
+  id         Int                 @id @default(autoincrement())
+  documentId String
+  parentId   Int?
   sourceName String
   sourceUrl  String
   text       String
   embedding  Unsupported("vector(768)")
-  createdAt  DateTime @default(now())
+  createdAt  DateTime            @default(now())
 
-  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document Document               @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  parent   DocumentParentChunk?   @relation(fields: [parentId], references: [id], onDelete: Cascade)
 
   @@index([documentId])
   @@index([sourceName])
+  @@index([parentId])
   @@map("document_chunks")
 }
 

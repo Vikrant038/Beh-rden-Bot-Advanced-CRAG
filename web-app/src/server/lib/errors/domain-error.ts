@@ -58,3 +58,19 @@ export class SsrfBlockedError extends DomainError {
     super(`Request to disallowed host rejected: ${url}`, ErrorCode.SSRF_BLOCKED);
   }
 }
+
+export class InvalidContentTypeError extends DomainError {
+  constructor(url: string, contentType: string) {
+    super(
+      `URL ${url} returned unsupported content type "${contentType}". ` +
+        `Only text/html and text/plain documents can be ingested.`,
+      ErrorCode.INVALID_CONTENT_TYPE,
+    );
+  }
+}
+
+export class PdfParseError extends DomainError {
+  constructor(message: string, details?: unknown) {
+    super(message, ErrorCode.PDF_PARSE_FAILED, details);
+  }
+}

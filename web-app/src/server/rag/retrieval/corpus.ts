@@ -19,12 +19,20 @@ export class PrismaCorpusProvider implements CorpusProvider {
     }
 
     const rows = await prisma.documentChunk.findMany({
-      select: { id: true, documentId: true, sourceName: true, sourceUrl: true, text: true },
+      select: {
+        id: true,
+        parentId: true,
+        documentId: true,
+        sourceName: true,
+        sourceUrl: true,
+        text: true,
+      },
       orderBy: { id: "asc" },
     });
 
     this.cache = rows.map((row) => ({
       id: String(row.id),
+      parentId: row.parentId === null ? undefined : String(row.parentId),
       documentId: row.documentId,
       sourceName: row.sourceName,
       sourceUrl: row.sourceUrl,

@@ -120,3 +120,48 @@ export class RecursiveChunker {
 export function chunkText(text: string, options: ChunkerOptions = {}): string[] {
   return new RecursiveChunker(options).splitText(text);
 }
+
+// ─── True Parent-Child Chunking (§2.5) ───────────────────────────────────────
+// Parents (~2000 ch) are stored and handed to the LLM as context; children
+// (~200 ch) are embedded and indexed for search. Overlap is preserved at both
+// levels so section boundaries are never lost.
+
+export const PARENT_CHUNK_SIZE = 2000;
+export const PARENT_CHUNK_OVERLAP = 200;
+export const CHILD_CHUNK_SIZE = 200;
+export const CHILD_CHUNK_OVERLAP = 50;
+
+export interface ParentChildChunk {
+  parent: { text: string };
+  children: { text: string }[];
+}
+
+/**
+ * Splits a cleaned document into parent chunks (~2000 ch) and, for each parent,
+ * a set of overlapping child chunks (~200 ch). A parent too short to produce a
+ * child becomes its own child so no content is lost.
+ */
+export function chunkParentChild(text: string): ParentChildChunk[] {
+  if (!text) {
+    return [];
+  }
+
+  const parentChunker = new RecursiveChunker({
+    chunkSize: PARENT_CHUNK_SIZE,
+    chunkOverlap: PARENT_CHUNK_OVERLAP,
+    minChunkChars: 100,
+  });
+  const childChunker = new RecursiveChunker({
+    chunkSize: CHILD_CHUNK_SIZE,
+    chunkOverlap: CHILD_CHUNK_OVERLAP,
+    minChunkChars: 40,
+  });
+
+  return parentChunker.splitText(text).map((parentText) => {
+    const children = childChunker.splitText(parentText);
+    return {
+      parent: { text: parentText },
+      children: children.length > 0 ? children.map((childText) => ({ text: childText })) : [{ text: parentText }],
+    };
+  });
+}

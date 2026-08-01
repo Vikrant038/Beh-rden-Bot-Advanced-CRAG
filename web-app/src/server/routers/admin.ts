@@ -2,6 +2,9 @@ import { router, adminProcedure } from "@/server/trpc/t";
 import { prisma } from "@/server/db";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { createLogger } from "@/server/lib/logger";
+import { z } from "zod";
+import { runAgenticRag, type AgenticRagResponse } from "@/server/rag/agents/orchestrator";
+import { getHybridRetriever } from "@/server/rag/instance";
 
 const logger = createLogger("admin-router");
 
@@ -72,6 +75,20 @@ export interface RecentQueryRow {
 
 const DAILY_QUERY_WINDOW_DAYS = 14;
 const RECENT_QUERY_LIMIT = 10;
+
+/**
+ * In-memory memory adapter for `admin.testPipeline`: prevents the orchestrator's
+ * `memory.addTurn()` from upserting a ConversationMemory row whose conversationId
+ * FK would not exist in the DB. Side-effect-free, so a glass-box run never writes.
+ */
+class NoopMemory {
+  async ensureLoaded(): Promise<void> {}
+  async addTurn(): Promise<void> {}
+  async getContextFormatted(): Promise<string> {
+    return "";
+  }
+  async clear(): Promise<void> {}
+}
 
 export const adminRouter = router({
   metrics: adminProcedure.query(async (): Promise<AdminMetrics> => {
@@ -214,4 +231,20 @@ export const adminRouter = router({
         return [];
       });
   }),
+
+  testPipeline: adminProcedure
+    .input(z.object({ prompt: z.string().trim().min(5).max(2000) }))
+    .mutation(async ({ input }): Promise<AgenticRagResponse> => {
+      const result = await runAgenticRag(input.prompt, {
+        hybridRetriever: getHybridRetriever(),
+        cache: semanticCache,
+        memory: new NoopMemory(),
+        bypassCache: true,
+      });
+      logger.info(
+        { prompt: input.prompt, latencyMs: result.totalLatencyMs },
+        "[ADMIN] pipeline test complete",
+      );
+      return result;
+    }),
 });

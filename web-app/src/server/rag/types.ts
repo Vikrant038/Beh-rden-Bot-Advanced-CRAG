@@ -4,6 +4,10 @@ export interface Chunk {
   sourceName: string;
   sourceUrl: string;
   text: string;
+  /** Matched child snippet — populated after parent expansion (visualizer / trace). */
+  childText?: string;
+  /** Parent chunk row id (True Parent-Child Chunking). */
+  parentId?: string;
   similarityScore?: number;
   bm25Score?: number;
   rrfScore?: number;

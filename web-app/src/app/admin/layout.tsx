@@ -39,7 +39,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
+    <div className="relative mx-auto max-w-6xl px-4 py-8">
+      <div className="gradient-mesh pointer-events-none absolute inset-x-0 top-0 -z-10 h-64 opacity-60" />
       <div className="mb-6 flex items-center gap-2">
         <ShieldAlert className="h-5 w-5 text-warning" />
         <h1 className="text-lg font-semibold">Admin</h1>
@@ -53,7 +54,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               type="button"
               onClick={() => router.push(item.href)}
               className={cn(
-                "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm transition",
+                "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm transition focus-visible:ring-2 focus-visible:ring-primary",
                 active
                   ? "bg-primary/10 font-medium text-foreground"
                   : "text-muted hover:bg-surface-hover hover:text-foreground",

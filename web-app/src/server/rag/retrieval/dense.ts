@@ -27,9 +27,16 @@ export async function denseRetrieve(
 
   try {
     const rows = await prisma.$queryRaw<
-      Array<{ id: number; sourceName: string; sourceUrl: string; text: string; sim: number }>
+      Array<{
+        id: number;
+        parentId: number | null;
+        sourceName: string;
+        sourceUrl: string;
+        text: string;
+        sim: number;
+      }>
     >`
-      SELECT id, "sourceName", "sourceUrl", text, 1 - (embedding <=> ${vectorLiteral}::vector) AS sim
+      SELECT id, "parentId", "sourceName", "sourceUrl", text, 1 - (embedding <=> ${vectorLiteral}::vector) AS sim
       FROM document_chunks
       WHERE 1 - (embedding <=> ${vectorLiteral}::vector) >= ${minSimilarity}
       ORDER BY embedding <=> ${vectorLiteral}::vector
@@ -38,6 +45,8 @@ export async function denseRetrieve(
 
     return rows.map((row) => ({
       id: String(row.id),
+      documentId: undefined,
+      parentId: row.parentId === null ? undefined : String(row.parentId),
       sourceName: row.sourceName,
       sourceUrl: row.sourceUrl,
       text: row.text,

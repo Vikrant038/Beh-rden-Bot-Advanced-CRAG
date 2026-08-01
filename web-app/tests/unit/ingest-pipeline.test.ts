@@ -4,13 +4,13 @@ import { createHash } from "node:crypto";
 vi.mock("@/server/db", () => {
   const tx = {
     document: { upsert: vi.fn(), update: vi.fn() },
-    documentChunk: { deleteMany: vi.fn() },
+    documentParentChunk: { deleteMany: vi.fn(), create: vi.fn() },
     $executeRaw: vi.fn(),
   };
   return {
     prisma: {
       document: { findUnique: vi.fn(), findMany: vi.fn(), upsert: vi.fn(), update: vi.fn() },
-      documentChunk: { deleteMany: vi.fn() },
+      documentParentChunk: { deleteMany: vi.fn(), create: vi.fn() },
       semanticCacheEntry: { findMany: vi.fn(), deleteMany: vi.fn() },
       $transaction: vi.fn(async (callback: (tx: unknown) => unknown) => callback(tx)),
       $executeRaw: vi.fn(),
@@ -45,6 +45,7 @@ const prismaMock = prisma as unknown as {
     update: ReturnType<typeof vi.fn>;
   };
   documentChunk: { deleteMany: ReturnType<typeof vi.fn> };
+  documentParentChunk: { deleteMany: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
   semanticCacheEntry: { findMany: ReturnType<typeof vi.fn>; deleteMany: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
   $executeRaw: ReturnType<typeof vi.fn>;
@@ -53,7 +54,7 @@ const prismaMock = prisma as unknown as {
 const txMock = (await import("@/server/db")) as unknown as {
   __tx: {
     document: { upsert: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
-    documentChunk: { deleteMany: ReturnType<typeof vi.fn> };
+    documentParentChunk: { deleteMany: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
     $executeRaw: ReturnType<typeof vi.fn>;
   };
 };
@@ -85,6 +86,7 @@ describe("ingestUrl", () => {
     });
     txMock.__tx.document.upsert.mockResolvedValue({ id: "doc-1" });
     txMock.__tx.document.update.mockResolvedValue({ id: "doc-1", chunkCount: 5 });
+    txMock.__tx.documentParentChunk.create.mockResolvedValue({ id: "parent-1" });
     prismaMock.document.findUnique.mockResolvedValue(null);
     mockedCache.mockResolvedValue(2);
   });
@@ -98,7 +100,7 @@ describe("ingestUrl", () => {
     expect(result.chunkCount).toBeGreaterThan(0);
     expect(result.title).toBe("German Student Visa Guide");
     expect(txMock.__tx.document.upsert).toHaveBeenCalled();
-    expect(txMock.__tx.documentChunk.deleteMany).toHaveBeenCalled();
+    expect(txMock.__tx.documentParentChunk.deleteMany).toHaveBeenCalled();
     expect(txMock.__tx.$executeRaw).toHaveBeenCalled();
     expect(txMock.__tx.document.update).toHaveBeenCalled();
     expect(mockedCache).toHaveBeenCalledWith("doc-1");
@@ -195,6 +197,7 @@ describe("syncAllDocuments", () => {
     });
     txMock.__tx.document.upsert.mockResolvedValue({ id: "doc-x" });
     txMock.__tx.document.update.mockResolvedValue({ id: "doc-x" });
+    txMock.__tx.documentParentChunk.create.mockResolvedValue({ id: "parent-1" });
     prismaMock.document.findUnique.mockResolvedValue(null);
   });
 

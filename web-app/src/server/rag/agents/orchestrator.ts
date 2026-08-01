@@ -6,7 +6,6 @@ import {
   type AnalystMatrix,
 } from "@/server/rag/agents/analyst";
 import type { SemanticCache } from "@/server/rag/cache/semantic-cache";
-import type { SummaryBufferMemory } from "@/server/rag/memory/summary-buffer";
 import type { Source } from "@/server/rag/types";
 import { maskPii } from "@/server/pii/masker";
 import { isQueryOutOfDomain } from "@/server/rag/guardrail";
@@ -14,15 +13,25 @@ import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("agentic-rag");
 
+/** Structural memory contract (satisfied by SummaryBufferMemory and test doubles). */
+export interface MemoryLike {
+  ensureLoaded(): Promise<void>;
+  addTurn(userQuery: string, assistantResponse: string): Promise<void>;
+  getContextFormatted(): Promise<string>;
+  clear(): Promise<void>;
+}
+
 export interface AgenticRagOptions {
   hybridRetriever: HybridRetriever;
   cache: SemanticCache;
-  memory: SummaryBufferMemory;
+  memory: MemoryLike;
   bypassCache?: boolean;
 }
 
 export interface AgenticRagResponse {
   userQuery: string;
+  maskedQuery: string;
+  guardrail: { passed: boolean; reason?: string };
   finalAnswer: string;
   researchSteps: ResearchStep[];
   analysisMatrix: AnalystMatrix;
@@ -34,6 +43,15 @@ const OUT_OF_DOMAIN_MESSAGE =
   "**Out of Domain Detected:** I am a specialized assistant for German immigration, " +
   "student visas, and university admissions. I cannot help with general queries such as " +
   "programming, sports, or other out-of-scope topics.";
+
+/** Small helper so `maskedQuery` / `guardrail` populate identically everywhere. */
+function withStageZero(
+  response: Omit<AgenticRagResponse, "maskedQuery" | "guardrail">,
+  maskedQuery: string,
+  guardrail: AgenticRagResponse["guardrail"],
+): AgenticRagResponse {
+  return { ...response, maskedQuery, guardrail };
+}
 
 /**
  * 3-Agent ReAct orchestrator (ported from `src/agentic_rag.py:run_agentic_rag_pipeline`):
@@ -52,50 +70,59 @@ export async function runAgenticRag(
   const cached = await cache.checkCache(maskedQuery, queryVector);
   if (cached) {
     await memory.addTurn(userQuery, cached.answer);
-    return {
-      userQuery,
-      finalAnswer: cached.answer,
-      researchSteps: [
-        {
-          iteration: 0,
-          thought: "Check cache.",
-          action: "Semantic Cache Hit",
-          observation: "Found matching response in cache.",
+    return withStageZero(
+      {
+        userQuery,
+        finalAnswer: cached.answer,
+        researchSteps: [
+          {
+            iteration: 0,
+            thought: "Check cache.",
+            action: "Semantic Cache Hit",
+            observation: "Found matching response in cache.",
+          },
+        ],
+        analysisMatrix: {
+          summary: "Served from cache.",
+          structured_table: "",
+          key_insights: [],
+          verified_facts: [],
         },
-      ],
-      analysisMatrix: {
-        summary: "Served from cache.",
-        structured_table: "",
-        key_insights: [],
-        verified_facts: [],
+        sources: cached.sources,
+        totalLatencyMs: Date.now() - startTime,
       },
-      sources: cached.sources,
-      totalLatencyMs: Date.now() - startTime,
-    };
+      maskedQuery,
+      { passed: true, reason: "In-domain" },
+    );
   }
 
-  if (await isQueryOutOfDomain(maskedQuery)) {
+  const blocked = await isQueryOutOfDomain(maskedQuery);
+  if (blocked) {
     logger.info("[AGENT ORCHESTRATOR] Out-of-domain query rejected early");
-    return {
-      userQuery,
-      finalAnswer: OUT_OF_DOMAIN_MESSAGE,
-      researchSteps: [
-        {
-          iteration: 1,
-          thought: "Check domain validity of the query.",
-          action: "Stage 0A Guardrail",
-          observation: "Query rejected as Out of Domain.",
+    return withStageZero(
+      {
+        userQuery,
+        finalAnswer: OUT_OF_DOMAIN_MESSAGE,
+        researchSteps: [
+          {
+            iteration: 1,
+            thought: "Check domain validity of the query.",
+            action: "Stage 0A Guardrail",
+            observation: "Query rejected as Out of Domain.",
+          },
+        ],
+        analysisMatrix: {
+          summary: "Out of domain.",
+          structured_table: "",
+          key_insights: [],
+          verified_facts: [],
         },
-      ],
-      analysisMatrix: {
-        summary: "Out of domain.",
-        structured_table: "",
-        key_insights: [],
-        verified_facts: [],
+        sources: [],
+        totalLatencyMs: Date.now() - startTime,
       },
-      sources: [],
-      totalLatencyMs: Date.now() - startTime,
-    };
+      maskedQuery,
+      { passed: false, reason: "Out of domain" },
+    );
   }
 
   const memoryContext = await memory.getContextFormatted();
@@ -120,12 +147,16 @@ export async function runAgenticRag(
   }
   await memory.addTurn(userQuery, finalAnswer);
 
-  return {
-    userQuery,
-    finalAnswer,
-    researchSteps: research.researchSteps,
-    analysisMatrix: analysis,
-    sources: research.sources,
-    totalLatencyMs: Date.now() - startTime,
-  };
+  return withStageZero(
+    {
+      userQuery,
+      finalAnswer,
+      researchSteps: research.researchSteps,
+      analysisMatrix: analysis,
+      sources: research.sources,
+      totalLatencyMs: Date.now() - startTime,
+    },
+    maskedQuery,
+    { passed: true, reason: "In-domain" },
+  );
 }

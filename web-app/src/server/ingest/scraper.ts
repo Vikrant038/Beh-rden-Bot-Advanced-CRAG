@@ -6,7 +6,7 @@
  */
 
 import { assertSafeUrl } from "@/server/lib/security/url-validator";
-import { ExternalApiError } from "@/server/lib/errors";
+import { ExternalApiError, InvalidContentTypeError } from "@/server/lib/errors";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("ingest-scraper");
@@ -15,16 +15,26 @@ export const SCRAPE_TIMEOUT_MS = 20_000;
 export const MAX_SCRAPE_BYTES = 5 * 1024 * 1024;
 export const MIN_CONTENT_CHARS = 200;
 
+const ALLOWED_CONTENT_TYPES = new Set(["text/html", "text/plain"]);
+
 export interface ScrapedDocument {
   title: string;
   url: string;
   text: string;
 }
 
+function assertSupportedContentType(url: string, contentType: string | null): void {
+  const mime = (contentType ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
+  if (!ALLOWED_CONTENT_TYPES.has(mime)) {
+    throw new InvalidContentTypeError(url, contentType ?? "(missing)");
+  }
+}
+
 /**
  * Fetches and extracts readable text from a web URL.
  * @throws ExternalApiError when the fetch/extraction fails or content is too short.
  * @throws SsrfBlockedError when the URL resolves to a disallowed host.
+ * @throws InvalidContentTypeError when the URL returns a non-HTML/plain-text content type.
  */
 export async function scrapeWebPage(rawUrl: string): Promise<ScrapedDocument> {
   const trimmedUrl = rawUrl.trim();
@@ -36,15 +46,25 @@ export async function scrapeWebPage(rawUrl: string): Promise<ScrapedDocument> {
     throw new ExternalApiError(`Failed to fetch ${trimmedUrl}: HTTP ${response.status}`);
   }
 
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes("text/html") && !contentType.includes("text/plain")) {
-    logger.warn(
-      { url: trimmedUrl, contentType },
-      "[INGEST] unexpected content type; attempting text extraction anyway",
+  // Post-redirect SSRF re-validation: fetch follows redirects, which can hop to
+  // an internal host after the initial assertSafeUrl passed.
+  await assertSafeUrl(response.url);
+
+  const contentType = response.headers.get("content-type");
+  assertSupportedContentType(trimmedUrl, contentType);
+
+  const contentLength = response.headers.get("content-length");
+  if (contentLength && Number(contentLength) > MAX_SCRAPE_BYTES) {
+    throw new ExternalApiError(
+      `Response too large from ${trimmedUrl} (${contentLength} bytes)`,
     );
   }
 
   const html = await response.text();
+  if (Buffer.byteLength(html, "utf8") > MAX_SCRAPE_BYTES) {
+    throw new ExternalApiError(`Decoded response too large from ${trimmedUrl}`);
+  }
+
   const extracted = extractMainContent(html);
 
   if (extracted.text.length < MIN_CONTENT_CHARS) {

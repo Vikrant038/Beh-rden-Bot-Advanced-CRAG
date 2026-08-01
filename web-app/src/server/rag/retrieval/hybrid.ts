@@ -10,6 +10,7 @@ import {
 import { denseRetrieve } from "@/server/rag/retrieval/dense";
 import { buildBm25, type Bm25Search } from "@/server/rag/retrieval/bm25";
 import { reciprocalRankFusion } from "@/server/rag/retrieval/rrf";
+import { expandToParents } from "@/server/rag/retrieval/join";
 import type { Reranker } from "@/server/rag/retrieval/reranker";
 import type { EmbeddingClient } from "@/server/embeddings/client";
 import { createLogger } from "@/server/lib/logger";
@@ -87,12 +88,16 @@ export class HybridRetriever {
       ? "CRAG_CONFIDENCE_GATE_WEB_FALLBACK"
       : "HYBRID_RRF_CROSS_ENCODER";
 
+    // True Parent-Child join: expand matched child chunks to their parent
+    // context so the LLM receives ~2000-char sections, not 200-char snippets.
+    const chunks = await expandToParents(reranked);
+
     logger.info(
       `[HYBRID] best cross score ${bestCrossScore.toFixed(4)} (threshold ${CRAG_THRESHOLD}) → ${pathUsed}`,
     );
 
     return {
-      chunks: reranked,
+      chunks,
       bestCrossScore,
       needsWebFallback,
       pathUsed,

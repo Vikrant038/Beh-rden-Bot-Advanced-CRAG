@@ -1,5 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
+import { ArrowRight } from "lucide-react";
+import { GlassCard } from "@/components/ui/glass-card";
 
 const FEATURES = [
   {
@@ -32,6 +34,33 @@ const FEATURES = [
   },
 ];
 
+const CONTENT_SECTIONS = [
+  {
+    eyebrow: "Guides",
+    title: "End-to-end process walkthroughs",
+    body: "Step-by-step walkthroughs that connect every milestone — from APS verification and uni-assist application through visa submission and blocked-account setup — so nothing falls through the cracks.",
+    cta: "Read the guides",
+  },
+  {
+    eyebrow: "Universities",
+    title: "University & program spotlights",
+    body: "Curated dossiers on leading German institutions: admission seasons, language requirements, tuition-fee status, and the documents each program actually expects.",
+    cta: "Explore spotlights",
+  },
+  {
+    eyebrow: "Finances",
+    title: "Financial planning for your move",
+    body: "Blocked-account thresholds, semester contributions, health-insurance costs, and realistic monthly budgets for major German cities — with the numbers kept current.",
+    cta: "See the numbers",
+  },
+  {
+    eyebrow: "Timelines",
+    title: "Checklists and timelines",
+    body: "Calendar-aware checklists that sequence every deadline: application windows, visa appointments, and enrollment cutoffs mapped to your intended intake.",
+    cta: "Get the checklist",
+  },
+];
+
 export default function LandingPage() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
@@ -41,14 +70,14 @@ export default function LandingPage() {
         <span className="text-lg font-semibold">Behörden-Bot</span>
         <Link
           href="/login"
-          className="rounded-lg border border-border px-3 py-1.5 text-sm transition hover:bg-surface-hover"
+          className="rounded-lg border border-glass-border bg-glass px-3 py-1.5 text-sm shadow-glass backdrop-blur transition hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-primary"
         >
           Sign in
         </Link>
       </header>
 
       <main className="relative z-10 mx-auto max-w-5xl px-6 pb-24 pt-16 text-center">
-        <div className="mx-auto max-w-2xl overflow-hidden rounded-3xl border border-glass-border bg-glass backdrop-blur">
+        <GlassCard className="mx-auto max-w-2xl overflow-hidden">
           <div className="relative aspect-video w-full overflow-hidden">
             <Image
               src="/Images/hero-banner.jpg"
@@ -69,23 +98,53 @@ export default function LandingPage() {
             </p>
             <Link
               href="/login"
-              className="cta-shimmer mt-8 inline-block rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-white"
+              className="cta-shimmer mt-8 inline-block rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground shadow-glass transition hover:bg-primary-hover active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-primary"
             >
               Start asking →
             </Link>
           </div>
-        </div>
+        </GlassCard>
 
         <div className="mt-16 grid gap-4 text-left sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((feature) => (
-            <div
+            <GlassCard
               key={feature.title}
-              className="rounded-2xl border border-border bg-surface/70 p-5 transition hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/10"
+              className="p-5 transition hover:-translate-y-0.5 hover:shadow-glass"
             >
               <h3 className="font-semibold">{feature.title}</h3>
               <p className="mt-2 text-sm text-muted">{feature.description}</p>
-            </div>
+            </GlassCard>
           ))}
+        </div>
+
+        <div className="mt-24">
+          <h2 className="text-2xl font-semibold sm:text-3xl">Guides, resources & timelines</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
+            In-depth editorial content for every stage of the journey — from your first APS
+            appointment to your first semester.
+          </p>
+
+          <div className="mt-10 grid gap-4 text-left sm:grid-cols-2">
+            {CONTENT_SECTIONS.map((section) => (
+              <GlassCard
+                key={section.eyebrow}
+                className="flex flex-col p-6 transition hover:-translate-y-0.5 hover:shadow-glass"
+              >
+                <p className="text-xs font-semibold uppercase tracking-wider text-accent">
+                  {section.eyebrow}
+                </p>
+                <h3 className="mt-2 font-semibold">{section.title}</h3>
+                <p className="mt-2 flex-1 text-sm text-muted">{section.body}</p>
+                <Link
+                  href="/login"
+                  className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary transition hover:text-primary-hover focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  {section.cta}
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </GlassCard>
+            ))}
+          </div>
         </div>
       </main>
 

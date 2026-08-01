@@ -2,6 +2,7 @@
 
 import { signOut, useSession } from "next-auth/react";
 import { LogOut } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export default function SettingsPage() {
   const { data: session } = useSession();
@@ -10,6 +11,12 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-8">
       <h1 className="text-2xl font-semibold">Settings</h1>
+
+      <section className="rounded-2xl border border-border bg-surface p-5">
+        <h2 className="mb-1 text-sm font-semibold">Appearance</h2>
+        <p className="mb-3 text-sm text-muted">Choose how Behoerden-Bot looks on this device.</p>
+        <ThemeToggle />
+      </section>
 
       <section className="rounded-2xl border border-border bg-surface p-5">
         <h2 className="mb-3 text-sm font-semibold">Profile</h2>

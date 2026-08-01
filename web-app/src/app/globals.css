@@ -6,42 +6,167 @@
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
 
-  --color-background: #f8fafc;
+  /* LIGHT — Paper & Ink (warm, editorial, high-contrast) */
+  --color-background: #faf7f2;
+  --color-foreground: #1f2430;
   --color-surface: #ffffff;
-  --color-surface-hover: #f1f5f9;
-  --color-border: #e2e8f0;
-  --color-primary: #6366f1;
-  --color-primary-hover: #4f46e5;
-  --color-accent: #0ea5e9;
-  --color-success: #16a34a;
-  --color-warning: #d97706;
-  --color-destructive: #dc2626;
-  --color-foreground: #0f172a;
-  --color-muted: #64748b;
-  --color-glass: rgba(255, 255, 255, 0.06);
-  --color-glass-border: rgba(15, 23, 42, 0.1);
+  --color-surface-hover: #f3efe7;
+  --color-border: #e5ded2;
+  --color-primary: #3f5bd6;
+  --color-primary-hover: #3249b8;
+  --color-primary-foreground: #ffffff;
+  --color-accent: #0e7490;
+  --color-success: #15803d;
+  --color-warning: #b45309;
+  --color-destructive: #b91c1c;
+  --color-muted: #6b7280;
+  --color-glass: rgba(255, 255, 255, 0.62);
+  --color-glass-border: rgba(31, 36, 48, 0.1);
+  --shadow-glass: 0 8px 32px rgba(90, 90, 140, 0.16);
+  --color-mesh-a: rgba(63, 91, 214, 0.18);
+  --color-mesh-b: rgba(14, 116, 144, 0.14);
+  --color-mesh-c: rgba(217, 119, 6, 0.1);
 }
 
 .dark {
-  --color-background: #0f172a;
-  --color-surface: #141a2e;
-  --color-surface-hover: #1a2238;
-  --color-border: #2a3350;
-  --color-primary: #6366f1;
-  --color-primary-hover: #5859f1;
-  --color-accent: #38bdf8;
+  /* DARK — Midnight (deep slate-navy, luminous accents, dark glass) */
+  --color-background: #0b1020;
+  --color-foreground: #e8ecf8;
+  --color-surface: #111832;
+  --color-surface-hover: #1a2340;
+  --color-border: #232e4f;
+  --color-primary: #7c9cff;
+  --color-primary-hover: #93aeff;
+  --color-primary-foreground: #0b1020;
+  --color-accent: #22d3ee;
   --color-success: #22c55e;
   --color-warning: #f59e0b;
-  --color-destructive: #ef4444;
-  --color-foreground: #f8fafc;
-  --color-muted: #94a3b8;
-  --color-glass: rgba(255, 255, 255, 0.05);
-  --color-glass-border: rgba(255, 255, 255, 0.08);
+  --color-destructive: #f87171;
+  --color-muted: #9aa4c0;
+  --color-glass: rgba(255, 255, 255, 0.06);
+  --color-glass-border: rgba(255, 255, 255, 0.12);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --color-mesh-a: rgba(124, 156, 255, 0.22);
+  --color-mesh-b: rgba(34, 211, 238, 0.16);
+  --color-mesh-c: rgba(192, 132, 252, 0.14);
 }
 
 body {
   background: var(--color-background);
   color: var(--color-foreground);
+}
+
+/* ─── Glassmorphism system ─── */
+
+.glass-card {
+  background: var(--color-glass);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--color-glass-border);
+  box-shadow: var(--shadow-glass);
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .glass-card {
+    background: var(--color-surface);
+  }
+}
+
+/* ─── Landing page animated gradient mesh ─── */
+
+.gradient-mesh {
+  background:
+    radial-gradient(40rem 40rem at 12% 8%, var(--color-mesh-a), transparent 60%),
+    radial-gradient(36rem 36rem at 88% 14%, var(--color-mesh-b), transparent 60%),
+    radial-gradient(46rem 46rem at 50% 100%, var(--color-mesh-c), transparent 65%);
+  background-size: 140% 140%;
+  animation: mesh-drift 22s ease-in-out infinite alternate;
+}
+
+@keyframes mesh-drift {
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: 100% 100%;
+  }
+}
+
+/* ─── CTA shimmer ─── */
+
+.cta-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.cta-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-120%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+  animation: shimmer 2.8s infinite;
+}
+.cta-shimmer:hover::after {
+  animation-duration: 1.2s;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+/* ─── Streaming cursor ─── */
+
+.streaming-cursor {
+  animation: streaming-blink 1s steps(1) infinite;
+  color: var(--color-primary);
+}
+
+@keyframes streaming-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ─── Pipeline status pulse ─── */
+
+.status-pulse {
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0);
+  }
+}
+
+/* ─── Motion / accessibility guard ─── */
+
+@media (prefers-reduced-motion: reduce) {
+  .gradient-mesh {
+    animation: none;
+  }
+  .cta-shimmer::after {
+    animation: none;
+  }
+  .streaming-cursor,
+  .status-pulse {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ─── Markdown rendering (assistant answers / analysis matrix) ─── */
@@ -92,6 +217,8 @@ body {
   border-collapse: collapse;
   margin: 0.75rem 0;
   font-size: 0.85rem;
+  display: block;
+  overflow-x: auto;
 }
 .markdown-body th,
 .markdown-body td {
@@ -131,70 +258,4 @@ body {
 .markdown-body hr {
   border-color: var(--color-border);
   margin: 1rem 0;
-}
-
-/* ─── Streaming cursor ─── */
-
-.streaming-cursor {
-  animation: streaming-blink 1s steps(1) infinite;
-  color: var(--color-primary);
-}
-
-@keyframes streaming-blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0;
-  }
-}
-
-/* ─── Pipeline status pulse ─── */
-
-.status-pulse {
-  animation: status-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes status-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.5);
-  }
-  50% {
-    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0);
-  }
-}
-
-/* ─── Landing page gradient mesh ─── */
-
-.gradient-mesh {
-  background:
-    radial-gradient(40rem 40rem at 12% 8%, rgba(99, 102, 241, 0.28), transparent 60%),
-    radial-gradient(36rem 36rem at 88% 14%, rgba(34, 211, 238, 0.22), transparent 60%),
-    radial-gradient(46rem 46rem at 50% 100%, rgba(192, 132, 252, 0.18), transparent 65%);
-}
-
-/* ─── CTA shimmer ─── */
-
-.cta-shimmer {
-  position: relative;
-  overflow: hidden;
-}
-.cta-shimmer::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  transform: translateX(-120%);
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
-  animation: shimmer 2.8s infinite;
-}
-.cta-shimmer:hover::after {
-  animation-duration: 1.2s;
-}
-
-@keyframes shimmer {
-  100% {
-    transform: translateX(120%);
-  }
 }

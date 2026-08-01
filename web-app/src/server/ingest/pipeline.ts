@@ -8,8 +8,13 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db";
 import { cleanText } from "@/server/ingest/cleaner";
-import { RecursiveChunker } from "@/server/ingest/chunker";
+import {
+  RecursiveChunker,
+  chunkParentChild,
+  type ParentChildChunk,
+} from "@/server/ingest/chunker";
 import { scrapeWebPage, type ScrapedDocument } from "@/server/ingest/scraper";
+import { parsePdf } from "@/server/ingest/pdf-parser";
 import { HfEmbeddingClient, type EmbeddingClient } from "@/server/embeddings/client";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { getCorpusProvider } from "@/server/rag/instance";
@@ -26,6 +31,7 @@ export interface IngestResult {
   title: string;
   status: IngestStatus;
   chunkCount: number;
+  parentCount?: number;
   hash: string;
   error?: string;
   cacheInvalidated: number;
@@ -72,8 +78,6 @@ export async function ingestUrl(
 
 async function ingestUrlInner(rawUrl: string, options: IngestOptions = {}): Promise<IngestResult> {
   const url = rawUrl.trim();
-  const chunker = options.chunker ?? new RecursiveChunker();
-  const embeddingClient = options.embeddingClient ?? new HfEmbeddingClient();
 
   let scraped: ScrapedDocument;
   try {
@@ -92,15 +96,32 @@ async function ingestUrlInner(rawUrl: string, options: IngestOptions = {}): Prom
     };
   }
 
-  const cleaned = cleanText(scraped.text);
+  return persistIngested(url, scraped.title, cleanText(scraped.text), options);
+}
+
+/**
+ * Shared persistence tail for URL and PDF ingestion: clean → hash →
+ * idempotency check → parent-child chunk → child embed → transactional store →
+ * invalidate corpus + semantic cache. True Parent-Child Chunking (§2.5):
+ * parents (~2000 ch) are stored for LLM context; children (~200 ch) are embedded
+ * for search.
+ */
+async function persistIngested(
+  sourceKey: string,
+  title: string,
+  cleaned: string,
+  options: IngestOptions = {},
+): Promise<IngestResult> {
+  const embeddingClient = options.embeddingClient ?? new HfEmbeddingClient();
+
   const hash = hashContent(cleaned);
-  const existing = await prisma.document.findUnique({ where: { url } });
+  const existing = await prisma.document.findUnique({ where: { url: sourceKey } });
 
   if (existing && existing.hash === hash && !options.force) {
-    logger.info({ url }, "[INGEST] content unchanged; skipping");
+    logger.info({ url: sourceKey }, "[INGEST] content unchanged; skipping");
     return {
-      url,
-      title: scraped.title,
+      url: sourceKey,
+      title,
       status: "skipped",
       chunkCount: existing.chunkCount,
       hash,
@@ -108,13 +129,14 @@ async function ingestUrlInner(rawUrl: string, options: IngestOptions = {}): Prom
     };
   }
 
-  const chunkTexts = chunker.splitText(cleaned);
-  if (chunkTexts.length === 0) {
+  const structure = chunkParentChild(cleaned);
+  const childTexts = structure.flatMap((block) => block.children.map((child) => child.text));
+  if (childTexts.length === 0) {
     const message = "No usable chunks extracted from document";
-    logger.warn({ url }, `[INGEST] ${message}`);
+    logger.warn({ url: sourceKey }, `[INGEST] ${message}`);
     return {
-      url,
-      title: scraped.title,
+      url: sourceKey,
+      title,
       status: "failed",
       chunkCount: 0,
       hash,
@@ -125,13 +147,13 @@ async function ingestUrlInner(rawUrl: string, options: IngestOptions = {}): Prom
 
   let vectors: number[][];
   try {
-    vectors = await embedChunks(embeddingClient, chunkTexts);
+    vectors = await embedChunks(embeddingClient, childTexts);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.warn({ url }, `[INGEST] embedding failed: ${message}`);
+    logger.warn({ url: sourceKey }, `[INGEST] embedding failed: ${message}`);
     return {
-      url,
-      title: scraped.title,
+      url: sourceKey,
+      title,
       status: "failed",
       chunkCount: 0,
       hash,
@@ -140,23 +162,51 @@ async function ingestUrlInner(rawUrl: string, options: IngestOptions = {}): Prom
     };
   }
 
-  const stored = await storeDocument(url, scraped.title, hash, chunkTexts, vectors, existing?.id);
+  const stored = await storeDocument(sourceKey, title, hash, structure, vectors, existing?.id);
 
   const invalidated = await semanticCache.invalidateForDocument(stored.id);
   await getCorpusProvider().invalidate();
 
   logger.info(
-    { url, status: stored.status, chunks: chunkTexts.length, invalidated },
+    { url: sourceKey, status: stored.status, chunks: childTexts.length, invalidated },
     "[INGEST] completed",
   );
   return {
-    url,
-    title: scraped.title,
+    url: sourceKey,
+    title,
     status: stored.status,
-    chunkCount: chunkTexts.length,
+    chunkCount: childTexts.length,
+    parentCount: stored.parentCount,
     hash,
     cacheInvalidated: invalidated,
   };
+}
+
+/**
+ * Ingests a PDF buffer into the knowledge base. Idempotent via a content-hash
+ * derived `pdf://` source key. ADMIN-only callers (upload route §2.2.4).
+ */
+export async function ingestPdf(
+  buffer: Buffer,
+  filename: string,
+  options: IngestOptions = {},
+): Promise<IngestResult & { filename: string }> {
+  return runWithTrace(
+    { name: "ingest-pdf", metadata: { filename }, input: filename },
+    async () => {
+      const parsed = await parsePdf(buffer);
+      const cleaned = cleanText(parsed.text);
+      const result = await persistIngested(pdfSourceKey(buffer, filename), filename, cleaned, options);
+      return { ...result, filename };
+    },
+  );
+}
+
+/** Deterministic `pdf://<content-hash-prefix>/<sanitized-filename>` source key. */
+export function pdfSourceKey(buffer: Buffer, filename: string): string {
+  const digest = createHash("sha256").update(buffer).digest("hex").slice(0, 16);
+  const safeName = filename.replace(/[^\w.\-]+/g, "_").toLowerCase();
+  return `pdf://${digest}/${safeName}`;
 }
 
 /**
@@ -177,10 +227,10 @@ async function storeDocument(
   url: string,
   title: string,
   hash: string,
-  chunkTexts: string[],
+  structure: ParentChildChunk[],
   vectors: number[][],
   existingId?: string,
-): Promise<{ id: string; status: "created" | "updated" }> {
+): Promise<{ id: string; status: "created" | "updated"; parentCount: number; childCount: number }> {
   return prisma.$transaction(async (tx) => {
     const document = await tx.document.upsert({
       where: { url },
@@ -190,34 +240,56 @@ async function storeDocument(
     });
 
     if (existingId && existingId !== document.id) {
-      await tx.documentChunk.deleteMany({ where: { documentId: existingId } });
+      // Cascades to children via document_chunks_documentId_fkey.
+      await tx.documentParentChunk.deleteMany({ where: { documentId: existingId } });
     }
-    await tx.documentChunk.deleteMany({ where: { documentId: document.id } });
+    await tx.documentParentChunk.deleteMany({ where: { documentId: document.id } });
 
-    if (chunkTexts.length > 0) {
-      const rows = chunkTexts.map(
-        (text, index) =>
-          Prisma.sql`(
+    let childCount = 0;
+    for (const block of structure) {
+      const parent = await tx.documentParentChunk.create({
+        data: { documentId: document.id, text: block.parent.text },
+        select: { id: true },
+      });
+
+      const rows = block.children.map((child, index) => {
+        const vector = vectors[childCount + index];
+        if (!vector) {
+          return null;
+        }
+        return Prisma.sql`(
           ${document.id},
+          ${parent.id},
           ${title},
           ${url},
-          ${text},
-          ${`[${vectors[index].join(",")}]`}::vector,
+          ${child.text},
+          ${`[${vector.join(",")}]`}::vector,
           NOW()
-        )`,
-      );
-      await tx.$executeRaw(Prisma.sql`
-        INSERT INTO document_chunks ("documentId", "sourceName", "sourceUrl", "text", "embedding", "createdAt")
-        VALUES ${Prisma.join(rows, ", ")}
-      `);
+        )`;
+      });
+
+      const nonNull = rows.filter((row): row is Prisma.Sql => row !== null);
+      if (nonNull.length > 0) {
+        await tx.$executeRaw(Prisma.sql`
+          INSERT INTO document_chunks
+            ("documentId", "parentId", "sourceName", "sourceUrl", "text", "embedding", "createdAt")
+          VALUES ${Prisma.join(nonNull, ", ")}
+        `);
+      }
+      childCount += nonNull.length;
     }
 
     await tx.document.update({
       where: { id: document.id },
-      data: { chunkCount: chunkTexts.length },
+      data: { chunkCount: childCount },
     });
 
-    return { id: document.id, status: existingId ? "updated" : "created" };
+    return {
+      id: document.id,
+      status: existingId ? "updated" : "created",
+      parentCount: structure.length,
+      childCount,
+    };
   });
 }
 

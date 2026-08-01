@@ -31,6 +31,7 @@ if (isProduction) {
 }
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["pdf-parse"],
   async headers() {
     return [
       {

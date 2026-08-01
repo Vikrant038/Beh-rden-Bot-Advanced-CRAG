@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { FileStack, History, Plus, Settings, ShieldAlert } from "lucide-react";
 import { api } from "@/lib/trpc/client";
 import { ConversationItem } from "@/components/sidebar/conversation-item";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const router = useRouter();
@@ -37,7 +38,7 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
           type="button"
           onClick={newChat}
           disabled={createMutation.isPending}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition hover:bg-primary-hover disabled:opacity-60"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover disabled:opacity-60"
         >
           <Plus className="h-4 w-4" />
           New chat
@@ -105,6 +106,10 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
             Admin
           </button>
         )}
+        <div className="flex items-center justify-between pt-1">
+          <ThemeToggle compact />
+          <span className="text-[10px] text-muted">Behörden-Bot</span>
+        </div>
       </div>
     </div>
   );

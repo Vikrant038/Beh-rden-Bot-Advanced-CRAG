@@ -4,6 +4,8 @@ import { useState } from "react";
 import { ChevronRight, FileText, Search } from "lucide-react";
 import { api } from "@/lib/trpc/client";
 import { formatRelativeTime } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface SourceListItem {
   id: string;
@@ -47,9 +49,20 @@ export function SourceBrowser() {
         </div>
 
         {documents.isLoading ? (
-          <p className="animate-pulse px-2 text-sm text-muted">Loading…</p>
+          <div className="space-y-2 px-1">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
         ) : items.length === 0 ? (
-          <p className="px-2 text-sm text-muted">No documents found.</p>
+          <EmptyState
+            title="No documents found"
+            description={
+              documents.data?.length ? "No documents match your search." : "Nothing indexed yet."
+            }
+            icon={FileText}
+            className="py-8"
+          />
         ) : (
           <ul className="space-y-1">
             {items.map((document) => (
@@ -76,9 +89,11 @@ export function SourceBrowser() {
 
       <div className="rounded-2xl border border-border bg-surface p-5">
         {!selected ? (
-          <p className="py-16 text-center text-sm text-muted">
-            Select a document to browse its indexed chunks.
-          </p>
+          <EmptyState
+            title="Select a document"
+            description="Browse its indexed chunks from the list on the left."
+            icon={FileText}
+          />
         ) : (
           <>
             <div className="mb-4">
@@ -88,7 +103,18 @@ export function SourceBrowser() {
               </p>
             </div>
             {chunks.isLoading ? (
-              <p className="animate-pulse text-sm text-muted">Loading chunks…</p>
+              <div className="space-y-3">
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+              </div>
+            ) : chunks.data?.pages.flatMap((page) => page.items).length === 0 ? (
+              <EmptyState
+                title="No chunks"
+                description="This document has no indexed chunks yet."
+                icon={FileText}
+                className="py-10"
+              />
             ) : (
               <ul className="space-y-3">
                 {chunks.data?.pages

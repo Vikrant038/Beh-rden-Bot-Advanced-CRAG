@@ -69,6 +69,8 @@ const standardResult = {
 
 const agenticResult = {
   userQuery: "q",
+  maskedQuery: "q",
+  guardrail: { passed: true, reason: "In-domain" },
   finalAnswer: "## Answer\n\n### Actionable Next Steps\n\n1. Step one.",
   researchSteps: [{ iteration: 1, thought: "t", action: "a", observation: "o" }],
   analysisMatrix: { summary: "s", structured_table: "", key_insights: [], verified_facts: [] },
