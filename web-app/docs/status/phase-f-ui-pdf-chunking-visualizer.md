@@ -1,13 +1,13 @@
 # Phase F — Global UI Overhaul, URL Validation Hardening, PDF Ingestion, Parent-Child Chunking & Pipeline Visualizer
 
-**Status:** IN PROGRESS (Phases 0–3 complete; Phase 4 pending)
-**Date:** 2026-08-01
+**Status:** COMPLETE (Phases 0–4 all done)
+**Date:** 2026-08-01 (updated 2026-08-02)
 **Branch:** `web-app`
 **Scope:** IMPLEMENTATION_PLAN.md Phases 0–4 (approved plan)
 
 ## Summary
 
-The approved phase-D/E follow-up plan is being executed in four phases. Phase 0 (URL content-type validation hardening), Phase 1 (parent-child chunking + PDF ingestion), and Phase 2 (dual-palette UI overhaul) are implemented and verified: typecheck clean, lint clean, build clean, and the full test suite is green (38 files / 242 tests). Phase 3 (pipeline visualizer) is complete: the orchestrator trace enrichment, `admin.testPipeline` router procedure, tRPC route duration, GitHub-Actions-style visualizer page, and admin nav entry are all done and verified. Phase 4 (tests & CI hardening) remains.
+The approved phase-D/E follow-up plan is being executed in four phases. Phase 0 (URL content-type validation hardening), Phase 1 (parent-child chunking + PDF ingestion), Phase 2 (dual-palette UI overhaul), Phase 3 (pipeline visualizer), and Phase 4 (tests & CI hardening) are all implemented and verified: typecheck clean, lint clean, build clean, and the full unit/integration/component suite is green (41 files / 280 tests). Phase 4 adds unit tests for the PDF parser, scraper content-type guard, parent-child chunker, `pdfSourceKey`, `expandToParents`, and `admin.testPipeline` (no-memory-write), plus e2e specs for the pipeline tester and PDF upload (413/422/client-side rejection), verified end-to-end except browser execution which requires a live DB + LLM keys.
 
 ## Phase Status
 
@@ -17,7 +17,7 @@ The approved phase-D/E follow-up plan is being executed in four phases. Phase 0 
 | Phase 1 | Parent-child chunking + PDF ingestion (schema, chunker, parser, pipeline, upload route, dropzone) | DONE (migration unverified — no DB in sandbox) |
 | Phase 2 | Two distinct light/dark palettes, glassmorphism, animated mesh, landing content, edge-case states | DONE (verified) |
 | Phase 3 | `admin.testPipeline` tRPC endpoint, trace enrichment, pipeline visualizer page + stage components, nav entry | DONE (verified) |
-| Phase 4 | Unit tests (pdf-parser, scraper content-type, expandToParents, pdfSourceKey, testPipeline), e2e, full gates | PENDING |
+| Phase 4 | Unit tests (pdf-parser, scraper content-type, chunkParentChild, pdfSourceKey, expandToParents, testPipeline), e2e (pipeline tester + PDF upload), full gates | DONE (e2e execution deferred to machine with DB) |
 
 ## Deliverables (Phase 0, 1 & 2)
 
@@ -57,7 +57,23 @@ The approved phase-D/E follow-up plan is being executed in four phases. Phase 0 
 | Typecheck | `pnpm typecheck` | PASS |
 | Lint | `pnpm lint` | PASS (0 errors; pre-existing `.lintstagedrc.mjs` warning only) |
 | Build | `pnpm build` (with dummy `DATABASE_URL` + `NEXTAUTH_SECRET`) | PASS (`/admin/pipeline-tester` generated) |
-| Unit + integration + component tests | `pnpm test` (with dummy `DATABASE_URL` + `NEXTAUTH_SECRET`) | PASS (242 tests, 38 files) |
+| Unit + integration + component tests | `pnpm test` (with dummy `DATABASE_URL` + `NEXTAUTH_SECRET`) | PASS (280 tests, 41 files) |
+| E2E spec compile | `pnpm exec playwright test --list` | PASS (21 tests, 6 files; browser execution deferred to machine with DB) |
+
+## Deliverables (Phase 4)
+
+| Area | Deliverable |
+|------|-------------|
+| pdf-parser tests | `tests/unit/pdf-parser.test.ts` — valid PDF, empty buffer, image-only (no text), >200 pages, parse throw; `MAX_PDF_BYTES`/`MAX_PDF_PAGES`/`ACCEPTED_MIME` constants |
+| scraper content-type tests | `tests/unit/scraper.test.ts` — JSON/PDF/missing content-type rejection, charset acceptance, Content-Length cap, decoded-body cap |
+| chunker tests | `tests/unit/chunker.test.ts` — `chunkParentChild` empty, parent cap, child cap, parent overlap, short-parent-as-own-child, determinism, content preservation |
+| pdfSourceKey tests | `tests/unit/ingest-pipeline.test.ts` — determinism, buffer sensitivity, case-insensitive filename, sanitization, `pdf://<16-hex>/<name>` shape |
+| expandToParents tests | `tests/unit/expand-to-parents.test.ts` — flat pass-through, parent expansion, parentId dedupe, missing parent, mixed order preservation (mocked Prisma) |
+| testPipeline tests | `tests/unit/admin-test-pipeline.test.ts` — ADMIN gate, min-length validation, full trace with child/parent snippets, no ConversationMemory/message/conversation writes, guardrail-blocked + cache-hit responses (mocked orchestrator) |
+| E2E pipeline tester | `tests/e2e/pipeline-tester.spec.ts` — 4 stages render, child→parent expansion, guardrail BLOCKED short-circuit, cache-hit badge, pre-run empty state |
+| E2E PDF upload | `tests/e2e/documents-upload.spec.ts` — valid PDF → created, server 413, image-only 422, client-side >4 MB rejection (mocked upload route) |
+| Fixtures | `tests/e2e/fixtures/valid-guide.pdf` (1-page text PDF) + `image-only.pdf` (no text) — generated with byte-accurate xrefs, verified through `parsePdf` |
+| Verification doc | `docs/TESTING_PHASE4.md` — commands + expected outputs for every test area |
 
 ## Decisions & Exceptions
 
@@ -79,6 +95,7 @@ The approved phase-D/E follow-up plan is being executed in four phases. Phase 0 
 
 ## Next Steps
 
-- [ ] Phase 4: unit tests (`pdf-parser`, `scraper` content-type, `expandToParents`, `pdfSourceKey`, `testPipeline` no-memory-write), e2e, full `lint/typecheck/test` run.
+- [x] Phase 4: unit tests (`pdf-parser`, `scraper` content-type, `chunkParentChild`, `pdfSourceKey`, `expandToParents`, `testPipeline` no-memory-write), e2e (pipeline tester + PDF upload), full `lint/typecheck/test` run.
 - [ ] Apply migration to real DB when available (`pnpm prisma migrate dev --name parent_child_chunks`) and run `pnpm ingest --sync --force` backfill.
+- [ ] Run `pnpm test:e2e` on a machine with a DB + LLM keys; verify the 21 e2e specs pass against the live dev server.
 - [ ] Verify a real pipeline run in the browser renders Stage 0 (masked query + guardrail), Stage 1 (ReAct steps + child snippet + expanded parent), Stage 2 (matrix), Stage 3 (markdown answer) — requires a live DB + LLM keys.

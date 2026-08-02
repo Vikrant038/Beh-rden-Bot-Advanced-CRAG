@@ -6,7 +6,7 @@ vi.mock("@/server/lib/security/url-validator", () => ({
 }));
 
 import { assertSafeUrl } from "@/server/lib/security/url-validator";
-import { SsrfBlockedError, ExternalApiError } from "@/server/lib/errors";
+import { SsrfBlockedError, ExternalApiError, InvalidContentTypeError } from "@/server/lib/errors";
 
 const mockedAssertSafeUrl = vi.mocked(assertSafeUrl);
 
@@ -78,6 +78,56 @@ describe("scrapeWebPage", () => {
   it("rejects when fetch itself fails", async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("ECONNRESET"));
     await expect(scrapeWebPage("https://example.com")).rejects.toThrow(ExternalApiError);
+  });
+
+  it("rejects a JSON content type with InvalidContentTypeError", async () => {
+    mockFetchResponse('{"data": []}', 200, "application/json");
+    await expect(scrapeWebPage("https://example.com/api.json")).rejects.toThrow(
+      InvalidContentTypeError,
+    );
+    expect(globalThis.fetch).toHaveBeenCalled();
+  });
+
+  it("rejects a PDF content type", async () => {
+    mockFetchResponse("%PDF-1.4", 200, "application/pdf");
+    await expect(scrapeWebPage("https://example.com/file.pdf")).rejects.toThrow(
+      InvalidContentTypeError,
+    );
+  });
+
+  it("rejects a missing content type header", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      text: () => Promise.resolve(SAMPLE_HTML),
+    } as Response);
+    await expect(scrapeWebPage("https://example.com/no-header")).rejects.toThrow(
+      InvalidContentTypeError,
+    );
+  });
+
+  it("accepts text/html with a charset parameter", async () => {
+    mockFetchResponse(SAMPLE_HTML, 200, "text/html; charset=UTF-8");
+    const result = await scrapeWebPage("https://www.daad.de/en/study/");
+    expect(result.title).toBe("DAAD — Study in Germany");
+  });
+
+  it("rejects when the declared content-length exceeds the cap", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "text/html", "content-length": "99999999" }),
+      text: () => Promise.resolve(SAMPLE_HTML),
+    } as Response);
+    await expect(scrapeWebPage("https://example.com/huge")).rejects.toThrow(ExternalApiError);
+    await expect(scrapeWebPage("https://example.com/huge")).rejects.toThrow(/too large/);
+  });
+
+  it("rejects when the decoded body exceeds the cap", async () => {
+    const huge = `<html><body><p>${"x".repeat(6 * 1024 * 1024)}</p></body></html>`;
+    mockFetchResponse(huge, 200, "text/html");
+    await expect(scrapeWebPage("https://example.com/big")).rejects.toThrow(/too large/);
   });
 });
 

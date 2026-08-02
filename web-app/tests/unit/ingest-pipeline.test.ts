@@ -33,7 +33,7 @@ vi.mock("@/server/rag/cache/semantic-cache", () => ({
 
 import { prisma } from "@/server/db";
 import { cleanText } from "@/server/ingest/cleaner";
-import { ingestUrl, syncAllDocuments } from "@/server/ingest/pipeline";
+import { ingestUrl, syncAllDocuments, pdfSourceKey } from "@/server/ingest/pipeline";
 import { scrapeWebPage } from "@/server/ingest/scraper";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 
@@ -206,5 +206,36 @@ describe("syncAllDocuments", () => {
     expect(prismaMock.document.findMany).toHaveBeenCalled();
     expect(results).toHaveLength(2);
     expect(mockedScrape).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("pdfSourceKey", () => {
+  it("is deterministic for the same buffer and filename", () => {
+    const buffer = Buffer.from("%PDF-1.4\ncontent");
+    expect(pdfSourceKey(buffer, "visa-guide.pdf")).toBe(pdfSourceKey(buffer, "visa-guide.pdf"));
+  });
+
+  it("produces different keys for different buffers", () => {
+    const keyA = pdfSourceKey(Buffer.from("aaa"), "visa.pdf");
+    const keyB = pdfSourceKey(Buffer.from("bbb"), "visa.pdf");
+    expect(keyA).not.toBe(keyB);
+  });
+
+  it("is case-insensitive on the filename", () => {
+    const buffer = Buffer.from("%PDF-1.4\ncontent");
+    expect(pdfSourceKey(buffer, "VISA-GUIDE.PDF")).toBe(pdfSourceKey(buffer, "visa-guide.pdf"));
+  });
+
+  it("sanitizes unsafe characters in the filename", () => {
+    const buffer = Buffer.from("%PDF-1.4\ncontent");
+    const key = pdfSourceKey(buffer, "my file (final) v2.pdf");
+    expect(key).toContain("my_file_final_v2.pdf");
+  });
+
+  it("formats as pdf://<16-hex>/<name>", () => {
+    const buffer = Buffer.from("%PDF-1.4\ncontent");
+    const key = pdfSourceKey(buffer, "visa.pdf");
+    const match = key.match(/^pdf:\/\/([0-9a-f]{16})\/visa\.pdf$/);
+    expect(match).not.toBeNull();
   });
 });

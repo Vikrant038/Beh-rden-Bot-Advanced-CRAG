@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { RecursiveChunker, chunkText } from "@/server/ingest/chunker";
+import {
+  RecursiveChunker,
+  chunkText,
+  chunkParentChild,
+  PARENT_CHUNK_SIZE,
+  PARENT_CHUNK_OVERLAP,
+  CHILD_CHUNK_SIZE,
+  CHILD_CHUNK_OVERLAP,
+} from "@/server/ingest/chunker";
 
 const LONG_TEXT = `
 German Student Visa Guide
@@ -69,5 +77,74 @@ describe("RecursiveChunker", () => {
     const first = chunkText(LONG_TEXT);
     const second = chunkText(LONG_TEXT);
     expect(first).toEqual(second);
+  });
+});
+
+describe("chunkParentChild", () => {
+  const PARAGRAPH =
+    "German universities require international applicants to submit a recognized school leaving " +
+    "certificate, proof of German or English language proficiency, and a valid passport. " +
+    "Admission decisions are issued by the university admissions office after document review.\n\n";
+
+  const LONG_DOC = PARAGRAPH.repeat(60);
+
+  it("returns an empty list for empty input", () => {
+    expect(chunkParentChild("")).toEqual([]);
+    expect(chunkParentChild("   ")).toEqual([]);
+  });
+
+  it("produces parent blocks under the 2000-char cap", () => {
+    const blocks = chunkParentChild(LONG_DOC);
+    expect(blocks.length).toBeGreaterThan(1);
+    for (const block of blocks) {
+      expect(block.parent.text.length).toBeLessThanOrEqual(PARENT_CHUNK_SIZE + PARENT_CHUNK_OVERLAP);
+    }
+  });
+
+  it("splits each parent into child chunks under the 200-char cap", () => {
+    const blocks = chunkParentChild(LONG_DOC);
+    for (const block of blocks) {
+      for (const child of block.children) {
+        expect(child.text.length).toBeLessThanOrEqual(CHILD_CHUNK_SIZE + CHILD_CHUNK_OVERLAP);
+      }
+    }
+  });
+
+  it("keeps overlap between adjacent parents", () => {
+    const blocks = chunkParentChild(LONG_DOC);
+    const parents = blocks.map((block) => block.parent.text);
+    for (let i = 1; i < parents.length; i++) {
+      const prevTail = parents[i - 1].slice(-PARENT_CHUNK_OVERLAP).trim();
+      expect(parents[i].includes(prevTail)).toBe(true);
+    }
+  });
+
+  it("bounds every child chunk size", () => {
+    const blocks = chunkParentChild(LONG_DOC);
+    for (const block of blocks) {
+      for (const child of block.children) {
+        expect(child.text.length).toBeLessThanOrEqual(CHILD_CHUNK_SIZE + CHILD_CHUNK_OVERLAP);
+      }
+    }
+  });
+
+  it("makes a short parent its own child so no content is lost", () => {
+    const text =
+      "A compact parent paragraph about visa document requirements for international student " +
+      "applicants and the documents they must prepare before submission.";
+    const blocks = chunkParentChild(text);
+    expect(blocks.length).toBe(1);
+    expect(blocks[0]?.children.length).toBe(1);
+    expect(blocks[0]?.children[0]?.text).toContain("visa document requirements");
+  });
+
+  it("is deterministic across runs", () => {
+    expect(chunkParentChild(LONG_DOC)).toEqual(chunkParentChild(LONG_DOC));
+  });
+
+  it("preserves the full document content across parent blocks", () => {
+    const blocks = chunkParentChild(LONG_DOC);
+    const joined = blocks.map((block) => block.parent.text).join(" ");
+    expect(joined.length).toBeGreaterThan(LONG_DOC.length * 0.9);
   });
 });

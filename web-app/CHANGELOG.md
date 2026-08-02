@@ -8,6 +8,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning:
 
 ### Added
 
+- **Phase 4 test coverage:** unit tests for `pdf-parser` (empty buffer, image-only,
+  >200 pages, parse failure), scraper content-type rejection (JSON/PDF/missing header,
+  charset acceptance, Content-Length + decoded-body caps), `chunkParentChild`
+  (parent/child caps, parent overlap, short-parent fallback), `pdfSourceKey` stability,
+  `expandToParents` (dedupe, flat pass-through, missing parent), and `admin.testPipeline`
+  (ADMIN gate, min-length validation, full trace with child/parent snippets, no
+  ConversationMemory/message/conversation writes, guardrail-blocked + cache-hit
+  responses). E2E specs added for the pipeline tester (4 stages, child→parent
+  expansion, guardrail BLOCKED short-circuit, cache-hit badge) and PDF upload
+  (valid PDF, server 413, image-only 422, client-side >4 MB rejection), backed by
+  hand-generated `tests/e2e/fixtures/{valid-guide,image-only}.pdf`. Full suite now
+  280 tests / 41 files; verification guide at `docs/TESTING_PHASE4.md`.
+
 - **Pipeline visualizer (admin):** `admin.testPipeline` runs the full 3-agent ReAct
   pipeline glass-box with `NoopMemory` + `bypassCache`, returns a full trace
   (`maskedQuery`, `guardrail`, research steps, analyst matrix, parent-expanded
