@@ -1,7 +1,7 @@
 import { HybridRetriever } from "@/server/rag/retrieval/hybrid";
 import { PrismaCorpusProvider } from "@/server/rag/retrieval/corpus";
 import { HfReranker } from "@/server/rag/retrieval/reranker";
-import { HfEmbeddingClient } from "@/server/embeddings/client";
+import { GeminiEmbeddingClient } from "@/server/embeddings/client";
 
 let retriever: HybridRetriever | null = null;
 let corpusProvider: PrismaCorpusProvider | null = null;
@@ -16,7 +16,7 @@ export function getCorpusProvider(): PrismaCorpusProvider {
 export function getHybridRetriever(): HybridRetriever {
   if (!retriever) {
     retriever = new HybridRetriever({
-      embeddingClient: new HfEmbeddingClient(),
+      embeddingClient: new GeminiEmbeddingClient(),
       reranker: new HfReranker(),
       corpusProvider: getCorpusProvider(),
     });

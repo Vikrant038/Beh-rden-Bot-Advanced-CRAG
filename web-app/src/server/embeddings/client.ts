@@ -12,7 +12,7 @@ export interface EmbeddingClient {
 }
 
 /**
- * Embedding client backed by the HuggingFace Inference API
+ * Embedding client backed by the Hugging Face Inference API
  * (feature-extraction pipeline). 768-dim BGE embeddings.
  * Option B (Transformers.js) can replace this later without changing callers.
  */
@@ -51,7 +51,7 @@ export class HfEmbeddingClient implements EmbeddingClient {
       logger.warn({ error: String(error) }, "[EMBED] HF API fetch failed");
       generation.endError(error);
       throw new LLMProviderError(
-        `HuggingFace API is unreachable (Network/DNS error). Please check your connection to ${this.inferenceUrl}`,
+        `Hugging Face API is unreachable (Network/DNS error). Please check your connection to ${this.inferenceUrl}`,
       );
     }
 
@@ -74,6 +74,71 @@ export class HfEmbeddingClient implements EmbeddingClient {
     const normalized = vectors.map((vector) => normalize(vector));
     generation.end({ count: normalized.length, dim: normalized[0]?.length ?? 0 });
     return normalized;
+  }
+
+  async embedQuery(query: string): Promise<number[]> {
+    const prefixed = `${QUERY_EMBEDDING_PREFIX}${query.trim()}`;
+    const vectors = await this.embedTexts([prefixed]);
+    return vectors[0];
+  }
+}
+
+/**
+ * Embedding client backed by the Google Gemini API (text-embedding-004).
+ * Returns 768-dimensional vectors by default.
+ */
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+export class GeminiEmbeddingClient implements EmbeddingClient {
+  private readonly ai: GoogleGenerativeAI;
+
+  constructor(
+    private readonly apiKey: string = env.GEMINI_API_KEY ?? "",
+    private readonly model: string = "text-embedding-004"
+  ) {
+    this.ai = new GoogleGenerativeAI(this.apiKey);
+  }
+
+  async embedTexts(texts: string[]): Promise<number[][]> {
+    if (texts.length === 0) {
+      return [];
+    }
+    if (!this.apiKey) {
+      throw new LLMProviderError("GEMINI_API_KEY not configured; cannot embed");
+    }
+
+    const generation = observeGeneration("embed", {
+      model: this.model,
+      metadata: { input: texts },
+    });
+
+    try {
+      const model = this.ai.getGenerativeModel({ model: this.model });
+      // batchEmbedContents requires an array of requests
+      const requests = texts.map((text) => ({
+        content: { role: "user", parts: [{ text }] },
+      }));
+
+      const response = await model.batchEmbedContents({
+        requests,
+      });
+
+      if (!response || !response.embeddings) {
+        throw new Error("Invalid response from Gemini API");
+      }
+
+      const vectors = response.embeddings.map((e) => e.values);
+      const normalized = vectors.map((vector) => normalize(vector));
+
+      generation.end({ count: normalized.length, dim: normalized[0]?.length ?? 0 });
+      return normalized;
+    } catch (error) {
+      logger.warn({ error: String(error) }, "[EMBED] Gemini API fetch failed");
+      generation.endError(error);
+      throw new LLMProviderError(
+        `Gemini Embedding API error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   async embedQuery(query: string): Promise<number[]> {

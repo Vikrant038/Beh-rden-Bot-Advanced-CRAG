@@ -59,10 +59,10 @@ export function StageNode({ index, title, status, durationMs, children }: StageN
 
       <div className="min-w-0 flex-1 pb-4">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-medium text-foreground">
+          <h3 className="text-sm font-medium text-foreground">
             <span className="mr-1.5 font-mono text-xs text-muted">{index}.</span>
             {title}
-          </p>
+          </h3>
           {durationMs !== undefined && status !== "pending" && (
             <span className="font-mono text-xs text-muted">{durationMs}ms</span>
           )}

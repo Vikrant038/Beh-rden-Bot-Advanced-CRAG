@@ -7,14 +7,14 @@
  * URL ingestion (scrape + embed) runs synchronously inside the calling
  * process. On Vercel serverless, `syncAllDocuments` or multiple rapid
  * `ingestUrl` calls will block the function for the full embedding time
- * (HF Inference API, ~2–5 s per document). For large corpora this will hit
+ * (Gemini embeddings, ~2–5 s per document). For large corpora this will hit
  * the 60 s serverless timeout.
  *
  * Mitigation implemented here: `syncAllDocuments` uses `IngestQueue` — a
  * serial async queue (concurrency = 1 by default) that processes one document
- * at a time, respects the HF API rate limits, and reports per-job progress.
+ * at a time, respects the embedding API rate limits, and reports per-job progress.
  * This prevents burst-embedding N documents simultaneously and exhausting the
- * Inference API quota.
+ * embedding API quota.
  *
  * Production upgrade path: replace `IngestQueue` with a Vercel Cron + a
  * `ingest_jobs` DB table (poll → process → mark done) or a BullMQ queue
@@ -28,7 +28,7 @@ import { cleanText } from "@/server/ingest/cleaner";
 import { RecursiveChunker, chunkParentChild, type ParentChildChunk } from "@/server/ingest/chunker";
 import { scrapeWebPage, type ScrapedDocument } from "@/server/ingest/scraper";
 import { parsePdf } from "@/server/ingest/pdf-parser";
-import { HfEmbeddingClient, type EmbeddingClient } from "@/server/embeddings/client";
+import { GeminiEmbeddingClient, type EmbeddingClient } from "@/server/embeddings/client";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { getCorpusProvider } from "@/server/rag/instance";
 import { ExternalApiError } from "@/server/lib/errors";
@@ -125,7 +125,7 @@ async function persistIngested(
   cleaned: string,
   options: IngestOptions = {},
 ): Promise<IngestResult> {
-  const embeddingClient = options.embeddingClient ?? new HfEmbeddingClient();
+  const embeddingClient = options.embeddingClient ?? new GeminiEmbeddingClient();
 
   const hash = hashContent(cleaned);
   const existing = await prisma.document.findUnique({ where: { url: sourceKey } });
@@ -228,7 +228,7 @@ export function pdfSourceKey(buffer: Buffer, filename: string): string {
  * Re-ingests every document currently in the knowledge base using a serial
  * queue (concurrency = 1). Documents whose content hash is unchanged are
  * skipped (idempotent). Processes one document at a time to avoid bursting
- * the HF Inference API and to stay within serverless timeout limits.
+ * the embedding API and to stay within serverless timeout limits.
  *
  * ⚠️  For corpora > ~10 documents consider migrating to a background job
  * queue (Vercel Cron + DB table or Upstash BullMQ) — see module-level JSDoc.

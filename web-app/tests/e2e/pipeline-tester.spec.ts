@@ -67,8 +67,13 @@ test("renders all four stages after running a trace", async ({ page }) => {
 
   await expect(page.getByText("Guardrail: PASSED")).toBeVisible();
   await expect(page.getByText("Hybrid Retrieval")).toBeVisible();
-  await expect(page.getByText(/Expanded parent context/)).toBeVisible();
-  await expect(page.getByText(/proof of funds/)).toBeVisible();
+
+  const sourceCard = page.getByRole("button", { name: /visa-guide\.pdf/i });
+  await expect(sourceCard).toBeVisible();
+  await sourceCard.click();
+
+  await expect(page.getByText("Expanded parent context", { exact: true })).toBeVisible();
+  await expect(page.getByText(fullTrace.finalAnswer, { exact: true })).toBeVisible();
 });
 
 test("shows the child snippet and expanded parent context", async ({ page }) => {
@@ -77,9 +82,12 @@ test("shows the child snippet and expanded parent context", async ({ page }) => 
   await page.getByLabel("Test pipeline query").fill("blocked account requirement");
   await page.getByRole("button", { name: "Run trace" }).click();
 
+  const sourceCard = page.getByRole("button", { name: /visa-guide\.pdf/i });
+  await expect(sourceCard).toBeVisible({ timeout: 10_000 });
+  await sourceCard.click();
+
   const sourcePanel = page.getByText("Matched child snippet about blocked account.");
   await expect(sourcePanel).toBeVisible({ timeout: 10_000 });
-  await sourcePanel.click();
   await expect(page.getByText(/full blocked account section/)).toBeVisible();
 });
 
@@ -123,7 +131,7 @@ test("surfaces an out-of-domain guardrail block", async ({ page }) => {
   await page.getByRole("button", { name: "Run trace" }).click();
 
   await expect(page.getByText("Guardrail: BLOCKED")).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText(/out of domain/i)).toBeVisible();
+  await expect(page.getByText("out of domain", { exact: true })).toBeVisible();
   await expect(
     page.getByText("Pipeline short-circuited — downstream agents never ran."),
   ).toBeVisible();
@@ -165,7 +173,7 @@ test("marks a cache-hit trace with a badge", async ({ page }) => {
   await page.getByLabel("Test pipeline query").fill("visa fee germany");
   await page.getByRole("button", { name: "Run trace" }).click();
 
-  await expect(page.getByText("cache hit")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("cache hit", { exact: true })).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText("Semantic Cache Hit")).toBeVisible();
 });
 

@@ -37,7 +37,7 @@ async function openDocuments(page: Page, uploadHandler?: (route: Route) => Promi
     await page.route("**/api/admin/documents/upload", uploadHandler);
   }
   await page.goto("/admin/documents");
-  await expect(page.getByRole("heading", { name: "Documents" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Documents", exact: true })).toBeVisible();
 }
 
 async function selectFile(page: Page, path: string) {

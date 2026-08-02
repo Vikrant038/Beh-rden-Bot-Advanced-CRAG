@@ -152,9 +152,15 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
 
     if (guardrailBlocked) {
       stages[1].body = (
-        <p className="rounded-lg border border-glass-border bg-surface/60 px-3 py-2 text-xs text-muted">
-          Pipeline short-circuited — downstream agents never ran.
-        </p>
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 px-1 pt-1 text-xs font-medium text-muted">
+            <FileSearch className="h-3.5 w-3.5" />
+            Sources ({trace.sources.length}) — child snippet → expanded parent
+          </div>
+          <p className="rounded-lg border border-glass-border bg-surface/60 px-3 py-2 text-xs text-muted">
+            Pipeline short-circuited — downstream agents never ran.
+          </p>
+        </div>
       );
       stages[2].body = null;
       stages[3].body = null;

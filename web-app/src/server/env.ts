@@ -9,6 +9,7 @@ const serverEnvSchema = z.object({
   HF_TOKEN: z.string().optional(),
   HF_LLM_MODEL: z.string().default("meta-llama/Llama-3.1-8B-Instruct"),
   RERANKER_MODEL: z.string().default("BAAI/bge-reranker-base"),
+  GEMINI_API_KEY: z.string().min(1),
   EMBEDDING_MODEL: z.string().default("BAAI/bge-base-en-v1.5"),
   HF_INFERENCE_URL: z.string().url().default("https://api-inference.huggingface.co"),
   UPSTASH_REDIS_URL: z.string().optional(),

@@ -8,6 +8,9 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["tests/setup.ts"],
     globals: true,
+    env: {
+      GEMINI_API_KEY: "test_key_for_vitest",
+    },
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
