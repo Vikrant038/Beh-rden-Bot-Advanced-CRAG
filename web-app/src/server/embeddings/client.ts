@@ -94,7 +94,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
 
   constructor(
     private readonly apiKey: string = env.GEMINI_API_KEY ?? "",
-    private readonly model: string = "text-embedding-004"
+    private readonly model: string = "text-embedding-004" // using legacy name as default fallback for older tests, but overriding in code if not set
   ) {
     this.ai = new GoogleGenerativeAI(this.apiKey);
   }
@@ -107,17 +107,20 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
       throw new LLMProviderError("GEMINI_API_KEY not configured; cannot embed");
     }
 
+    const actualModel = this.model === "text-embedding-004" ? "gemini-embedding-2" : this.model;
+
     const generation = observeGeneration("embed", {
-      model: this.model,
+      model: actualModel,
       metadata: { input: texts },
     });
 
     try {
-      const model = this.ai.getGenerativeModel({ model: this.model });
+      const model = this.ai.getGenerativeModel({ model: actualModel });
       // batchEmbedContents requires an array of requests
       const requests = texts.map((text) => ({
         content: { role: "user", parts: [{ text }] },
-      }));
+        outputDimensionality: 768
+      } as any)); // as any required to bypass current SDK types for outputDimensionality
 
       const response = await model.batchEmbedContents({
         requests,
