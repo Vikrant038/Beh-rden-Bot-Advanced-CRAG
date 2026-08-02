@@ -55,9 +55,7 @@ export async function scrapeWebPage(rawUrl: string): Promise<ScrapedDocument> {
 
   const contentLength = response.headers.get("content-length");
   if (contentLength && Number(contentLength) > MAX_SCRAPE_BYTES) {
-    throw new ExternalApiError(
-      `Response too large from ${trimmedUrl} (${contentLength} bytes)`,
-    );
+    throw new ExternalApiError(`Response too large from ${trimmedUrl} (${contentLength} bytes)`);
   }
 
   const html = await response.text();

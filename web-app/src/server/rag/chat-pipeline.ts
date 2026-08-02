@@ -227,7 +227,10 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
     yield { type: "status", stage: "agent_writer" };
   }
 
-  await prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: { updatedAt: new Date() },
+  });
   const persisted = await persistAssistant(conversationId, result.answer, result.sources, {
     retrievalPath: result.retrievalPath,
     latencyMs: result.latencyMs,

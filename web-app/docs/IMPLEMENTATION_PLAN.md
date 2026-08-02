@@ -14,7 +14,7 @@
 | Phase 0 | URL content-type validation, domain errors, tRPC plumbing | ✅ Done | Verified: typecheck/lint/tests green |
 | Phase 1 | Parent-child chunking + PDF ingestion | ✅ Done | Migration handwritten, **unverified against real pgvector DB** (no DB in sandbox) |
 | Phase 2 | Global UI overhaul (dual palettes, glass, mesh, landing, edge states) | ✅ Done | Verified: typecheck/lint/tests/build green (236 tests) |
-| Phase 3 | Pipeline visualizer (`admin.testPipeline`, page, stage components) | 🔄 In progress | Orchestrator trace enrichment + router + tRPC duration done; page/components pending |
+| Phase 3 | Pipeline visualizer (`admin.testPipeline`, page, stage components) | ✅ Done | Verified: typecheck/lint/tests/build green (242 tests) |
 | Phase 4 | Tests & CI hardening (unit + e2e) | ⬜ Pending | — |
 
 **Live progress doc:** `docs/status/phase-f-ui-pdf-chunking-visualizer.md`
@@ -1101,13 +1101,13 @@ export const adminLongProcedure = adminProcedure.use(withTimeout(PIPELINE_TEST_T
 - [ ] Verify dark/light toggle with `next-themes`: no flash (hydration guard), no CLS, both palettes AA-contrast on glass over mesh.
 
 **Phase 3 — Pipeline Visualizer**
-- [ ] Extend `AgenticRagResponse` with `maskedQuery` + `guardrail` in `orchestrator.ts`; populate all return sites.
-- [ ] Add `NoopMemory` + `admin.testPipeline` mutation in `src/server/routers/admin.ts`.
-- [ ] Set `runtime="nodejs"` + `maxDuration=60` on the tRPC route handler.
-- [ ] (Optional) Add `withTimeout` middleware + `adminLongProcedure`; use `retry: false` on the client.
-- [ ] Create `src/app/admin/pipeline-tester/page.tsx` and the four pipeline components.
-- [ ] Add "Pipeline Tester" entry to `NAV_ITEMS` in `src/app/admin/layout.tsx`.
-- [ ] Verify a test run renders Stage 0 (masked query + guardrail), Stage 1 (ReAct steps + **child snippet + expanded parent**), Stage 2 (matrix), Stage 3 (markdown answer). Verify guardrail-blocked and zero-source edge cases.
+- [x] Extend `AgenticRagResponse` with `maskedQuery` + `guardrail` in `orchestrator.ts`; populate all return sites.
+- [x] Add `NoopMemory` + `admin.testPipeline` mutation in `src/server/routers/admin.ts`.
+- [x] Set `runtime="nodejs"` + `maxDuration=60` on the tRPC route handler.
+- [x] Add `withTimeout` middleware + `adminLongProcedure`; use `retry: false` on the client.
+- [x] Create `src/app/admin/pipeline-tester/page.tsx` and the four pipeline components.
+- [x] Add "Pipeline Tester" entry to `NAV_ITEMS` in `src/app/admin/layout.tsx`.
+- [ ] Verify a test run renders Stage 0 (masked query + guardrail), Stage 1 (ReAct steps + **child snippet + expanded parent**), Stage 2 (matrix), Stage 3 (markdown answer). Verify guardrail-blocked and zero-source edge cases. *(Requires live DB + LLM keys — sandbox blocked.)*
 
 **Phase 4 — Tests & CI**
 - [ ] Unit: `pdf-parser` (valid PDF, empty, image-only, >200 pages), `scraper` content-type rejection.

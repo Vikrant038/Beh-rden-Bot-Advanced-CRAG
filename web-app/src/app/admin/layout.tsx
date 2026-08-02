@@ -3,12 +3,13 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { BarChart3, FileStack, ShieldAlert } from "lucide-react";
+import { BarChart3, FileStack, FlaskConical, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/admin/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/admin/documents", label: "Documents", icon: FileStack },
+  { href: "/admin/pipeline-tester", label: "Pipeline tester", icon: FlaskConical },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

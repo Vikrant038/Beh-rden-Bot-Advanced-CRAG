@@ -51,3 +51,34 @@ const isAdmin = t.middleware(({ ctx, next }) => {
 
 export const protectedProcedure = t.procedure.use(isAuthenticated);
 export const adminProcedure = t.procedure.use(isAuthenticated).use(isAdmin);
+
+const ADMIN_OPERATION_TIMEOUT_MS = 60_000;
+
+/**
+ * Timeout guard for long-running admin operations (pipeline tests make 3–5
+ * sequential LLM calls). Rejects with INTERNAL_SERVER_ERROR once elapsed time
+ * exceeds `ms`, so a hung LLM call fails fast instead of exhausting the
+ * serverless function budget.
+ */
+function withTimeout(ms: number) {
+  return t.middleware(async ({ next }) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Operation timed out" })),
+        ms,
+      );
+    });
+    try {
+      return await Promise.race([next(), timeoutPromise]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  });
+}
+
+export const adminLongProcedure = t.procedure
+  .use(isAuthenticated)
+  .use(isAdmin)
+  .use(withTimeout(ADMIN_OPERATION_TIMEOUT_MS));

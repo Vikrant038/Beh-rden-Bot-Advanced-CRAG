@@ -52,11 +52,7 @@ describe("EmptyState", () => {
 
   it("renders an icon and action node", () => {
     const { container } = render(
-      <EmptyState
-        title="Empty"
-        icon={FileText}
-        action={<button type="button">Add one</button>}
-      />,
+      <EmptyState title="Empty" icon={FileText} action={<button type="button">Add one</button>} />,
     );
     expect(screen.getByRole("button", { name: "Add one" })).toBeInTheDocument();
     expect(container.querySelector("svg")).not.toBeNull();

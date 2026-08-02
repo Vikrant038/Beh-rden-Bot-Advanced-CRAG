@@ -19,6 +19,10 @@ export interface Source {
   url: string;
   score: number;
   documentId?: string;
+  /** Matched child snippet (~200 ch) — rendered by the pipeline visualizer. */
+  childText?: string;
+  /** Expanded parent context (~2000 ch) — rendered by the pipeline visualizer. */
+  parentText?: string;
 }
 
 export interface RetrievedContext {

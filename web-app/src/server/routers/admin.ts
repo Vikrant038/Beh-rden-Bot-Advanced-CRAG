@@ -1,4 +1,4 @@
-import { router, adminProcedure } from "@/server/trpc/t";
+import { router, adminProcedure, adminLongProcedure } from "@/server/trpc/t";
 import { prisma } from "@/server/db";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { createLogger } from "@/server/lib/logger";
@@ -232,7 +232,7 @@ export const adminRouter = router({
       });
   }),
 
-  testPipeline: adminProcedure
+  testPipeline: adminLongProcedure
     .input(z.object({ prompt: z.string().trim().min(5).max(2000) }))
     .mutation(async ({ input }): Promise<AgenticRagResponse> => {
       const result = await runAgenticRag(input.prompt, {

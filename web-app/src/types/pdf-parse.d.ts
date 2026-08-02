@@ -12,5 +12,8 @@ declare module "pdf-parse/lib/pdf-parse.js" {
     [key: string]: unknown;
   }
 
-  export default function pdfParse(data: Buffer, options?: Record<string, unknown>): Promise<PdfParseResult>;
+  export default function pdfParse(
+    data: Buffer,
+    options?: Record<string, unknown>,
+  ): Promise<PdfParseResult>;
 }

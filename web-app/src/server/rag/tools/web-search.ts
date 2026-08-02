@@ -33,8 +33,7 @@ const FALLBACK_RESULTS: WebSearchResult[] = [
   {
     title: "DAAD Official Portal",
     url: "https://www.daad.de/en/study-and-research-in-germany/",
-    snippet:
-      "Official German academic exchange service guidelines for student visa & admissions.",
+    snippet: "Official German academic exchange service guidelines for student visa & admissions.",
   },
 ];
 

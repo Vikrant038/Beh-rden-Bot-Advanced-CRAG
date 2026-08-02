@@ -6,6 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning:
 
 ## [Unreleased]
 
+### Added
+
+- **Pipeline visualizer (admin):** `admin.testPipeline` runs the full 3-agent ReAct
+  pipeline glass-box with `NoopMemory` + `bypassCache`, returns a full trace
+  (`maskedQuery`, `guardrail`, research steps, analyst matrix, parent-expanded
+  sources). New `/admin/pipeline-tester` page renders a GitHub-Actions-style
+  Stage 0→3 timeline: masked query + guardrail verdict, ReAct steps, matched-child
+  snippet → expanded-parent context, comparison matrix, and the final markdown answer.
+  `Source` now carries optional `childText`/`parentText` so the child→parent
+  expansion is visible. Added `adminLongProcedure` (60 s `withTimeout` middleware);
+  the tRPC route handler runs on the Node runtime with `maxDuration = 60`.
+
 ### Fixed
 
 - **Semantic cache race condition:** replaced findUnique+INSERT two-step write with a

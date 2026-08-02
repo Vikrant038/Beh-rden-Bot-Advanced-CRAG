@@ -53,7 +53,10 @@ export function ThemeToggle({ compact = false, className }: ThemeToggleProps) {
     <div
       role="radiogroup"
       aria-label="Theme"
-      className={cn("inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1", className)}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1",
+        className,
+      )}
     >
       {OPTIONS.map((option) => {
         const active = mounted ? resolvedTheme === option.value : option.value === "dark";

@@ -200,7 +200,8 @@ export function DocumentManager() {
           <p
             className={cn(
               "mt-3 text-xs",
-              ingestFeedback.startsWith("Failed") || ingestFeedback.startsWith("Unsupported") ||
+              ingestFeedback.startsWith("Failed") ||
+                ingestFeedback.startsWith("Unsupported") ||
                 ingestFeedback.startsWith("Error")
                 ? "text-destructive"
                 : "text-muted",
@@ -292,7 +293,9 @@ export function DocumentManager() {
         <div className="glass-card flex flex-col items-center rounded-2xl border border-dashed py-12 text-center">
           <FileText className="h-8 w-8 text-muted" />
           <p className="mt-2 text-sm font-medium">No documents ingested yet</p>
-          <p className="mt-1 text-xs text-muted">Add a URL or upload a PDF above to seed the knowledge base.</p>
+          <p className="mt-1 text-xs text-muted">
+            Add a URL or upload a PDF above to seed the knowledge base.
+          </p>
         </div>
       ) : (
         <ul className="space-y-2">

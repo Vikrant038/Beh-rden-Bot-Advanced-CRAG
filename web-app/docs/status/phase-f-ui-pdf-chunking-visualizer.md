@@ -1,13 +1,13 @@
 # Phase F — Global UI Overhaul, URL Validation Hardening, PDF Ingestion, Parent-Child Chunking & Pipeline Visualizer
 
-**Status:** IN PROGRESS (Phases 0–2 complete; Phase 3 in progress)
+**Status:** IN PROGRESS (Phases 0–3 complete; Phase 4 pending)
 **Date:** 2026-08-01
 **Branch:** `web-app`
 **Scope:** IMPLEMENTATION_PLAN.md Phases 0–4 (approved plan)
 
 ## Summary
 
-The approved phase-D/E follow-up plan is being executed in four phases. Phase 0 (URL content-type validation hardening), Phase 1 (parent-child chunking + PDF ingestion), and Phase 2 (dual-palette UI overhaul) are implemented and verified: typecheck clean, lint clean, build clean, and the full test suite is green (37 files / 236 tests). Phase 3 (pipeline visualizer) is in progress — the orchestrator trace enrichment, `admin.testPipeline` router procedure, and tRPC route duration are done; the visualizer page and stage components remain. Phase 4 (tests & CI hardening) remains.
+The approved phase-D/E follow-up plan is being executed in four phases. Phase 0 (URL content-type validation hardening), Phase 1 (parent-child chunking + PDF ingestion), and Phase 2 (dual-palette UI overhaul) are implemented and verified: typecheck clean, lint clean, build clean, and the full test suite is green (38 files / 242 tests). Phase 3 (pipeline visualizer) is complete: the orchestrator trace enrichment, `admin.testPipeline` router procedure, tRPC route duration, GitHub-Actions-style visualizer page, and admin nav entry are all done and verified. Phase 4 (tests & CI hardening) remains.
 
 ## Phase Status
 
@@ -16,7 +16,7 @@ The approved phase-D/E follow-up plan is being executed in four phases. Phase 0 
 | Phase 0 | URL content-type validation, new domain errors, tRPC error plumbing | DONE (verified) |
 | Phase 1 | Parent-child chunking + PDF ingestion (schema, chunker, parser, pipeline, upload route, dropzone) | DONE (migration unverified — no DB in sandbox) |
 | Phase 2 | Two distinct light/dark palettes, glassmorphism, animated mesh, landing content, edge-case states | DONE (verified) |
-| Phase 3 | `admin.testPipeline` tRPC endpoint, trace enrichment, pipeline visualizer page + stage components, nav entry | IN PROGRESS (backend done; page/components pending) |
+| Phase 3 | `admin.testPipeline` tRPC endpoint, trace enrichment, pipeline visualizer page + stage components, nav entry | DONE (verified) |
 | Phase 4 | Unit tests (pdf-parser, scraper content-type, expandToParents, pdfSourceKey, testPipeline), e2e, full gates | PENDING |
 
 ## Deliverables (Phase 0, 1 & 2)
@@ -37,14 +37,27 @@ The approved phase-D/E follow-up plan is being executed in four phases. Phase 0 
 | Landing page | `src/app/page.tsx`: hero + features restyled as glass cards, 4 new `CONTENT_SECTIONS` (Guides / Universities / Finances / Timelines) with eyebrow + CTA |
 | Wiring | `app-sidebar.tsx` (compact ThemeToggle footer, `text-primary-foreground`), `settings/page.tsx` (Appearance section), `admin/layout.tsx` (mesh accent + focus-visible), `source-browser.tsx` (Skeleton/EmptyState) |
 
-## Quality Gates (as of 2026-08-01)
+## Deliverables (Phase 3)
+
+| Area | Deliverable |
+|------|-------------|
+| Trace enrichment | `AgenticRagResponse` gains `maskedQuery` + `guardrail` (`orchestrator.ts`), populated at cache-hit / guardrail-blocked / success return sites via `withStageZero()`; `MemoryLike` structural interface |
+| Router | `admin.testPipeline` (`admin.ts`): `z.string().trim().min(5).max(2000)`, `runAgenticRag` with `bypassCache: true` + `NoopMemory`; logs latency |
+| Timeout guard | `adminLongProcedure` (`t.ts`): `isAuthenticated` + `isAdmin` + 60 s `withTimeout` middleware; client mutation uses `retry: false` |
+| Duration | `runtime = "nodejs"` + `maxDuration = 60` on the tRPC route handler |
+| Source enrichment | `Source` gains optional `childText` + `parentText` (`rag/types.ts`); `research.ts` populates both from the parent-expanded chunk |
+| Visualizer | `src/components/admin/pipeline/`: `stage-node.tsx` (GitHub-Actions-style timeline node with done/warning/skipped/running states), `react-step.tsx` (thought/action/observation per ReAct iteration), `source-panel.tsx` (collapsible matched-child snippet + expanded-parent context), `pipeline-visualizer.tsx` (4-stage trace with guardrail/cache badges) |
+| Page | `src/app/admin/pipeline-tester/page.tsx`: query input, example chips, running state, typed `ErrorState`, `EmptyState` before first run, `PipelineVisualizer` on success |
+| Nav | "Pipeline tester" entry added to `NAV_ITEMS` in `src/app/admin/layout.tsx` |
+
+## Quality Gates (as of 2026-08-02)
 
 | Gate | Command | Result |
 |------|---------|--------|
 | Typecheck | `pnpm typecheck` | PASS |
 | Lint | `pnpm lint` | PASS (0 errors; pre-existing `.lintstagedrc.mjs` warning only) |
-| Build | `pnpm build` | PASS (fixed route-export error: `MAX_PDF_BYTES`/`ACCEPTED_MIME` moved to `pdf-parser.ts`) |
-| Unit + integration + component tests | `pnpm test` (with dummy `DATABASE_URL` + `NEXTAUTH_SECRET`) | PASS (236 tests, 37 files) |
+| Build | `pnpm build` (with dummy `DATABASE_URL` + `NEXTAUTH_SECRET`) | PASS (`/admin/pipeline-tester` generated) |
+| Unit + integration + component tests | `pnpm test` (with dummy `DATABASE_URL` + `NEXTAUTH_SECRET`) | PASS (242 tests, 38 files) |
 
 ## Decisions & Exceptions
 
@@ -66,6 +79,6 @@ The approved phase-D/E follow-up plan is being executed in four phases. Phase 0 
 
 ## Next Steps
 
-- [ ] Phase 3: pipeline visualizer — `src/app/admin/pipeline-tester/page.tsx` + `src/components/admin/pipeline/` (`pipeline-visualizer.tsx`, `stage-node.tsx`, `react-step.tsx`, `source-panel.tsx`), admin nav item. (Backend done: `admin.testPipeline`, orchestrator trace enrichment, `maxDuration=60` tRPC route.)
 - [ ] Phase 4: unit tests (`pdf-parser`, `scraper` content-type, `expandToParents`, `pdfSourceKey`, `testPipeline` no-memory-write), e2e, full `lint/typecheck/test` run.
 - [ ] Apply migration to real DB when available (`pnpm prisma migrate dev --name parent_child_chunks`) and run `pnpm ingest --sync --force` backfill.
+- [ ] Verify a real pipeline run in the browser renders Stage 0 (masked query + guardrail), Stage 1 (ReAct steps + child snippet + expanded parent), Stage 2 (matrix), Stage 3 (markdown answer) — requires a live DB + LLM keys.

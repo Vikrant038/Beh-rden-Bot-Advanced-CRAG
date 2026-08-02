@@ -25,11 +25,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db";
 import { cleanText } from "@/server/ingest/cleaner";
-import {
-  RecursiveChunker,
-  chunkParentChild,
-  type ParentChildChunk,
-} from "@/server/ingest/chunker";
+import { RecursiveChunker, chunkParentChild, type ParentChildChunk } from "@/server/ingest/chunker";
 import { scrapeWebPage, type ScrapedDocument } from "@/server/ingest/scraper";
 import { parsePdf } from "@/server/ingest/pdf-parser";
 import { HfEmbeddingClient, type EmbeddingClient } from "@/server/embeddings/client";
@@ -208,15 +204,17 @@ export async function ingestPdf(
   filename: string,
   options: IngestOptions = {},
 ): Promise<IngestResult & { filename: string }> {
-  return runWithTrace(
-    { name: "ingest-pdf", metadata: { filename }, input: filename },
-    async () => {
-      const parsed = await parsePdf(buffer);
-      const cleaned = cleanText(parsed.text);
-      const result = await persistIngested(pdfSourceKey(buffer, filename), filename, cleaned, options);
-      return { ...result, filename };
-    },
-  );
+  return runWithTrace({ name: "ingest-pdf", metadata: { filename }, input: filename }, async () => {
+    const parsed = await parsePdf(buffer);
+    const cleaned = cleanText(parsed.text);
+    const result = await persistIngested(
+      pdfSourceKey(buffer, filename),
+      filename,
+      cleaned,
+      options,
+    );
+    return { ...result, filename };
+  });
 }
 
 /** Deterministic `pdf://<content-hash-prefix>/<sanitized-filename>` source key. */

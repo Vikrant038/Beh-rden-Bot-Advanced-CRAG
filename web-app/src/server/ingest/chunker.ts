@@ -161,7 +161,10 @@ export function chunkParentChild(text: string): ParentChildChunk[] {
     const children = childChunker.splitText(parentText);
     return {
       parent: { text: parentText },
-      children: children.length > 0 ? children.map((childText) => ({ text: childText })) : [{ text: parentText }],
+      children:
+        children.length > 0
+          ? children.map((childText) => ({ text: childText }))
+          : [{ text: parentText }],
     };
   });
 }
