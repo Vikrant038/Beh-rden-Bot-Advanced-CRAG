@@ -7,6 +7,11 @@ import { mapChatStageToPipeline } from "@/lib/chat/types";
 
 export const STREAMING_ID = "__streaming__";
 
+/** Maximum number of automatic retry attempts after a transient stream failure. */
+const MAX_STREAM_RETRIES = 2;
+/** Initial backoff delay in ms; doubles on each retry (500 → 1000). */
+const RETRY_BACKOFF_MS = 500;
+
 export interface UseChatOptions {
   conversationId: string | null;
   onNotFound?: () => void;
@@ -29,11 +34,34 @@ function nowIso(): string {
 }
 
 /**
+ * Returns true for errors that are worth retrying automatically:
+ * network failures and 5xx responses. 4xx errors (401, 403, 422, 429, etc.)
+ * indicate a client-side problem that won't be fixed by retrying.
+ */
+function isRetryableError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  // "Request failed (5xx)" shape set by consumeStream
+  const match = err.message.match(/Request failed \((\d+)\)/);
+  if (match) {
+    const status = Number(match[1]);
+    return status >= 500;
+  }
+  // Network-level failures (no status code in message)
+  return true;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
  * Client-side chat hook: consumes the SSE stream from POST /api/chat/stream
  * (WEB_APP_PLAN §10). The pipeline's `findOrCreateUserMessage` owns user-message
  * persistence — no separate tRPC mutation is needed from the hook.
  * Streaming tokens are appended to a local assistant message until the `done`
  * event replaces it with the persisted message.
+ * Transient stream failures (network / 5xx) are retried up to MAX_STREAM_RETRIES
+ * times with exponential backoff before surfacing an error to the user.
  */
 export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChatReturn {
   const utils = api.useUtils();
@@ -46,6 +74,7 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
   const currentConvIdRef = useRef<string | null>(null);
 
   const regenerateMutation = api.chat.regenerate.useMutation();
+  const savePartialMutation = api.chat.savePartial.useMutation();
 
   const {
     data: conversation,
@@ -226,20 +255,46 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
       };
       setMessages((prev) => [...prev, userMessage, placeholder]);
 
-      try {
-        await consumeStream({ query: trimmed, mode });
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Streaming request failed");
+      let lastErr: unknown;
+      for (let attempt = 0; attempt <= MAX_STREAM_RETRIES; attempt++) {
+        if (attempt > 0) {
+          // Reset the streaming placeholder content between retries so tokens
+          // don't double-accumulate if a partial stream succeeded then failed.
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === STREAMING_ID ? { ...message, content: "" } : message,
+            ),
+          );
+          await sleep(RETRY_BACKOFF_MS * attempt);
+        }
+
+        try {
+          await consumeStream({ query: trimmed, mode });
+          lastErr = null;
+          break; // success — exit retry loop
+        } catch (err) {
+          lastErr = err;
+          if (!isRetryableError(err) || attempt === MAX_STREAM_RETRIES) {
+            break; // non-retryable or exhausted — stop
+          }
+          // Transient error — log and retry
+          setError(`Retrying… (attempt ${attempt + 1}/${MAX_STREAM_RETRIES})`);
+        }
+      }
+
+      if (lastErr) {
+        const message = lastErr instanceof Error ? lastErr.message : "Streaming request failed";
+        setError(message);
         setMessages((prev) =>
-          prev.map((message) =>
-            message.id === STREAMING_ID
-              ? { ...message, content: "Streaming request failed." }
-              : message,
+          prev.map((msg) =>
+            msg.id === STREAMING_ID ? { ...msg, content: "Streaming request failed." } : msg,
           ),
         );
-      } finally {
-        await invalidateConversation();
+      } else {
+        setError(null);
       }
+
+      await invalidateConversation();
     },
     [conversationId, consumeStream, invalidateConversation, isStreaming],
   );
@@ -290,16 +345,36 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
+
+    // Capture whatever tokens arrived before the abort so we can persist them.
+    let partialContent = "";
     setMessages((prev) =>
-      prev.map((message) =>
-        message.id === STREAMING_ID
-          ? { ...message, id: `stopped-${Date.now()}`, createdAt: nowIso() }
-          : message,
-      ),
+      prev.map((message) => {
+        if (message.id === STREAMING_ID) {
+          partialContent = message.content;
+          return { ...message, id: `stopped-${Date.now()}`, createdAt: nowIso() };
+        }
+        return message;
+      }),
     );
+
     setStatus("done");
-    void invalidateConversation();
-  }, [invalidateConversation]);
+
+    // Persist the partial message so it survives a conversation reload.
+    // Fire-and-forget: a failure here is non-fatal (the message is still
+    // visible in the current session via local state).
+    if (conversationId && partialContent.trim()) {
+      void savePartialMutation
+        .mutateAsync({ conversationId, content: partialContent })
+        .then(() => invalidateConversation())
+        .catch(() => {
+          // Persistence failed — the partial content remains in local state
+          // for the current session but won't survive a reload.
+        });
+    } else {
+      void invalidateConversation();
+    }
+  }, [conversationId, invalidateConversation, savePartialMutation]);
 
   const resetMessages = useCallback(() => {
     setMessages([]);

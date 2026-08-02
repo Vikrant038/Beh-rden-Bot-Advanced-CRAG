@@ -26,6 +26,10 @@ export interface RegenerateResult {
   conversationId: string;
 }
 
+export interface SavePartialResult {
+  messageId: string;
+}
+
 async function ensureOwnership(user: AuthedUser, conversationId: string) {
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
@@ -114,5 +118,47 @@ export const chatRouter = router({
         query: lastUser.content,
         conversationId: input.conversationId,
       };
+    }),
+
+  /**
+   * Persists a partial (user-stopped) assistant response to the database.
+   * Called by the client's stop() handler so truncated answers survive a
+   * conversation reload. Content is trimmed and capped at 10 000 chars to
+   * prevent oversized payloads from a very long partial stream.
+   * Silently no-ops (returns null messageId) when content is empty.
+   */
+  savePartial: protectedProcedure
+    .input(
+      z.object({
+        conversationId: z.string().min(1),
+        content: z.string().max(10_000),
+      }),
+    )
+    .mutation(async ({ ctx, input }): Promise<SavePartialResult> => {
+      const user = ctx.user as AuthedUser;
+      await ensureOwnership(user, input.conversationId);
+
+      const trimmed = input.content.trim();
+      if (!trimmed) {
+        // Nothing streamed yet — no point persisting an empty message.
+        return { messageId: "" };
+      }
+
+      const message = await prisma.message.create({
+        data: {
+          conversationId: input.conversationId,
+          role: "ASSISTANT",
+          content: trimmed,
+          metadata: { partial: true },
+        },
+        select: { id: true },
+      });
+
+      logger.info(
+        { conversationId: input.conversationId, messageId: message.id },
+        "[CHAT] partial assistant message persisted",
+      );
+
+      return { messageId: message.id };
     }),
 });

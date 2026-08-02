@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { prisma } from "@/server/db";
-import type { Prisma } from "@prisma/client";
+import { vectorQueries } from "@/server/db/vector-queries";
 import type { Source } from "@/server/rag/types";
 import { CACHE_SIMILARITY_THRESHOLD, CACHE_TTL_SECONDS } from "@/server/rag/types";
 import { createLogger } from "@/server/lib/logger";
@@ -20,10 +20,9 @@ export interface CachedResponse {
   isCached: boolean;
 }
 
-interface CacheHitRow {
-  responseJson: unknown;
-  sim: number;
-}
+// Re-exported from vector-queries for backward compatibility with any existing
+// test code that imports this type directly from semantic-cache.
+export type { CacheSimRow as CacheHitRow } from "@/server/db/vector-queries";
 
 /**
  * Multi-tier semantic cache (WEB_APP_PLAN §7; ported from `src/semantic_cache.py`):
@@ -31,6 +30,8 @@ interface CacheHitRow {
  * - Tier 2: pgvector cosine similarity >= 0.97.
  * TTL (7 days) is enforced at read and write time.
  * - Race-safe writes: INSERT … ON CONFLICT DO UPDATE eliminates the TOCTOU race.
+ * - Raw SQL delegated to `vectorQueries` (src/server/db/vector-queries.ts) —
+ *   the single source of truth for all pgvector queries.
  */
 export class SemanticCache {
   constructor(
@@ -56,14 +57,7 @@ export class SemanticCache {
       }
 
       if (queryVector && queryVector.length > 0) {
-        const vectorLiteral = `[${queryVector.join(",")}]`;
-        const rows = await prisma.$queryRaw<CacheHitRow[]>`
-          SELECT "responseJson", 1 - ("queryVector" <=> ${vectorLiteral}::vector) AS sim
-          FROM semantic_cache
-          WHERE "expiresAt" > ${now}
-          ORDER BY "queryVector" <=> ${vectorLiteral}::vector
-          LIMIT 1;
-        `;
+        const rows = await vectorQueries.findSimilarCacheEntry(prisma, queryVector, now);
 
         if (rows.length > 0) {
           const sim = Number(rows[0].sim);
@@ -99,31 +93,23 @@ export class SemanticCache {
     const expiresAt = new Date(now.getTime() + this.ttlSeconds * 1000);
     const payload = JSON.parse(
       JSON.stringify({ answer: responseData.answer, sources: responseData.sources }),
-    ) as Prisma.InputJsonValue;
+    );
 
     try {
       /**
-       * Atomic upsert: ON CONFLICT eliminates the TOCTOU race where two concurrent
-       * requests for the same query hash both pass a findUnique check and the second
-       * INSERT crashes on the unique constraint. Last writer wins.
+       * Delegates to vectorQueries.upsertCacheEntry which issues an atomic
+       * INSERT … ON CONFLICT DO UPDATE — the single authoritative vector upsert
+       * path (src/server/db/vector-queries.ts).
        */
-      await prisma.$executeRaw`
-        INSERT INTO semantic_cache
-          (id, "queryHash", "queryText", "queryVector", "responseJson", "parentDocIds", "createdAt", "expiresAt")
-        VALUES (
-          nextval(pg_get_serial_sequence('semantic_cache', 'id')),
-          ${qHash},
-          ${query},
-          ${`[${queryVector.join(",")}]`}::vector,
-          ${JSON.stringify(payload)}::jsonb,
-          ${parentDocIds},
-          ${now},
-          ${expiresAt}
-        )
-        ON CONFLICT ("queryHash") DO UPDATE
-          SET "responseJson" = EXCLUDED."responseJson",
-              "expiresAt"    = EXCLUDED."expiresAt";
-      `;
+      await vectorQueries.upsertCacheEntry(prisma, {
+        queryHash: qHash,
+        queryText: query,
+        queryVector,
+        responseJson: JSON.stringify(payload),
+        parentDocIds,
+        now,
+        expiresAt,
+      });
       logger.info(`[CACHE] upserted entry for query: '${query.slice(0, 40)}'`);
     } catch (error) {
       logger.warn({ error: String(error) }, "[CACHE] write failed");

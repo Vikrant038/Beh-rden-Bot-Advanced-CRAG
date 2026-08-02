@@ -9,6 +9,37 @@ import type { ChatMessage, ChatSource } from "@/lib/chat/types";
 
 const logger = createLogger("conversation-router");
 
+/**
+ * Zod schema for the ChatSource shape stored in Message.sources (Json?).
+ *
+ * Design note: Message.sources is intentionally kept as a Json? blob rather
+ * than a separate MessageSource relation. Sources are only ever read as part
+ * of their parent message (never joined or queried independently), so a
+ * relational table adds schema complexity with no query benefit.
+ *
+ * The trade-off: SQL-level queries on "which documents were cited most" are
+ * impossible without a relation. If that analytics use-case is needed later,
+ * migrate to a MessageSource table at that point.
+ *
+ * This Zod schema is the contract enforcement at the read boundary — it catches
+ * any malformed or legacy JSON before it reaches the client, returning an empty
+ * array rather than propagating corrupt data.
+ */
+const chatSourceSchema = z.object({
+  name: z.string(),
+  url: z.string(),
+  score: z.number(),
+  documentId: z.string().optional(),
+});
+
+const chatSourceArraySchema = z.array(chatSourceSchema);
+
+function parseSourcesJson(value: unknown): ChatSource[] {
+  if (!Array.isArray(value)) return [];
+  const result = chatSourceArraySchema.safeParse(value);
+  return result.success ? result.data : [];
+}
+
 export const chatModeSchema = z.enum(["standard", "agentic"]);
 
 const paginationSchema = z.object({
@@ -36,10 +67,6 @@ export interface ConversationWithMessages {
   messages: ChatMessage[];
 }
 
-function parseJsonArray(value: unknown): ChatSource[] {
-  return Array.isArray(value) ? (value as ChatSource[]) : [];
-}
-
 function parseJsonObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -58,7 +85,7 @@ function toChatMessage(row: {
     id: row.id,
     role: row.role as ChatMessage["role"],
     content: row.content,
-    sources: parseJsonArray(row.sources),
+    sources: parseSourcesJson(row.sources),
     metadata: parseJsonObject(row.metadata) as ChatMessage["metadata"],
     createdAt: row.createdAt.toISOString(),
   };

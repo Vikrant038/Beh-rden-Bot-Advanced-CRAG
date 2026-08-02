@@ -1,7 +1,24 @@
 /**
- * Ingest pipeline: fetch URL → clean → chunk (600/150) → embed (768-d BGE) →
+ * Ingest pipeline: fetch URL → clean → chunk → embed (768-d BGE) →
  * transactional store in Postgres (pgvector) → invalidate corpus + cache.
  * Ported from `src/ingest.py` + `src/embed.py` (Python reference).
+ *
+ * ⚠️  BACKPRESSURE LIMITATION:
+ * URL ingestion (scrape + embed) runs synchronously inside the calling
+ * process. On Vercel serverless, `syncAllDocuments` or multiple rapid
+ * `ingestUrl` calls will block the function for the full embedding time
+ * (HF Inference API, ~2–5 s per document). For large corpora this will hit
+ * the 60 s serverless timeout.
+ *
+ * Mitigation implemented here: `syncAllDocuments` uses `IngestQueue` — a
+ * serial async queue (concurrency = 1 by default) that processes one document
+ * at a time, respects the HF API rate limits, and reports per-job progress.
+ * This prevents burst-embedding N documents simultaneously and exhausting the
+ * Inference API quota.
+ *
+ * Production upgrade path: replace `IngestQueue` with a Vercel Cron + a
+ * `ingest_jobs` DB table (poll → process → mark done) or a BullMQ queue
+ * backed by Upstash Redis for true background processing and retry semantics.
  */
 
 import { createHash } from "node:crypto";
@@ -210,17 +227,95 @@ export function pdfSourceKey(buffer: Buffer, filename: string): string {
 }
 
 /**
- * Re-ingests every document currently in the knowledge base. Documents whose
- * content hash is unchanged are skipped (idempotent).
+ * Re-ingests every document currently in the knowledge base using a serial
+ * queue (concurrency = 1). Documents whose content hash is unchanged are
+ * skipped (idempotent). Processes one document at a time to avoid bursting
+ * the HF Inference API and to stay within serverless timeout limits.
+ *
+ * ⚠️  For corpora > ~10 documents consider migrating to a background job
+ * queue (Vercel Cron + DB table or Upstash BullMQ) — see module-level JSDoc.
  */
 export async function syncAllDocuments(options: IngestOptions = {}): Promise<IngestResult[]> {
   const documents = await prisma.document.findMany({ select: { url: true } });
-  logger.info({ count: documents.length }, "[INGEST] starting full sync");
+  logger.info({ count: documents.length }, "[INGEST] starting full sync via serial queue");
+
+  const queue = new IngestQueue({ concurrency: 1 });
   const results: IngestResult[] = [];
+
   for (const document of documents) {
-    results.push(await ingestUrl(document.url, options));
+    queue.add(async () => {
+      const result = await ingestUrl(document.url, options);
+      results.push(result);
+      logger.info(
+        { url: document.url, status: result.status, chunks: result.chunkCount },
+        "[INGEST] queue job complete",
+      );
+    });
   }
+
+  await queue.drain();
+  logger.info({ total: results.length }, "[INGEST] full sync complete");
   return results;
+}
+
+/**
+ * Minimal serial async queue for ingest jobs.
+ *
+ * Concurrency is configurable (default 1 = strictly serial). Jobs are run
+ * in insertion order. `drain()` resolves when every queued job has settled.
+ *
+ * Why not a library? The project has no existing queue dependency and the
+ * Vercel/serverless constraints make a full BullMQ setup disproportionate
+ * for the current corpus size. This 40-line class gives the same sequential
+ * guarantee and is trivially replaceable.
+ */
+export class IngestQueue {
+  private readonly concurrency: number;
+  private running = 0;
+  private readonly pending: Array<() => Promise<void>> = [];
+  private drainResolvers: Array<() => void> = [];
+
+  constructor(options: { concurrency?: number } = {}) {
+    this.concurrency = Math.max(1, options.concurrency ?? 1);
+  }
+
+  add(job: () => Promise<void>): void {
+    this.pending.push(job);
+    void this.tick();
+  }
+
+  /** Resolves when all currently queued and running jobs have settled. */
+  drain(): Promise<void> {
+    if (this.running === 0 && this.pending.length === 0) {
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => {
+      this.drainResolvers.push(resolve);
+    });
+  }
+
+  private async tick(): Promise<void> {
+    if (this.running >= this.concurrency || this.pending.length === 0) {
+      return;
+    }
+    const job = this.pending.shift();
+    if (!job) return;
+    this.running++;
+    try {
+      await job();
+    } catch (error) {
+      logger.warn({ error: String(error) }, "[INGEST QUEUE] job failed");
+    } finally {
+      this.running--;
+      if (this.running === 0 && this.pending.length === 0) {
+        for (const resolve of this.drainResolvers) {
+          resolve();
+        }
+        this.drainResolvers = [];
+      }
+      void this.tick();
+    }
+  }
 }
 
 async function storeDocument(

@@ -19,24 +19,55 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning:
   of O(query_length × doc_length).
 - **Semantic cache missing HNSW index:** added pgvector HNSW index on
   `semantic_cache.queryVector` via migration `20260802_add_semantic_cache_hnsw_index`.
-  The cosine similarity lookup is now approximate-nearest-neighbour instead of a
-  sequential scan.
-- **CSP `unsafe-inline`:** replaced static `unsafe-inline` in `script-src` with a
-  per-request nonce injected via `middleware.ts`. Style-src retains `unsafe-inline`
-  (required by Tailwind's inline critical CSS) with a documented exception.
+  Cosine similarity lookups are now ANN instead of a sequential scan.
+- **CSP `script-src unsafe-inline`:** replaced the static `unsafe-inline` in
+  `script-src` with a per-request cryptographic nonce generated in `middleware.ts` and
+  embedded in the CSP header at response time. `style-src` retains `unsafe-inline`
+  (Tailwind CSS v4 requirement, logged in `SECURITY_EXCEPTIONS.md`).
 - **Mode toggle hardcoded to agentic:** `modeRef` in `chat-interface.tsx` replaced with
   proper `useState`; `ChatInput` now renders a Standard/Agentic toggle that persists the
-  selection across messages.
+  selection across messages in the session.
 - **Double user-message persistence:** removed the redundant `chat.sendMessage` tRPC
   mutation call from `useChat.sendMessage`; the SSE pipeline's `findOrCreateUserMessage`
   is the single authoritative write path.
+- **Guardrail prompt injection:** guardrail now splits the system instructions and user
+  query into separate system/user messages, truncates the query to 500 chars, and wraps
+  it in `<user_query>` XML delimiters with an explicit data-vs-instruction notice to
+  raise the bar for instruction-override attacks.
+- **Vector raw SQL scattered across callers:** created `src/server/db/vector-queries.ts`
+  as the single source of truth for all pgvector `$queryRaw`/`$executeRaw` calls.
+  `dense.ts` and `semantic-cache.ts` now delegate to `vectorQueries.*` — no inline SQL
+  outside this module.
+- **`Message.sources` unvalidated at read boundary:** replaced the untyped
+  `parseJsonArray` cast in `conversation.ts` with a Zod-validated `parseSourcesJson`
+  that enforces the `ChatSource` shape and returns `[]` on malformed data. Added
+  explanatory JSDoc documenting the deliberate `Json?` trade-off and when to revisit.
+- **`stop()` partial message lost on reload:** added `chat.savePartial` tRPC mutation;
+  `stop()` now captures accumulated tokens and persists them as an ASSISTANT message
+  with `metadata: { partial: true }` — partial responses survive conversation reload.
+- **No retry on stream failure:** `sendMessage` in `use-chat.ts` now retries up to 2
+  times with exponential backoff (500 ms → 1 000 ms) for transient 5xx / network
+  errors. 4xx errors (auth, validation, rate-limit) are not retried.
+- **Ingest no backpressure guard:** added `IngestQueue` (serial async queue, configurable
+  concurrency, `drain()` API) and updated `syncAllDocuments` to process one document at
+  a time, protecting the HF Inference API from burst-embedding and staying within the
+  Vercel 60 s function timeout.
+- **`pdf-parse` version unpinned:** changed `"pdf-parse": "^1.1.1"` to exact pin
+  `"1.1.1"` in `package.json` to prevent silent upgrades of an unmaintained library.
+- **`duck-duck-scrape` tightly coupled:** introduced `WebSearchProvider` interface,
+  `DuckDuckGoProvider` wrapper (dynamic import), `ACTIVE_PROVIDER` singleton, and
+  `setWebSearchProvider()` for runtime swapping. Migration to Brave Search / Tavily is
+  now a one-line change; call sites are unchanged.
 
 ### Changed
 
-- **Circuit breaker + rate limiter:** added prominent `⚠️ SERVERLESS LIMITATION` doc
-  comments to `CircuitBreaker` and `RateLimiter` classes explaining that in-process state
-  does not persist across Vercel cold starts. Upstash Redis must be configured in
-  production.
+- **Circuit breaker + rate limiter:** added prominent `⚠️ SERVERLESS LIMITATION`
+  comments to `CircuitBreaker` and `RateLimiter` explaining that in-process state does
+  not persist across Vercel cold starts. `UPSTASH_REDIS_URL` + `UPSTASH_REDIS_TOKEN`
+  must be set in production.
+- **`next.config.ts` CSP moved to middleware:** the static `Content-Security-Policy`
+  header has been removed from `next.config.ts`; the nonce-bearing CSP is now set
+  exclusively by `src/middleware.ts` on each request.
 
 ### Added
 

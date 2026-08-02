@@ -85,14 +85,17 @@ scripts/              # Developer tooling (secret scan, …)
 
 ## Key flows
 
-- **Chat** — `POST /api/chat/stream` (SSE) drives the streaming UI; messages are
-  persisted via the `chat.sendMessage` tRPC mutation. Vague queries surface
-  Stage-0 disambiguation cards.
+- **Chat** — `POST /api/chat/stream` (SSE) drives the streaming UI. User messages are
+  persisted by `findOrCreateUserMessage` inside the pipeline (single write path). Vague
+  queries surface Stage-0 disambiguation cards. Stopped streams are persisted as partial
+  ASSISTANT messages via `chat.savePartial`. Transient stream failures are retried up to
+  2 times with exponential backoff.
 - **Admin** — `/admin/*` is restricted to the `ADMIN` role; the dashboard shows
   usage metrics, cache health, mode split, and recent queries (raw SQL against
   `messages`/`conversations`).
-- **Ingest** — `pnpm ingest` runs the URL/PDF ingestion pipeline; a nightly cron
-  (`/api/cron/cleanup-cache`) clears the semantic cache.
+- **Ingest** — `pnpm ingest` runs the URL/PDF ingestion pipeline via a serial
+  `IngestQueue` (one document at a time). A nightly cron (`/api/cron/cleanup-cache`)
+  clears the semantic cache.
 
 ## Environment variables
 
@@ -125,10 +128,34 @@ protection.
 
 ### Web search fallback
 
-The CRAG web fallback and Research Agent tool use `duck-duck-scrape`, an
-unofficial DuckDuckGo scraper. It may break without notice if DDG changes its
-HTML. A planned migration to a stable search API (Brave Search / Tavily / Serper)
-is tracked in `docs/ROADMAP.md`.
+The CRAG web fallback and Research Agent tool use `duck-duck-scrape` via the
+`DuckDuckGoProvider` adapter. It is an unofficial scraper and may break without
+notice if DDG changes its HTML. To migrate to a stable API, implement
+`WebSearchProvider` and call `setWebSearchProvider(new YourProvider())` — no
+other changes needed. Tracked in `docs/ROADMAP.md`.
+
+### Guardrail prompt injection
+
+The domain guardrail uses an instruction-following LLM (not a dedicated
+classifier). The query is truncated, XML-delimited, and placed in a separate
+user message to raise the bar for injection attacks, but a crafted prompt can
+still manipulate the YES/NO verdict. A fine-tuned text-classification model
+would be more robust. See `docs/security/SECURITY_EXCEPTIONS.md`.
+
+### Ingest pipeline backpressure
+
+`syncAllDocuments` and individual `ingestUrl` calls run synchronously inside the
+serverless function. For large corpora (>~20 documents) this risks hitting the
+60 s Vercel timeout. The interim fix is `IngestQueue` (serial, one document at a
+time). For production-scale ingestion, migrate to a background queue (Vercel
+Cron + a `ingest_jobs` DB table, or Upstash BullMQ).
+
+### Message sources schema
+
+`Message.sources` is stored as a `Json?` blob. Sources are Zod-validated at the
+read boundary in `conversation.ts`, but SQL-level analytics (e.g. "which
+documents were cited most") are not possible without a normalised relation.
+Revisit when that use-case is needed.
 
 ## CI/CD
 

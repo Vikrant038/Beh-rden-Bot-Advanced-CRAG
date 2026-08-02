@@ -1,45 +1,121 @@
-import { search, SafeSearchType } from "duck-duck-scrape";
 import type { WebSearchResult } from "@/server/rag/types";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("web-search");
 
+// ─── Provider interface ───────────────────────────────────────────────────────
+
+/**
+ * Abstraction over web-search backends.
+ *
+ * Current implementation: DuckDuckGoProvider (duck-duck-scrape, unofficial
+ * scraper — may break without notice if DDG changes its HTML).
+ *
+ * To migrate to a stable API (Brave Search, Tavily, Serper):
+ *   1. Implement WebSearchProvider with the new client.
+ *   2. Set ACTIVE_PROVIDER to the new instance.
+ *   3. Add the API key to .env.example and src/server/env.ts.
+ *   No call-site changes needed — webSearch() delegates to ACTIVE_PROVIDER.
+ *
+ * ⚠️  KNOWN LIMITATION: DuckDuckGoProvider uses duck-duck-scrape, an
+ * unofficial scraper. It is NOT suitable for production SLAs. Track the
+ * migration to a stable search API in docs/ROADMAP.md.
+ */
+export interface WebSearchProvider {
+  search(query: string, maxResults: number): Promise<WebSearchResult[]>;
+  /** Human-readable name used in logs and trace metadata. */
+  readonly name: string;
+}
+
+// ─── Static fallback ─────────────────────────────────────────────────────────
+
 const FALLBACK_RESULTS: WebSearchResult[] = [
   {
     title: "DAAD Official Portal",
     url: "https://www.daad.de/en/study-and-research-in-germany/",
-    snippet: "Official German academic exchange service guidelines for student visa & admissions.",
+    snippet:
+      "Official German academic exchange service guidelines for student visa & admissions.",
   },
 ];
 
+// ─── DuckDuckGo provider (current default) ───────────────────────────────────
+
 /**
- * Live web search fallback via DuckDuckGo scrape (`duck-duck-scrape`).
- * Ported from `src/agentic_rag.py:tool_web_search`; returns sanitized results
- * and falls back to a DAAD portal entry when search fails.
+ * Web search via the `duck-duck-scrape` library.
+ *
+ * This provider is the current default because it requires no API key. It is
+ * fragile: DDG can change its HTML at any time and break the scraper silently.
+ * Use BraveSearchProvider or TavilyProvider in production.
  */
-export async function webSearch(query: string, maxResults: number = 3): Promise<WebSearchResult[]> {
-  if (maxResults < 1 || maxResults > 10) {
-    maxResults = 3;
-  }
+export class DuckDuckGoProvider implements WebSearchProvider {
+  readonly name = "DuckDuckGo (duck-duck-scrape)";
 
-  try {
-    const results = await search(query, {
-      safeSearch: SafeSearchType.STRICT,
-    });
+  async search(query: string, maxResults: number): Promise<WebSearchResult[]> {
+    // Dynamic import keeps duck-duck-scrape out of the critical path when the
+    // provider is swapped out, and avoids top-level import failures if the
+    // package is removed.
+    const { search: ddgSearch, SafeSearchType } = await import("duck-duck-scrape");
 
-    const webResults = results.results.slice(0, maxResults).map((item) => ({
+    const results = await ddgSearch(query, { safeSearch: SafeSearchType.STRICT });
+
+    return results.results.slice(0, maxResults).map((item) => ({
       title: item.title || "Web Result",
       url: item.url || "#",
       snippet: item.description || item.rawDescription || "",
     }));
+  }
+}
 
-    if (webResults.length === 0) {
-      logger.warn("[WEB] Search returned no results; using fallback");
+// ─── Active provider singleton ───────────────────────────────────────────────
+
+/**
+ * The active web-search provider.
+ * Swap this to BraveSearchProvider / TavilyProvider when ready.
+ */
+let ACTIVE_PROVIDER: WebSearchProvider = new DuckDuckGoProvider();
+
+/**
+ * Replaces the active provider at runtime. Useful for tests (mock provider)
+ * and for swapping to a stable API without restarting the process.
+ */
+export function setWebSearchProvider(provider: WebSearchProvider): void {
+  ACTIVE_PROVIDER = provider;
+  logger.info(`[WEB] search provider changed to: ${provider.name}`);
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Executes a web search via the active provider. Falls back to static DAAD
+ * portal results when the provider fails, so the pipeline never hard-errors
+ * on a search backend outage.
+ *
+ * Ported from `src/agentic_rag.py:tool_web_search`.
+ */
+export async function webSearch(query: string, maxResults: number = 3): Promise<WebSearchResult[]> {
+  const clampedMax = Math.min(10, Math.max(1, maxResults));
+
+  try {
+    const results = await ACTIVE_PROVIDER.search(query, clampedMax);
+
+    if (results.length === 0) {
+      logger.warn(
+        { provider: ACTIVE_PROVIDER.name },
+        "[WEB] search returned no results; using fallback",
+      );
       return FALLBACK_RESULTS;
     }
-    return webResults;
+
+    logger.info(
+      { provider: ACTIVE_PROVIDER.name, count: results.length, query: query.slice(0, 60) },
+      "[WEB] search completed",
+    );
+    return results;
   } catch (error) {
-    logger.warn({ error: String(error) }, "[WEB] DuckDuckGo search failed; using fallback");
+    logger.warn(
+      { error: String(error), provider: ACTIVE_PROVIDER.name },
+      "[WEB] search failed; using fallback",
+    );
     return FALLBACK_RESULTS;
   }
 }
