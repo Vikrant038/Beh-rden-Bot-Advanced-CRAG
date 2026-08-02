@@ -116,8 +116,7 @@ describe("SemanticCache", () => {
     expect(count).toBe(2);
   });
 
-  it("addToCache should INSERT via $executeRaw when new", async () => {
-    mockedFindUnique.mockResolvedValue(null);
+  it("addToCache should upsert via single $executeRaw (atomic ON CONFLICT)", async () => {
     vi.mocked(prisma.$executeRaw).mockResolvedValue(1);
 
     await cache.addToCache(
@@ -127,29 +126,23 @@ describe("SemanticCache", () => {
       ["doc-1"],
     );
 
-    expect(prisma.$executeRaw).toHaveBeenCalled();
-    expect(mockedFindUnique).toHaveBeenCalled();
+    // Atomic upsert: $executeRaw called once, findUnique never called
+    expect(prisma.$executeRaw).toHaveBeenCalledOnce();
+    expect(mockedFindUnique).not.toHaveBeenCalled();
   });
 
-  it("addToCache should UPDATE when entry already exists", async () => {
+  it("addToCache should use same upsert path whether entry exists or not", async () => {
     const update = vi.mocked(prisma.semanticCacheEntry.update);
-    mockedFindUnique.mockResolvedValue({
-      queryHash: "abc",
-      queryText: "visa",
-      responseJson: {},
-      parentDocIds: [],
-      createdAt: now,
-      expiresAt: future,
-    } as never);
-    update.mockResolvedValue({} as never);
+    vi.mocked(prisma.$executeRaw).mockResolvedValue(1);
 
     await cache.addToCache("visa requirements", makeVector(3), {
       answer: "Blocked account total: EUR 11904.",
       sources: [],
     });
 
-    expect(update).toHaveBeenCalled();
-    expect(prisma.$executeRaw).not.toHaveBeenCalled();
+    // No separate UPDATE call — the ON CONFLICT clause handles updates inside $executeRaw
+    expect(update).not.toHaveBeenCalled();
+    expect(prisma.$executeRaw).toHaveBeenCalledOnce();
   });
 
   it("clearAll should delete many and return true", async () => {

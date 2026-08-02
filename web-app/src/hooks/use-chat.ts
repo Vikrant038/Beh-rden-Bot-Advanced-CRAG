@@ -30,9 +30,10 @@ function nowIso(): string {
 
 /**
  * Client-side chat hook: consumes the SSE stream from POST /api/chat/stream
- * (WEB_APP_PLAN §10). Persists the user message via the chat.sendMessage
- * mutation, then appends streaming tokens to a local assistant message until
- * the `done` event replaces it with the persisted message.
+ * (WEB_APP_PLAN §10). The pipeline's `findOrCreateUserMessage` owns user-message
+ * persistence — no separate tRPC mutation is needed from the hook.
+ * Streaming tokens are appended to a local assistant message until the `done`
+ * event replaces it with the persisted message.
  */
 export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChatReturn {
   const utils = api.useUtils();
@@ -44,7 +45,6 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
   const abortRef = useRef<AbortController | null>(null);
   const currentConvIdRef = useRef<string | null>(null);
 
-  const sendMessageMutation = api.chat.sendMessage.useMutation();
   const regenerateMutation = api.chat.regenerate.useMutation();
 
   const {
@@ -227,17 +227,6 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
       setMessages((prev) => [...prev, userMessage, placeholder]);
 
       try {
-        await sendMessageMutation.mutateAsync({ conversationId, query: trimmed, mode });
-      } catch {
-        setMessages((prev) =>
-          prev.filter((message) => message.id !== STREAMING_ID && message.id !== userMessage.id),
-        );
-        setError("Failed to send your message. Please try again.");
-        setStatus("idle");
-        return;
-      }
-
-      try {
         await consumeStream({ query: trimmed, mode });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Streaming request failed");
@@ -252,7 +241,7 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
         await invalidateConversation();
       }
     },
-    [conversationId, consumeStream, invalidateConversation, isStreaming, sendMessageMutation],
+    [conversationId, consumeStream, invalidateConversation, isStreaming],
   );
 
   const regenerate = useCallback(async () => {

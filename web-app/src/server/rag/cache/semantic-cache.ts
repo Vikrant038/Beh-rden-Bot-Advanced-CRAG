@@ -30,6 +30,7 @@ interface CacheHitRow {
  * - Tier 1: SHA-256 exact string match.
  * - Tier 2: pgvector cosine similarity >= 0.97.
  * TTL (7 days) is enforced at read and write time.
+ * - Race-safe writes: INSERT … ON CONFLICT DO UPDATE eliminates the TOCTOU race.
  */
 export class SemanticCache {
   constructor(
@@ -101,19 +102,14 @@ export class SemanticCache {
     ) as Prisma.InputJsonValue;
 
     try {
-      const existing = await prisma.semanticCacheEntry.findUnique({
-        where: { queryHash: qHash },
-      });
-      if (existing) {
-        await prisma.semanticCacheEntry.update({
-          where: { queryHash: qHash },
-          data: { responseJson: payload, expiresAt },
-        });
-        return;
-      }
-
+      /**
+       * Atomic upsert: ON CONFLICT eliminates the TOCTOU race where two concurrent
+       * requests for the same query hash both pass a findUnique check and the second
+       * INSERT crashes on the unique constraint. Last writer wins.
+       */
       await prisma.$executeRaw`
-        INSERT INTO semantic_cache (id, "queryHash", "queryText", "queryVector", "responseJson", "parentDocIds", "createdAt", "expiresAt")
+        INSERT INTO semantic_cache
+          (id, "queryHash", "queryText", "queryVector", "responseJson", "parentDocIds", "createdAt", "expiresAt")
         VALUES (
           nextval(pg_get_serial_sequence('semantic_cache', 'id')),
           ${qHash},
@@ -123,9 +119,12 @@ export class SemanticCache {
           ${parentDocIds},
           ${now},
           ${expiresAt}
-        );
+        )
+        ON CONFLICT ("queryHash") DO UPDATE
+          SET "responseJson" = EXCLUDED."responseJson",
+              "expiresAt"    = EXCLUDED."expiresAt";
       `;
-      logger.info(`[CACHE] added entry for query: '${query.slice(0, 40)}'`);
+      logger.info(`[CACHE] upserted entry for query: '${query.slice(0, 40)}'`);
     } catch (error) {
       logger.warn({ error: String(error) }, "[CACHE] write failed");
     }

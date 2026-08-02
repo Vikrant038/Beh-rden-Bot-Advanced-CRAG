@@ -7,7 +7,11 @@ export interface CircuitBreakerOptions {
 
 /**
  * Minimal circuit breaker (WEB_APP_PLAN §7: "~50 lines, no heavy library").
- * State is stored per serverless-function instance (documented decision).
+ * ⚠️  SERVERLESS LIMITATION: State is stored per function instance (in-process memory).
+ * On Vercel every cold start begins with failureCount = 0, so the breaker does NOT
+ * open across requests — it only protects within a single warm instance lifetime.
+ * This is an accepted trade-off (see docs/security/SECURITY_EXCEPTIONS.md). For true
+ * cross-request protection use an external store (e.g. Upstash Redis).
  * Ported behavior from `pybreaker.CircuitBreaker(fail_max=5, reset_timeout=60)`.
  */
 export class CircuitBreaker {

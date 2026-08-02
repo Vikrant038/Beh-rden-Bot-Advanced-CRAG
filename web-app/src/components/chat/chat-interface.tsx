@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useChat, STREAMING_ID } from "@/hooks/use-chat";
 import type { ChatMode } from "@/lib/chat/types";
@@ -22,7 +22,7 @@ export function ChatInterface({ conversationId }: { conversationId: string }) {
     useChat({ conversationId, onNotFound: () => router.replace("/chat") });
 
   const bottomRef = useRef<HTMLDivElement>(null);
-  const modeRef = useRef<ChatMode>("agentic");
+  const [mode, setMode] = useState<ChatMode>("agentic");
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -46,7 +46,7 @@ export function ChatInterface({ conversationId }: { conversationId: string }) {
                   <button
                     key={prompt}
                     type="button"
-                    onClick={() => void sendMessage(prompt, modeRef.current)}
+                    onClick={() => void sendMessage(prompt, mode)}
                     className="rounded-xl border border-border bg-surface px-4 py-2.5 text-left text-sm text-muted transition hover:border-primary hover:text-foreground"
                   >
                     {prompt}
@@ -69,7 +69,7 @@ export function ChatInterface({ conversationId }: { conversationId: string }) {
               <p className="text-xs text-muted">Which of these did you mean?</p>
               <DisambiguationCards
                 options={disambiguationOptions}
-                onSelect={(option) => void sendMessage(option, modeRef.current)}
+                onSelect={(option) => void sendMessage(option, mode)}
               />
             </div>
           )}
@@ -89,9 +89,11 @@ export function ChatInterface({ conversationId }: { conversationId: string }) {
         </div>
       </div>
       <ChatInput
-        onSubmit={(query) => void sendMessage(query, modeRef.current)}
+        onSubmit={(query) => void sendMessage(query, mode)}
         onStop={stop}
         isStreaming={isStreaming}
+        mode={mode}
+        onModeChange={setMode}
       />
     </div>
   );

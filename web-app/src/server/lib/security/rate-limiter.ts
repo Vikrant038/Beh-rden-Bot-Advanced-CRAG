@@ -13,6 +13,10 @@ export interface RateLimitResult {
  * GUARDRAILS M2.6: auth endpoints 5 req / 15 min / IP; public endpoints 100 req / 15 min / IP.
  * Uses Upstash sliding-window when configured; falls back to an in-memory sliding window
  * for local development (no external dependency).
+ * ⚠️  SERVERLESS LIMITATION: The in-memory fallback (`memBuckets`) is per-function-instance.
+ * Without Upstash configured, rate limits are NOT enforced globally across Vercel instances —
+ * each warm instance tracks only its own bucket. Always configure UPSTASH_REDIS_URL and
+ * UPSTASH_REDIS_TOKEN in production (see docs/security/SECURITY_EXCEPTIONS.md).
  */
 export class RateLimiter {
   private readonly upstashLimit: Ratelimit | null;

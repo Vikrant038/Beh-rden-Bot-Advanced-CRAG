@@ -106,9 +106,29 @@ See `.env.example` for the full list with comments. Key ones:
 | `GROQ_API_KEY`    | No*      | Primary LLM provider                    |
 | `HF_TOKEN`        | No*      | Fallback LLM provider + embeddings      |
 | `CRON_SECRET`     | No*      | Bearer guard for cron endpoints         |
+| `UPSTASH_REDIS_URL` | **Yes (prod)** | Upstash Redis URL for cross-instance rate limiting; in-memory fallback is per-serverless-instance only |
+| `UPSTASH_REDIS_TOKEN` | **Yes (prod)** | Upstash Redis token |
 | `LANGFUSE_*`      | No       | LLM tracing                             |
 
 \* Required at runtime for LLM features; CI uses placeholders.
+
+## Known limitations
+
+### Serverless state (circuit breaker & rate limiter)
+
+`CircuitBreaker` and `RateLimiter` store state in-process. On Vercel each cold
+start resets the failure counter and rate-limit buckets, so these guards only
+protect within a single warm function instance. For production deployments,
+`UPSTASH_REDIS_URL` + `UPSTASH_REDIS_TOKEN` **must** be set — without them, rate
+limits are per-instance and the circuit breaker provides no cross-request
+protection.
+
+### Web search fallback
+
+The CRAG web fallback and Research Agent tool use `duck-duck-scrape`, an
+unofficial DuckDuckGo scraper. It may break without notice if DDG changes its
+HTML. A planned migration to a stable search API (Brave Search / Tavily / Serper)
+is tracked in `docs/ROADMAP.md`.
 
 ## CI/CD
 

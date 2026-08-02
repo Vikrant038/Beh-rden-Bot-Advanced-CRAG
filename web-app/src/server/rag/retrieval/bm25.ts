@@ -18,14 +18,15 @@ export function defaultTokenizer(text: string): string[] {
 /**
  * Okapi BM25 sparse ranker, ported from `rank_bm25.BM25Okapi`
  * (used by `src/advanced_retrieval.py`). Stateless index built over a
- * chunk corpus; re-built per request for small corpora (<1000 chunks) as
- * decided in WEB_APP_PLAN §7.
+ * chunk corpus; Re-built per request for small corpora; term-frequency maps are
+ * pre-computed at construction time for O(query_length) per-document scoring.
  */
 export class BM25Okapi {
   private readonly docFrequencies = new Map<string, number>();
   private readonly docLengths: number[] = [];
   private readonly avgDocLength: number;
   private readonly idfCache = new Map<string, number>();
+  private readonly termFrequencies: Map<string, number>[];
 
   constructor(
     private readonly documents: string[][],
@@ -46,6 +47,16 @@ export class BM25Okapi {
         }
       }
     }
+
+    // Pre-compute per-document term-frequency maps so getScore is O(query_length)
+    // instead of O(query_length × doc_length).
+    this.termFrequencies = documents.map((doc) => {
+      const tf = new Map<string, number>();
+      for (const token of doc) {
+        tf.set(token, (tf.get(token) ?? 0) + 1);
+      }
+      return tf;
+    });
   }
 
   private getIdf(term: string): number {
@@ -75,18 +86,13 @@ export class BM25Okapi {
     if (docIndex < 0 || docIndex >= this.documents.length) {
       return 0;
     }
-    const doc = this.documents[docIndex];
-    const docLength = doc.length;
+    const docLength = this.docLengths[docIndex];
+    const tfMap = this.termFrequencies[docIndex];
     const averageIdf = this.getAverageIdf();
 
     let score = 0;
     for (const term of query) {
-      let termFrequency = 0;
-      for (const token of doc) {
-        if (token === term) {
-          termFrequency += 1;
-        }
-      }
+      const termFrequency = tfMap.get(term) ?? 0;
       if (termFrequency === 0) {
         continue;
       }
