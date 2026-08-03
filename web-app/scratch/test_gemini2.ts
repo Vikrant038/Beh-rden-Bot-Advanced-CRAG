@@ -10,12 +10,14 @@ async function main() {
   
   try {
     const model = ai.getGenerativeModel({ model: "text-embedding-004" });
-    const res = await model.batchEmbedContents({
-      requests: [{ content: { role: "user", parts: [{ text: "Hello" }] } } as any]
-    });
+    const request: {
+      content: { role: string; parts: Array<{ text: string }> };
+      outputDimensionality: number;
+    } = { content: { role: "user", parts: [{ text: "Hello" }] }, outputDimensionality: 768 };
+    const res = await model.batchEmbedContents({ requests: [request] });
     console.log("Success with text-embedding-004:", res.embeddings?.[0]?.values?.length);
   } catch (e) {
-    console.error("SDK Error:", e.message);
+    console.error("SDK Error:", e instanceof Error ? e.message : e);
   }
 }
 main();

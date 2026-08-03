@@ -116,11 +116,15 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
 
     try {
       const model = this.ai.getGenerativeModel({ model: actualModel });
-      // batchEmbedContents requires an array of requests
-      const requests = texts.map((text) => ({
+      // batchEmbedContents requires an array of requests; outputDimensionality is
+      // not part of the SDK's current public request type, so define it locally.
+      const requests: Array<{
+        content: { role: string; parts: Array<{ text: string }> };
+        outputDimensionality: number;
+      }> = texts.map((text) => ({
         content: { role: "user", parts: [{ text }] },
-        outputDimensionality: 768
-      } as any)); // as any required to bypass current SDK types for outputDimensionality
+        outputDimensionality: 768,
+      }));
 
       const response = await model.batchEmbedContents({
         requests,

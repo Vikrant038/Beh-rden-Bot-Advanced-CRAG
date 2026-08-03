@@ -11,7 +11,7 @@ test.describe("Landing page", () => {
     await expect(page.getByText("Hybrid Retrieval")).toBeVisible();
     await expect(page.getByText("CRAG Gate")).toBeVisible();
 
-    const signIn = page.getByRole("link", { name: "Sign in" });
+    const signIn = page.getByRole("link", { name: "Get started" });
     await expect(signIn).toBeVisible();
     await signIn.click();
     // First navigation to /login on a cold dev server compiles the route server-side.

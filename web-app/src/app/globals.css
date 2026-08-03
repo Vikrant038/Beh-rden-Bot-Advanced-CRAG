@@ -56,6 +56,17 @@ body {
   color: var(--color-foreground);
 }
 
+/* ─── Global focus-visible treatment ───
+   Every keyboard-focusable element gets a high-contrast outline so
+   keyboard/screen-reader users always see where they are. Component-level
+   `focus-visible:ring-*` classes are redundant with this and should be
+   removed where they duplicate it. */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 0.125rem;
+}
+
 /* ─── Glassmorphism system ─── */
 
 .glass-card {
