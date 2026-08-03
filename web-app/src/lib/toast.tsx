@@ -11,6 +11,7 @@ export interface ToastItem {
   title: string;
   description?: string;
   variant: ToastVariant;
+  action?: { label: string; onClick: () => void };
 }
 
 export interface ToastOptions {
@@ -18,6 +19,7 @@ export interface ToastOptions {
   description?: string;
   variant?: ToastVariant;
   durationMs?: number;
+  action?: { label: string; onClick: () => void };
 }
 
 interface ToastContextValue {
@@ -56,12 +58,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (options: ToastOptions): string => {
       const id = createToastId();
       const variant = options.variant ?? "info";
-      const durationMs = options.durationMs ?? DEFAULT_DURATION_MS;
+      const durationMs = options.durationMs ?? (options.action ? 8000 : DEFAULT_DURATION_MS);
       const next: ToastItem = {
         id,
         title: options.title,
         description: options.description,
         variant,
+        action: options.action,
       };
       setToasts((current) => [...current.slice(-3), next]);
 

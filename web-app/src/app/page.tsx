@@ -20,7 +20,6 @@ import {
 import { GlassCard } from "@/components/ui/glass-card";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { CountUp } from "@/components/ui/count-up";
-import { Badge } from "@/components/ui/badge";
 import { ChatMockup } from "@/components/landing/chat-mockup";
 import { ChangelogModal } from "@/components/ui/changelog-modal";
 
@@ -201,7 +200,7 @@ export default function LandingPage() {
     : { initial: { opacity: 0, y: 16 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true } };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background">
+    <div id="main" className="relative min-h-screen overflow-hidden bg-background">
       <div className="gradient-mesh pointer-events-none absolute inset-0" />
 
       {/* ─── Sticky glass navbar ─── */}

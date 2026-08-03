@@ -26,6 +26,7 @@ interface ModeSplitRow {
 
 interface RecentQueryRowRaw {
   id: string;
+  conversationId: string;
   query: string;
   createdAt: Date;
   mode: string;
@@ -65,6 +66,7 @@ export interface ModeSplitPoint {
 
 export interface RecentQueryRow {
   id: string;
+  conversationId: string;
   query: string;
   createdAt: Date;
   mode: string;
@@ -73,7 +75,8 @@ export interface RecentQueryRow {
   retrievalPath: string | null;
 }
 
-const DAILY_QUERY_WINDOW_DAYS = 14;
+const DAILY_QUERY_MAX_DAYS = 90;
+
 const RECENT_QUERY_LIMIT = 10;
 
 /**
@@ -161,21 +164,23 @@ export const adminRouter = router({
     }));
   }),
 
-  dailyQueries: adminProcedure.query(async (): Promise<DailyQueryPoint[]> => {
-    return prisma.$queryRaw<DailyQueryRow[]>`
+  dailyQueries: adminProcedure
+    .input(z.object({ days: z.number().int().min(7).max(DAILY_QUERY_MAX_DAYS).default(14) }))
+    .query(async ({ input }): Promise<DailyQueryPoint[]> => {
+      return prisma.$queryRaw<DailyQueryRow[]>`
       SELECT to_char("createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date, COUNT(*)::int AS count
       FROM messages
       WHERE role = 'USER'
-        AND "createdAt" >= NOW() - (${DAILY_QUERY_WINDOW_DAYS} || ' days')::interval
+        AND "createdAt" >= NOW() - (${input.days} || ' days')::interval
       GROUP BY date
       ORDER BY date ASC
     `
-      .then((rows) => rows.map((row) => ({ date: row.date, count: Number(row.count ?? 0) })))
-      .catch((error) => {
-        logger.warn({ error: String(error) }, "[ADMIN] dailyQueries aggregation failed");
-        return [];
-      });
-  }),
+        .then((rows) => rows.map((row) => ({ date: row.date, count: Number(row.count ?? 0) })))
+        .catch((error) => {
+          logger.warn({ error: String(error) }, "[ADMIN] dailyQueries aggregation failed");
+          return [];
+        });
+    }),
 
   modeSplit: adminProcedure.query(async (): Promise<ModeSplitPoint[]> => {
     return prisma.$queryRaw<ModeSplitRow[]>`
@@ -195,6 +200,7 @@ export const adminRouter = router({
   recentQueries: adminProcedure.query(async (): Promise<RecentQueryRow[]> => {
     return prisma.$queryRaw<RecentQueryRowRaw[]>`
       SELECT m."id",
+             m."conversationId" AS "conversationId",
              m.content AS query,
              m."createdAt" AS "createdAt",
              COALESCE(a.metadata->>'mode', 'standard') AS mode,
@@ -218,6 +224,7 @@ export const adminRouter = router({
       .then((rows) =>
         rows.map((row) => ({
           id: row.id,
+          conversationId: row.conversationId,
           query: row.query,
           createdAt: row.createdAt,
           mode: row.mode,
@@ -231,6 +238,60 @@ export const adminRouter = router({
         return [];
       });
   }),
+
+  topQuestions: adminProcedure
+    .input(z.object({ days: z.number().int().min(1).max(DAILY_QUERY_MAX_DAYS).default(30) }))
+    .query(async ({ input }): Promise<Array<{ query: string; count: number }>> => {
+      return prisma.$queryRaw<Array<{ query: string; count: number }>>`
+        SELECT content AS query, COUNT(*)::int AS count
+        FROM messages
+        WHERE role = 'USER'
+          AND "createdAt" >= NOW() - (${input.days} || ' days')::interval
+        GROUP BY content
+        ORDER BY count DESC, MAX("createdAt") DESC
+        LIMIT 10
+      `
+        .then((rows) =>
+          rows.map((row) => ({ query: row.query, count: Number(row.count ?? 0) })),
+        )
+        .catch((error) => {
+          logger.warn({ error: String(error) }, "[ADMIN] topQuestions aggregation failed");
+          return [];
+        });
+    }),
+
+  failedQueries: adminProcedure.query(
+    async (): Promise<
+      Array<{ id: string; conversationId: string; query: string; createdAt: Date }>
+    > => {
+      return prisma.$queryRaw<Array<{ id: string; conversationId: string; query: string; createdAt: Date }>>`
+        SELECT m."id", m."conversationId" AS "conversationId", m.content AS query, m."createdAt" AS "createdAt"
+        FROM messages m
+        WHERE m.role = 'USER'
+          AND m."createdAt" >= NOW() - INTERVAL '14 days'
+          AND NOT EXISTS (
+            SELECT 1 FROM messages a
+            WHERE a."conversationId" = m."conversationId"
+              AND a.role = 'ASSISTANT'
+              AND a."createdAt" > m."createdAt"
+          )
+        ORDER BY m."createdAt" DESC
+        LIMIT 10
+      `
+        .then((rows) =>
+          rows.map((row) => ({
+            id: row.id,
+            conversationId: row.conversationId,
+            query: row.query,
+            createdAt: row.createdAt,
+          })),
+        )
+        .catch((error) => {
+          logger.warn({ error: String(error) }, "[ADMIN] failedQueries aggregation failed");
+          return [];
+        });
+    },
+  ),
 
   testPipeline: adminLongProcedure
     .input(z.object({ prompt: z.string().trim().min(5).max(2000) }))

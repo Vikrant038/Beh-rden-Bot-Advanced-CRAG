@@ -46,6 +46,7 @@ const paginationSchema = z.object({
   cursor: z.string().optional(),
   limit: z.number().int().min(1).max(100).default(20),
   search: z.string().trim().max(200).optional(),
+  mode: chatModeSchema.optional(),
 });
 
 export interface ConversationListItem {
@@ -134,6 +135,9 @@ export const conversationRouter = router({
       userId: user.id,
       ...(input.search
         ? { title: { contains: input.search, mode: Prisma.QueryMode.insensitive } }
+        : {}),
+      ...(input.mode
+        ? { mode: input.mode === "standard" ? "STANDARD" : "AGENTIC" }
         : {}),
       ...(input.cursor ? { id: { lt: input.cursor } } : {}),
     };
@@ -230,6 +234,72 @@ export const conversationRouter = router({
       await prisma.conversation.delete({ where: { id: input.id } });
       logger.info({ conversationId: input.id, userId: user.id }, "[CONV] deleted");
       return { success: true };
+    }),
+
+  deleteMany: protectedProcedure
+    .input(z.object({ ids: z.array(z.string().min(1)).min(1).max(100) }))
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user as AuthedUser;
+      const ids = [...new Set(input.ids)];
+      const owned = await prisma.conversation.findMany({
+        where: { id: { in: ids }, userId: user.id },
+        select: { id: true },
+      });
+      const ownedIds = owned.map((row) => row.id);
+      if (ownedIds.length > 0) {
+        await prisma.conversation.deleteMany({ where: { id: { in: ownedIds } } });
+      }
+      logger.info(
+        { deleted: ownedIds.length, requested: ids.length, userId: user.id },
+        "[CONV] bulk deleted",
+      );
+      return { success: true, deleted: ownedIds.length };
+    }),
+
+  clearAll: protectedProcedure.mutation(async ({ ctx }) => {
+    const user = ctx.user as AuthedUser;
+    const result = await prisma.conversation.deleteMany({ where: { userId: user.id } });
+    logger.info({ deleted: result.count, userId: user.id }, "[CONV] cleared all");
+    return { success: true, deleted: result.count };
+  }),
+
+  restore: protectedProcedure
+    .input(
+      z.object({
+        title: z.string().trim().max(200),
+        mode: chatModeSchema.default("agentic"),
+        messages: z
+          .array(
+            z.object({
+              role: z.enum(["USER", "ASSISTANT"]),
+              content: z.string(),
+              sources: z.unknown().optional(),
+              metadata: z.unknown().optional(),
+            }),
+          )
+          .max(500),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user as AuthedUser;
+      const conversation = await prisma.conversation.create({
+        data: {
+          userId: user.id,
+          title: input.title || "New conversation",
+          mode: input.mode === "standard" ? "STANDARD" : "AGENTIC",
+          messages: {
+            create: input.messages.map((message) => ({
+              role: message.role,
+              content: message.content,
+              sources: (message.sources as Prisma.InputJsonValue | undefined) ?? undefined,
+              metadata: (message.metadata as Prisma.InputJsonValue | undefined) ?? undefined,
+            })),
+          },
+        },
+        select: { id: true },
+      });
+      logger.info({ conversationId: conversation.id, userId: user.id }, "[CONV] restored");
+      return { id: conversation.id };
     }),
 
   clear: protectedProcedure

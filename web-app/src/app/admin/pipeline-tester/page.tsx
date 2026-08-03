@@ -1,20 +1,36 @@
 "use client";
 
 import { useState } from "react";
-import { FlaskConical, Play } from "lucide-react";
+import { Check, Copy, FlaskConical, GraduationCap, Landmark, Play, Scale } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { api } from "@/lib/trpc/client";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { PipelineVisualizer } from "@/components/admin/pipeline/pipeline-visualizer";
+import { useToast } from "@/lib/toast";
 
-const EXAMPLES = [
-  "Compare the cost of studying in Germany vs the Netherlands",
-  "What documents are required for a student visa at a German embassy?",
-  "Is the APS certificate mandatory for Indian students applying to German universities?",
+const EXAMPLES: Array<{ label: string; prompt: string; icon: LucideIcon }> = [
+  {
+    label: "Compare study costs",
+    prompt: "Compare the cost of studying in Germany vs the Netherlands",
+    icon: Scale,
+  },
+  {
+    label: "Student visa documents",
+    prompt: "What documents are required for a student visa at a German embassy?",
+    icon: GraduationCap,
+  },
+  {
+    label: "APS for Indian students",
+    prompt: "Is the APS certificate mandatory for Indian students applying to German universities?",
+    icon: Landmark,
+  },
 ];
 
 export default function AdminPipelineTesterPage() {
+  const { toast } = useToast();
   const [prompt, setPrompt] = useState("");
+  const [copied, setCopied] = useState(false);
   const testPipeline = api.admin.testPipeline.useMutation({
     retry: false,
   });
@@ -25,6 +41,20 @@ export default function AdminPipelineTesterPage() {
       return;
     }
     testPipeline.mutate({ prompt: trimmed });
+  };
+
+  const copyTrace = async () => {
+    if (!testPipeline.data) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(testPipeline.data, null, 2));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+      toast({ title: "Trace copied to clipboard", variant: "success" });
+    } catch {
+      toast({ title: "Could not copy the trace", variant: "error" });
+    }
   };
 
   return (
@@ -66,15 +96,16 @@ export default function AdminPipelineTesterPage() {
         <div className="mt-3 flex flex-wrap gap-2">
           {EXAMPLES.map((example) => (
             <button
-              key={example}
+              key={example.label}
               type="button"
               onClick={() => {
-                setPrompt(example);
+                setPrompt(example.prompt);
                 testPipeline.reset();
               }}
-              className="rounded-full border border-border px-3 py-1 text-xs text-muted transition hover:border-primary/60 hover:text-foreground"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs text-muted transition hover:border-primary/60 hover:text-foreground"
             >
-              {example}
+              <example.icon className="h-3 w-3" />
+              {example.label}
             </button>
           ))}
         </div>
@@ -103,7 +134,28 @@ export default function AdminPipelineTesterPage() {
       ) : null}
 
       {testPipeline.isSuccess && testPipeline.data ? (
-        <PipelineVisualizer trace={testPipeline.data} />
+        <div className="space-y-4">
+          <div className="glass-card flex flex-wrap items-center gap-3 rounded-2xl p-4">
+            <p className="min-w-0 flex-1 truncate text-sm font-medium">
+              Query: {prompt}
+            </p>
+            <span className="font-mono text-xs text-muted">
+              {testPipeline.data.totalLatencyMs}ms
+            </span>
+            <span className="font-mono text-xs text-muted">
+              {testPipeline.data.sources.length} sources
+            </span>
+            <button
+              type="button"
+              onClick={() => void copyTrace()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs transition hover:bg-surface-hover"
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? "Copied" : "Copy trace"}
+            </button>
+          </div>
+          <PipelineVisualizer trace={testPipeline.data} />
+        </div>
       ) : null}
 
       {!testPipeline.isPending && !testPipeline.isError && !testPipeline.isSuccess ? (

@@ -40,7 +40,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="relative mx-auto max-w-6xl px-4 py-8">
+    <div id="main" className="relative mx-auto max-w-6xl px-4 py-8">
       <div className="gradient-mesh pointer-events-none absolute inset-x-0 top-0 -z-10 h-64 opacity-60" />
       <div className="mb-6 flex items-center gap-2">
         <ShieldAlert className="h-5 w-5 text-warning" />

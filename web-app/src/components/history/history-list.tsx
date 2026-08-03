@@ -1,22 +1,69 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, MessageSquare, Search, Trash2 } from "lucide-react";
+import {
+  BookOpen,
+  CheckSquare,
+  Download,
+  FileDown,
+  Loader2,
+  MessageSquare,
+  Search,
+  Trash2,
+  Zap,
+} from "lucide-react";
 import { api } from "@/lib/trpc/client";
 import { formatRelativeTime, cn } from "@/lib/utils";
+import { useDebouncedValue } from "@/hooks/use-debounce";
+import { SkeletonList } from "@/components/ui/skeleton";
+import { useToast } from "@/lib/toast";
+
+type ModeFilter = "all" | "standard" | "agentic";
+type DateRange = "all" | "7d" | "30d";
+type SortKey = "updated" | "created" | "title";
+
+const MODE_FILTERS: Array<{ value: ModeFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "agentic", label: "Agentic" },
+  { value: "standard", label: "Standard" },
+];
+
+const DATE_RANGES: Array<{ value: DateRange; label: string }> = [
+  { value: "all", label: "All time" },
+  { value: "7d", label: "Last 7 days" },
+  { value: "30d", label: "Last 30 days" },
+];
+
+function withinRange(iso: string, range: DateRange): boolean {
+  if (range === "all") {
+    return true;
+  }
+  const days = range === "7d" ? 7 : 30;
+  return Date.now() - new Date(iso).getTime() <= days * 86_400_000;
+}
 
 export function HistoryList() {
   const router = useRouter();
   const utils = api.useUtils();
+  const { toast } = useToast();
   const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+  const search = useDebouncedValue(searchInput.trim(), 300);
+  const [modeFilter, setModeFilter] = useState<ModeFilter>("all");
+  const [dateRange, setDateRange] = useState<DateRange>("all");
+  const [sort, setSort] = useState<SortKey>("updated");
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
   const loaderRef = useRef<HTMLDivElement>(null);
 
   const deleteMutation = api.conversation.delete.useMutation();
+  const deleteManyMutation = api.conversation.deleteMany.useMutation();
+  const clearAllMutation = api.conversation.clearAll.useMutation();
+  const restoreMutation = api.conversation.restore.useMutation();
 
   const conversations = api.conversation.list.useInfiniteQuery(
-    { limit: 15, search: search || undefined },
+    { limit: 15, search: search || undefined, mode: modeFilter === "all" ? undefined : modeFilter },
     { getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined },
   );
 
@@ -36,61 +83,312 @@ export function HistoryList() {
     return () => observer.disconnect();
   }, [conversations]);
 
-  const items = conversations.data?.pages.flatMap((page) => page.items) ?? [];
+  const items = useMemo(() => {
+    const all = conversations.data?.pages.flatMap((page) => page.items) ?? [];
+    const filtered = all.filter((item) => withinRange(item.updatedAt, dateRange));
+    const sorted = [...filtered].sort((a, b) => {
+      if (sort === "title") {
+        return (a.title ?? "").localeCompare(b.title ?? "");
+      }
+      const key = sort === "created" ? "createdAt" : "updatedAt";
+      return new Date(b[key]).getTime() - new Date(a[key]).getTime();
+    });
+    return sorted;
+  }, [conversations.data, dateRange, sort]);
 
-  const remove = (id: string) => {
-    deleteMutation.mutate(
-      { id },
+  const selectedItems = items.filter((item) => selected.has(item.id));
+  const isAllSelected = items.length > 0 && selectedItems.length === items.length;
+
+  const refresh = () => {
+    void utils.conversation.list.invalidate();
+    void utils.conversation.getById.invalidate();
+  };
+
+  const deleteWithUndo = async (conversation: {
+    id: string;
+    title: string | null;
+  }) => {
+    try {
+      const full = await utils.conversation.getById.fetch({ id: conversation.id });
+      await deleteMutation.mutateAsync({ id: conversation.id });
+      refresh();
+      toast({
+        title: "Conversation deleted",
+        description: conversation.title ?? "Untitled conversation",
+        variant: "info",
+        action: {
+          label: "Undo",
+          onClick: () => {
+            restoreMutation.mutate(
+              {
+                title: full.title ?? "Untitled conversation",
+                mode: full.mode === "STANDARD" ? "standard" : "agentic",
+                messages: full.messages.map((message) => ({
+                  role: message.role === "ASSISTANT" ? "ASSISTANT" : "USER",
+                  content: message.content,
+                  sources: message.sources as unknown,
+                  metadata: message.metadata as unknown,
+                })),
+              },
+              {
+                onSuccess: (result) => {
+                  refresh();
+                  router.push(`/chat/${result.id}`);
+                },
+              },
+            );
+          },
+        },
+      });
+    } catch {
+      toast({ title: "Could not delete conversation", variant: "error" });
+    }
+  };
+
+  const deleteSelected = () => {
+    const ids = [...selected];
+    if (ids.length === 0) {
+      return;
+    }
+    deleteManyMutation.mutate(
+      { ids },
       {
         onSuccess: () => {
-          void utils.conversation.list.invalidate();
+          setSelected(new Set());
+          setSelectMode(false);
+          refresh();
+          toast({ title: `${ids.length} conversations deleted`, variant: "success" });
         },
       },
     );
   };
 
-  const handleExport = (id: string, title: string | null) => {
-    void utils.conversation.export
-      .fetch({ id })
-      .then(({ markdown }) => {
-        const blob = new Blob([markdown], { type: "text/markdown" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `${title ?? "conversation"}.md`.replace(/[^a-z0-9-]+/gi, "-");
-        link.click();
-        URL.revokeObjectURL(url);
-      })
-      .catch(() => {
-        // Export failures are surfaced via react-query error state.
-      });
+  const handleClearAll = () => {
+    if (!confirmClearAll) {
+      setConfirmClearAll(true);
+      window.setTimeout(() => setConfirmClearAll(false), 4000);
+      return;
+    }
+    clearAllMutation.mutate(undefined, {
+      onSuccess: () => {
+        setConfirmClearAll(false);
+        refresh();
+        toast({ title: "All conversations deleted", variant: "success" });
+      },
+    });
+  };
+
+  const handleExport = async (id: string, title: string | null) => {
+    try {
+      const { markdown } = await utils.conversation.export.fetch({ id });
+      downloadMarkdown(markdown, `${title ?? "conversation"}.md`);
+    } catch {
+      toast({ title: "Export failed", variant: "error" });
+    }
+  };
+
+  const exportSelected = async () => {
+    if (selectedItems.length === 0) {
+      return;
+    }
+    try {
+      const parts: string[] = [];
+      for (const item of selectedItems) {
+        const { markdown } = await utils.conversation.export.fetch({ id: item.id });
+        parts.push(markdown);
+      }
+      const combined = parts.join("\n\n---\n\n");
+      downloadMarkdown(combined, `behoerden-bot-history-${Date.now()}.md`);
+      toast({ title: `Exported ${selectedItems.length} conversations`, variant: "success" });
+    } catch {
+      toast({ title: "Export failed", variant: "error" });
+    }
+  };
+
+  const downloadMarkdown = (markdown: string, filename: string) => {
+    const blob = new Blob([markdown], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename.replace(/[^a-z0-9-]+/gi, "-");
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   };
 
   return (
     <div className="mt-6">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-        <input
-          type="search"
-          value={searchInput}
-          onChange={(event) => setSearchInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              setSearch(searchInput.trim());
-            }
-          }}
-          placeholder="Search conversations…"
-          className="w-full rounded-xl border border-border bg-surface py-2.5 pl-9 pr-4 text-sm outline-none transition placeholder:text-muted focus:border-primary"
-        />
+      <div className="space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+          <input
+            type="search"
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder="Search conversations…"
+            aria-label="Search conversations"
+            className="w-full rounded-xl border border-border bg-surface py-2.5 pl-9 pr-4 text-sm outline-none transition placeholder:text-muted focus:border-primary"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            role="radiogroup"
+            aria-label="Filter by engine mode"
+            className="inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1"
+          >
+            {MODE_FILTERS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={modeFilter === option.value}
+                onClick={() => setModeFilter(option.value)}
+                className={cn(
+                  "rounded-lg px-3 py-1.5 text-xs transition focus-visible:ring-2 focus-visible:ring-primary",
+                  modeFilter === option.value
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted hover:bg-surface-hover hover:text-foreground",
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <label className="sr-only" htmlFor="history-date-range">
+            Date range
+          </label>
+          <select
+            id="history-date-range"
+            value={dateRange}
+            onChange={(event) => setDateRange(event.target.value as DateRange)}
+            className="rounded-xl border border-border bg-surface px-3 py-2 text-xs outline-none transition focus:border-primary"
+          >
+            {DATE_RANGES.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
+          <label className="sr-only" htmlFor="history-sort">
+            Sort by
+          </label>
+          <select
+            id="history-sort"
+            value={sort}
+            onChange={(event) => setSort(event.target.value as SortKey)}
+            className="rounded-xl border border-border bg-surface px-3 py-2 text-xs outline-none transition focus:border-primary"
+          >
+            <option value="updated">Sort: recently updated</option>
+            <option value="created">Sort: recently created</option>
+            <option value="title">Sort: title</option>
+          </select>
+
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectMode((current) => !current);
+                setSelected(new Set());
+              }}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs transition hover:bg-surface-hover",
+                selectMode && "border-primary/50 bg-primary/5 text-foreground",
+              )}
+              aria-pressed={selectMode}
+            >
+              <CheckSquare className="h-3.5 w-3.5" />
+              {selectMode ? "Done" : "Select"}
+            </button>
+            <button
+              type="button"
+              onClick={handleClearAll}
+              disabled={clearAllMutation.isPending || items.length === 0}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs transition hover:bg-surface-hover disabled:opacity-50",
+                confirmClearAll && "border-destructive/50 bg-destructive/10 text-destructive",
+              )}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {confirmClearAll ? "Confirm delete all?" : "Delete all"}
+            </button>
+          </div>
+        </div>
+
+        {selectMode ? (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5">
+            <p className="text-sm font-medium">
+              {selectedItems.length} selected{items.length > 0 ? ` of ${items.length} shown` : ""}
+            </p>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setSelected(isAllSelected ? new Set() : new Set(items.map((item) => item.id)))
+                }
+                className="rounded-lg px-2.5 py-1.5 text-xs transition hover:bg-surface-hover"
+              >
+                {isAllSelected ? "Clear all" : "Select all shown"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void exportSelected()}
+                disabled={selectedItems.length === 0}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs transition hover:bg-surface-hover disabled:opacity-50"
+              >
+                <FileDown className="h-3.5 w-3.5" />
+                Export
+              </button>
+              <button
+                type="button"
+                onClick={deleteSelected}
+                disabled={deleteManyMutation.isPending || selectedItems.length === 0}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-destructive/15 px-2.5 py-1.5 text-xs font-medium text-destructive transition hover:bg-destructive/25 disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <p className="text-xs text-muted" aria-live="polite">
+          {conversations.isLoading
+            ? "Loading…"
+            : `${items.length} conversation${items.length === 1 ? "" : "s"}${
+                search ? " matching your search" : ""
+              }`}
+        </p>
       </div>
 
-      {items.length === 0 && !conversations.isLoading ? (
-        <div className="mt-16 flex flex-col items-center text-center">
+      {conversations.isLoading ? (
+        <div className="mt-4">
+          <SkeletonList rows={4} />
+        </div>
+      ) : items.length === 0 ? (
+        <div className="mt-8 flex flex-col items-center text-center">
           <MessageSquare className="h-10 w-10 text-muted" />
-          <p className="mt-3 font-medium">No conversations found</p>
+          <p className="mt-3 font-medium">
+            {search || modeFilter !== "all" || dateRange !== "all"
+              ? "No conversations match your filters"
+              : "No conversations yet"}
+          </p>
           <p className="mt-1 text-sm text-muted">
-            {search
-              ? "Try a different search term."
+            {search || modeFilter !== "all" || dateRange !== "all"
+              ? "Try adjusting the filters."
               : "Start your first conversation to see it here."}
           </p>
           <button
@@ -106,44 +404,92 @@ export function HistoryList() {
           {items.map((conversation) => (
             <li
               key={conversation.id}
-              className="group flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 transition hover:border-primary/40"
-              onClick={() => router.push(`/chat/${conversation.id}`)}
+              className={cn(
+                "group flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 transition hover:border-primary/40",
+                selected.has(conversation.id) && "border-primary/50 bg-primary/5",
+              )}
+              onClick={() => {
+                if (selectMode) {
+                  toggleSelect(conversation.id);
+                } else {
+                  router.push(`/chat/${conversation.id}`);
+                }
+              }}
             >
+              {selectMode ? (
+                <button
+                  type="button"
+                  aria-label={selected.has(conversation.id) ? "Deselect" : "Select"}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleSelect(conversation.id);
+                  }}
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-border text-muted transition hover:border-primary"
+                >
+                  {selected.has(conversation.id) ? (
+                    <CheckSquare className="h-4 w-4 text-primary" />
+                  ) : null}
+                </button>
+              ) : null}
+
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">
-                  {conversation.title ?? "Untitled conversation"}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="truncate font-medium">
+                    {conversation.title ?? "Untitled conversation"}
+                  </p>
+                  <span
+                    className={cn(
+                      "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                      conversation.mode === "AGENTIC"
+                        ? "bg-accent/10 text-accent"
+                        : "bg-surface-hover text-muted",
+                    )}
+                  >
+                    {conversation.mode === "AGENTIC" ? (
+                      <Zap className="h-2.5 w-2.5" />
+                    ) : (
+                      <BookOpen className="h-2.5 w-2.5" />
+                    )}
+                    {conversation.mode}
+                  </span>
+                </div>
                 <p className="mt-0.5 line-clamp-1 text-xs text-muted">
                   {conversation.preview || "No messages"}
                 </p>
                 <p className="mt-1 text-[10px] text-muted">
-                  {formatRelativeTime(conversation.updatedAt)} · {conversation.mode}
+                  {formatRelativeTime(conversation.updatedAt)} · {conversation.messageCount}{" "}
+                  {conversation.messageCount === 1 ? "message" : "messages"}
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-1 opacity-0 transition group-hover:opacity-100">
-                <button
-                  type="button"
-                  aria-label="Export conversation"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    handleExport(conversation.id, conversation.title);
-                  }}
-                  className="rounded-lg p-2 text-muted transition hover:bg-surface-hover hover:text-foreground"
-                >
-                  <Download className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Delete conversation"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    remove(conversation.id);
-                  }}
-                  className="rounded-lg p-2 text-muted transition hover:bg-surface-hover hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
+
+              {!selectMode ? (
+                <div className="flex shrink-0 items-center gap-1 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
+                  <button
+                    type="button"
+                    aria-label="Export conversation"
+                    title="Export as Markdown"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void handleExport(conversation.id, conversation.title);
+                    }}
+                    className="rounded-lg p-2 text-muted transition hover:bg-surface-hover hover:text-foreground"
+                  >
+                    <Download className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Delete conversation"
+                    title="Delete"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void deleteWithUndo(conversation);
+                    }}
+                    className="rounded-lg p-2 text-muted transition hover:bg-surface-hover hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -154,6 +500,13 @@ export function HistoryList() {
       {conversations.isFetchingNextPage && (
         <p className="py-4 text-center text-xs text-muted">Loading more…</p>
       )}
+
+      {deleteManyMutation.isPending || clearAllMutation.isPending ? (
+        <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Deleting…
+        </div>
+      ) : null}
     </div>
   );
 }

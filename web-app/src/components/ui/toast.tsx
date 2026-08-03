@@ -52,6 +52,18 @@ export function ToastViewport({ toasts, onDismiss }: ToastViewportProps) {
                 {toastItem.description ? (
                   <p className="mt-0.5 text-xs text-muted">{toastItem.description}</p>
                 ) : null}
+                {toastItem.action ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toastItem.action?.onClick();
+                      onDismiss(toastItem.id);
+                    }}
+                    className="mt-1.5 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition hover:bg-primary/20"
+                  >
+                    {toastItem.action.label}
+                  </button>
+                ) : null}
               </div>
               <button
                 type="button"

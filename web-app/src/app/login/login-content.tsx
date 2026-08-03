@@ -47,7 +47,7 @@ export function LoginContent() {
   const error = friendlyError(searchParams.get("error"));
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background">
+    <div id="main" className="relative min-h-screen overflow-hidden bg-background">
       <div className="gradient-mesh pointer-events-none absolute inset-0" />
 
       <Link
@@ -147,7 +147,7 @@ export function LoginContent() {
 
             {guestOpen && (
               <div className="mt-3 rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-[11px] leading-relaxed text-muted">
-                Guest browsing isn't available yet — create a free account above to save your
+                Guest browsing isn&apos;t available yet — create a free account above to save your
                 conversations and export answers.
               </div>
             )}

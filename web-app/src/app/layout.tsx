@@ -3,6 +3,7 @@ import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
 import { Providers } from "@/lib/trpc/provider";
+import { PreferenceProvider } from "@/components/preferences/preference-provider";
 
 const APP_NAME = "Behörden-Bot";
 const APP_DESCRIPTION =
@@ -56,7 +57,15 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
-        <Providers>{children}</Providers>
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[200] focus:rounded-xl focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
+        >
+          Skip to content
+        </a>
+        <PreferenceProvider>
+          <Providers>{children}</Providers>
+        </PreferenceProvider>
       </body>
     </html>
   );

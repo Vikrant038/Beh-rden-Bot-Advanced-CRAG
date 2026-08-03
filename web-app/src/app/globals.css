@@ -201,6 +201,19 @@ body {
 
 /* ─── Motion / accessibility guard ─── */
 
+@keyframes progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+.progress-indeterminate {
+  animation: progress-slide 1.2s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .gradient-mesh {
     animation: none;
@@ -209,7 +222,8 @@ body {
     animation: none;
   }
   .streaming-cursor,
-  .status-pulse {
+  .status-pulse,
+  .progress-indeterminate {
     animation: none;
   }
   *,
@@ -217,6 +231,41 @@ body {
   *::after {
     scroll-behavior: auto !important;
   }
+}
+
+/* ─── Accessibility utilities ────────────────────────────────── */
+
+/* iOS safe-area insets for notched devices */
+@supports (padding: max(0px)) {
+  .safe-bottom {
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+  .safe-top {
+    padding-top: max(0px, env(safe-area-inset-top));
+  }
+}
+
+/* User-level "reduce motion" override (independent of OS setting) */
+html[data-force-reduced-motion="true"] *,
+html[data-force-reduced-motion="true"] *::before,
+html[data-force-reduced-motion="true"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* High-contrast mode: strengthen borders, muted text, and reduce alpha surfaces */
+html[data-high-contrast="true"] {
+  --color-muted: var(--color-foreground);
+  --color-border: var(--color-foreground);
+  --color-glass-border: var(--color-foreground);
+}
+html[data-high-contrast="true"] .dark {
+  --color-muted: #d7def2;
+}
+html[data-high-contrast="true"] .glass-card {
+  background: var(--color-surface);
 }
 
 /* ─── Markdown rendering (assistant answers / analysis matrix) ─── */

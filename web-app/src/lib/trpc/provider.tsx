@@ -34,10 +34,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
         <ToastProvider>
           <api.Provider client={trpcClient} queryClient={queryClient}>
-            <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+            <QueryClientProvider client={queryClient}>
+              {children}
+              <CommandPalette />
+            </QueryClientProvider>
           </api.Provider>
         </ToastProvider>
-        <CommandPalette />
       </ThemeProvider>
     </SessionProvider>
   );

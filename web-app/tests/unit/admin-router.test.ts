@@ -110,7 +110,7 @@ describe("admin router", () => {
       { date: "2026-07-29", count: 5 },
     ] as never);
     const caller = makeCaller();
-    const result = await caller.admin.dailyQueries();
+    const result = await caller.admin.dailyQueries({ days: 14 });
     expect(result).toEqual([
       { date: "2026-07-28", count: 3 },
       { date: "2026-07-29", count: 5 },
@@ -120,7 +120,7 @@ describe("admin router", () => {
   it("dailyQueries: falls back to empty list on aggregation failure", async () => {
     prismaMock.$queryRaw.mockRejectedValue(new Error("db down"));
     const caller = makeCaller();
-    const result = await caller.admin.dailyQueries();
+    const result = await caller.admin.dailyQueries({ days: 14 });
     expect(result).toEqual([]);
   });
 

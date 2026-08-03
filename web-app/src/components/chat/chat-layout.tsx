@@ -1,16 +1,52 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Menu } from "lucide-react";
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
+import { cn } from "@/lib/utils";
+
+const COLLAPSED_KEY = "behoerden.sidebarCollapsed";
+
+function readCollapsed(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  try {
+    return window.localStorage.getItem(COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 export function ChatLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    setCollapsed(readCollapsed());
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        // Ignore storage failures (private mode / storage disabled).
+      }
+      return next;
+    });
+  };
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <aside className="hidden w-72 shrink-0 border-r border-border bg-surface/60 md:block">
-        <AppSidebar />
+    <div className="flex h-dvh overflow-hidden">
+      <aside
+        className={cn(
+          "hidden shrink-0 border-r border-border bg-surface/60 transition-[width] duration-200 md:block",
+          collapsed ? "w-16" : "w-72",
+        )}
+      >
+        <AppSidebar collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
       </aside>
 
       {sidebarOpen && (
@@ -38,7 +74,9 @@ export function ChatLayout({ children }: { children: React.ReactNode }) {
           </button>
           <span className="font-semibold">Behörden-Bot</span>
         </header>
-        <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
+        <main id="main" className="safe-bottom min-h-0 flex-1 overflow-hidden">
+          {children}
+        </main>
       </div>
     </div>
   );

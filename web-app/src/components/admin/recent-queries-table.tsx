@@ -1,10 +1,13 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { CheckCircle2, Clock, GitFork, XCircle } from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface RecentQueryRow {
   id: string;
+  conversationId: string;
   query: string;
   createdAt: string;
   mode: string;
@@ -19,11 +22,17 @@ interface RecentQueriesTableProps {
 }
 
 export function RecentQueriesTable({ queries, loading }: RecentQueriesTableProps) {
+  const router = useRouter();
+
   if (loading) {
     return (
       <div className="rounded-2xl border border-border bg-surface p-5">
         <h3 className="text-sm font-semibold">Recent queries</h3>
-        <p className="mt-4 animate-pulse text-sm text-muted">Loading…</p>
+        <div className="mt-4 space-y-3">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+        </div>
       </div>
     );
   }
@@ -40,7 +49,9 @@ export function RecentQueriesTable({ queries, loading }: RecentQueriesTableProps
   return (
     <div className="rounded-2xl border border-border bg-surface p-5">
       <h3 className="text-sm font-semibold">Recent queries</h3>
-      <p className="mb-3 text-xs text-muted">Latest user questions with pipeline outcome</p>
+      <p className="mb-3 text-xs text-muted">
+        Latest user questions with pipeline outcome — click a row to open it.
+      </p>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
@@ -55,7 +66,11 @@ export function RecentQueriesTable({ queries, loading }: RecentQueriesTableProps
           </thead>
           <tbody>
             {queries.map((query) => (
-              <tr key={query.id} className="border-b border-border/60 last:border-0">
+              <tr
+                key={query.id}
+                onClick={() => router.push(`/chat/${query.conversationId}`)}
+                className="cursor-pointer border-b border-border/60 last:border-0 hover:bg-surface-hover/60"
+              >
                 <td className="max-w-[220px] py-2.5 pr-4">
                   <p className="truncate">{query.query}</p>
                 </td>

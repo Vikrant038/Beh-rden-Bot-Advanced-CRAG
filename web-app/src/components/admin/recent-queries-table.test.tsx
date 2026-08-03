@@ -1,11 +1,16 @@
 import "@testing-library/jest-dom/vitest";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { RecentQueriesTable } from "@/components/admin/recent-queries-table";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
+}));
 
 const QUERIES = [
   {
     id: "m1",
+    conversationId: "c1",
     query: "How do I open a blocked account?",
     createdAt: "2026-07-31T10:00:00.000Z",
     mode: "agentic",
@@ -15,6 +20,7 @@ const QUERIES = [
   },
   {
     id: "m2",
+    conversationId: "c2",
     query: "Visa fee?",
     createdAt: "2026-07-31T09:00:00.000Z",
     mode: "standard",
@@ -27,7 +33,7 @@ const QUERIES = [
 describe("RecentQueriesTable", () => {
   it("shows a loading placeholder while loading", () => {
     render(<RecentQueriesTable queries={[]} loading />);
-    expect(screen.getByText("Loading…")).toBeInTheDocument();
+    expect(screen.getAllByText("Loading…").length).toBeGreaterThan(0);
   });
 
   it("shows an empty state when there are no queries", () => {

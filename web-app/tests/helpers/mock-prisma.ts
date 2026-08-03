@@ -14,6 +14,7 @@ export interface MockPrisma {
     create: MockFn;
     update: MockFn;
     delete: MockFn;
+    deleteMany: MockFn;
     count: MockFn;
     findMany: MockFn;
     aggregate: MockFn;
@@ -24,6 +25,7 @@ export interface MockPrisma {
     create: MockFn;
     update: MockFn;
     delete: MockFn;
+    deleteMany: MockFn;
     count: MockFn;
     findMany: MockFn;
   };
