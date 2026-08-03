@@ -232,6 +232,16 @@ export const conversationRouter = router({
       return { success: true };
     }),
 
+  clear: protectedProcedure
+    .input(z.object({ id: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user as AuthedUser;
+      await ensureOwnership(user, input.id);
+      await prisma.message.deleteMany({ where: { conversationId: input.id } });
+      logger.info({ conversationId: input.id, userId: user.id }, "[CONV] cleared");
+      return { success: true };
+    }),
+
   export: protectedProcedure
     .input(z.object({ id: z.string().min(1) }))
     .query(async ({ ctx, input }) => {

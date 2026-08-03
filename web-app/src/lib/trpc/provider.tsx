@@ -7,6 +7,7 @@ import { SessionProvider } from "next-auth/react";
 import { ThemeProvider } from "next-themes";
 import { api } from "@/lib/trpc/client";
 import { ToastProvider } from "@/lib/toast";
+import { CommandPalette } from "@/components/ui/command-palette";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -36,6 +37,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
           </api.Provider>
         </ToastProvider>
+        <CommandPalette />
       </ThemeProvider>
     </SessionProvider>
   );

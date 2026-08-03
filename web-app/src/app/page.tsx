@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
+  ArrowUp,
   BarChart3,
   Bot,
   Database,
@@ -19,6 +20,9 @@ import {
 import { GlassCard } from "@/components/ui/glass-card";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { CountUp } from "@/components/ui/count-up";
+import { Badge } from "@/components/ui/badge";
+import { ChatMockup } from "@/components/landing/chat-mockup";
+import { ChangelogModal } from "@/components/ui/changelog-modal";
 
 const NAV_LINKS = [
   { href: "#features", label: "Features" },
@@ -116,6 +120,42 @@ const FAQ_ITEMS = [
   },
 ];
 
+const TOPICS = [
+  "Student Visa",
+  "APS Certificate",
+  "Blocked Account",
+  "University Admissions",
+  "Health Insurance",
+  "Language Requirements",
+  "uni-assist",
+  "Scholarships",
+  "Work Permit",
+  "City Cost of Living",
+  "Semester Contribution",
+  "Degree Recognition",
+];
+
+const TESTIMONIALS = [
+  {
+    quote:
+      "I was drowning in conflicting visa advice. The cited answers with official sources made me confident enough to book my APS appointment.",
+    name: "Ananya S.",
+    role: "MSc applicant, TU Munich",
+  },
+  {
+    quote:
+      "The blocked-account and cost breakdowns were the first numbers I trusted after days of googling. It laid out the whole timeline.",
+    name: "Rohan M.",
+    role: "Bachelor's applicant, RWTH Aachen",
+  },
+  {
+    quote:
+      "The disambiguation prompts ask exactly the right clarifying questions. It caught that I meant the German student visa, not the Schengen one.",
+    name: "Priya K.",
+    role: "Masters applicant, FAU Erlangen",
+  },
+];
+
 function StatCard({
   value,
   suffix,
@@ -140,7 +180,21 @@ function StatCard({
 export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const [changelogOpen, setChangelogOpen] = useState(false);
   const reduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    const onScroll = () => {
+      setShowBackToTop(window.scrollY > 600);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+  };
 
   const reveal = reduceMotion
     ? {}
@@ -278,6 +332,40 @@ export default function LandingPage() {
           ))}
         </motion.section>
 
+        {/* ─── Live chat demo ─── */}
+        <motion.section
+          {...reveal}
+          transition={{ duration: 0.5 }}
+          className="mt-24 grid items-center gap-10 text-left lg:grid-cols-2"
+          id="demo"
+        >
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-accent">
+              See it in action
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold sm:text-3xl">
+              Ask a question. Get a cited answer.
+            </h2>
+            <p className="mt-3 max-w-md text-sm text-muted">
+              Every answer is grounded in official sources with confidence scores — and the
+              three-agent pipeline tells you exactly what it&apos;s doing as it works.
+            </p>
+            <ul className="mt-6 space-y-2 text-sm text-muted">
+              {[
+                "Hybrid retrieval across 50+ official sources",
+                "Confidence-gated live web fallback (CRAG)",
+                "Sources with relevance scores on every answer",
+              ].map((point) => (
+                <li key={point} className="flex items-center gap-2">
+                  <Zap className="h-3.5 w-3.5 shrink-0 text-accent" />
+                  {point}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <ChatMockup />
+        </motion.section>
+
         {/* ─── How it works ─── */}
         <motion.section
           {...reveal}
@@ -344,6 +432,62 @@ export default function LandingPage() {
                 </motion.div>
               );
             })}
+          </div>
+        </motion.section>
+
+        {/* ─── Testimonials ─── */}
+        <motion.section {...reveal} transition={{ duration: 0.5 }} className="mt-24">
+          <h2 className="text-2xl font-semibold sm:text-3xl">Trusted by applicants</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
+            Students planning their German move use Behörden-Bot to cut through the noise.
+          </p>
+          <div className="mt-10 grid gap-4 text-left md:grid-cols-3">
+            {TESTIMONIALS.map((testimonial) => (
+              <GlassCard
+                key={testimonial.name}
+                className="flex h-full flex-col p-6 transition hover:-translate-y-0.5 hover:shadow-glass"
+              >
+                <div className="flex gap-0.5 text-warning" aria-label="5 out of 5 stars">
+                  {Array.from({ length: 5 }).map((_, index) => (
+                    <span key={index} aria-hidden="true">
+                      ★
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-3 flex-1 text-sm leading-relaxed text-muted">
+                  “{testimonial.quote}”
+                </p>
+                <div className="mt-4 flex items-center gap-2">
+                  <span className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    {testimonial.name.charAt(0)}
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium">{testimonial.name}</p>
+                    <p className="text-xs text-muted">{testimonial.role}</p>
+                  </div>
+                </div>
+              </GlassCard>
+            ))}
+          </div>
+        </motion.section>
+
+        {/* ─── Supported topics ─── */}
+        <motion.section {...reveal} transition={{ duration: 0.5 }} className="mt-24">
+          <h2 className="text-2xl font-semibold sm:text-3xl">What can I ask about?</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
+            From your first APS appointment to your first semester — the knowledge base covers the
+            whole journey.
+          </p>
+          <div className="mx-auto mt-8 flex max-w-3xl flex-wrap justify-center gap-2">
+            {TOPICS.map((topic) => (
+              <a
+                key={topic}
+                href="/login"
+                className="rounded-full border border-glass-border bg-glass px-3.5 py-1.5 text-xs text-muted shadow-glass backdrop-blur transition hover:border-primary hover:text-foreground"
+              >
+                {topic}
+              </a>
+            ))}
           </div>
         </motion.section>
 
@@ -463,9 +607,31 @@ export default function LandingPage() {
               Knowledge base
             </Link>
           </div>
-          <p className="text-[10px] text-muted">© {new Date().getFullYear()} Behörden-Bot</p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setChangelogOpen(true)}
+              className="text-[10px] text-muted underline-offset-2 transition hover:text-foreground hover:underline"
+            >
+              What&apos;s new · v1.1.0
+            </button>
+            <p className="text-[10px] text-muted">© {new Date().getFullYear()} Behörden-Bot</p>
+          </div>
         </div>
       </footer>
+
+      {showBackToTop && (
+        <button
+          type="button"
+          onClick={scrollToTop}
+          aria-label="Back to top"
+          className="fixed bottom-6 right-6 z-40 grid h-11 w-11 place-items-center rounded-full border border-glass-border bg-glass text-foreground shadow-glass backdrop-blur transition hover:bg-surface-hover"
+        >
+          <ArrowUp className="h-4 w-4" />
+        </button>
+      )}
+
+      <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </div>
   );
 }
