@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 import { authConfig } from "@/auth.config";
+import { GUEST_COOKIE } from "@/lib/guest";
 
 const { auth } = NextAuth(authConfig);
 
@@ -22,6 +23,10 @@ export default auth((request) => {
   const { nextUrl } = request;
   const isLoggedIn = Boolean(request.auth);
   const role = request.auth?.user?.role;
+  // Guest admission (3.10): presence of the signed guest cookie lets an
+  // unauthenticated visitor through to the app surfaces. The signature itself
+  // is verified server-side in the tRPC context, never here on the edge.
+  const isGuest = Boolean(request.cookies.get(GUEST_COOKIE));
 
   const isProtected = PROTECTED_PREFIXES.some((prefix) => nextUrl.pathname.startsWith(prefix));
   const isAdminRoute = ADMIN_PREFIXES.some((prefix) => nextUrl.pathname.startsWith(prefix));
@@ -35,7 +40,7 @@ export default auth((request) => {
     }
   }
 
-  if (isProtected && !isLoggedIn) {
+  if (isProtected && !isLoggedIn && !isGuest) {
     return NextResponse.redirect(new URL("/login", nextUrl));
   }
 
@@ -58,7 +63,8 @@ export default auth((request) => {
       // style-src: unsafe-inline is still required for Tailwind CSS v4's
       // runtime inline style injection. See docs/security/SECURITY_EXCEPTIONS.md.
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
+      // Google s2 favicon service feeds the 16px source chips (4.7).
+      "img-src 'self' data: blob: https://www.google.com",
       "font-src 'self' data:",
       "connect-src 'self' https://api-inference.huggingface.co https://api.groq.com",
       "frame-ancestors 'none'",

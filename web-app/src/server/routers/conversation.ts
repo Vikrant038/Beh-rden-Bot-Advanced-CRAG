@@ -2,10 +2,11 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { router, protectedProcedure } from "@/server/trpc/t";
 import { prisma } from "@/server/db";
-import { NotFoundError } from "@/server/lib/errors";
+import { GuestLimitReachedError, NotFoundError } from "@/server/lib/errors";
 import { createLogger } from "@/server/lib/logger";
 import type { AuthedUser } from "@/server/trpc/t";
 import type { ChatMessage, ChatSource } from "@/lib/chat/types";
+import { GUEST_CONVERSATION_LIMIT } from "@/lib/guest";
 
 const logger = createLogger("conversation-router");
 
@@ -43,10 +44,12 @@ function parseSourcesJson(value: unknown): ChatSource[] {
 export const chatModeSchema = z.enum(["standard", "agentic"]);
 
 const paginationSchema = z.object({
-  cursor: z.string().optional(),
+  cursor: z.object({ updatedAt: z.coerce.date(), id: z.string() }).optional(),
   limit: z.number().int().min(1).max(100).default(20),
   search: z.string().trim().max(200).optional(),
   mode: chatModeSchema.optional(),
+  includeDeleted: z.boolean().default(false),
+  pinnedOnly: z.boolean().default(false),
 });
 
 export interface ConversationListItem {
@@ -116,6 +119,21 @@ export const conversationRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const user = ctx.user as AuthedUser;
+
+      // Free-tier cap: guests may hold at most GUEST_CONVERSATION_LIMIT
+      // (non-deleted) conversations. Soft-deleting a conversation frees its
+      // slot, so a guest always has up to N active threads at a time. Signing in
+      // lifts the cap entirely and the guest's data is transferred to the
+      // account (see server/guest.ts + trpc/context.ts).
+      if (user.isGuest) {
+        const count = await prisma.conversation.count({
+          where: { userId: user.id, deletedAt: null },
+        });
+        if (count >= GUEST_CONVERSATION_LIMIT) {
+          throw new GuestLimitReachedError(GUEST_CONVERSATION_LIMIT);
+        }
+      }
+
       const conversation = await prisma.conversation.create({
         data: {
           userId: user.id,
@@ -133,13 +151,22 @@ export const conversationRouter = router({
 
     const where: Prisma.ConversationWhereInput = {
       userId: user.id,
+      deletedAt: input.includeDeleted ? { not: null } : null,
+      ...(input.pinnedOnly ? { pinned: true } : {}),
       ...(input.search
         ? { title: { contains: input.search, mode: Prisma.QueryMode.insensitive } }
         : {}),
       ...(input.mode
         ? { mode: input.mode === "standard" ? "STANDARD" : "AGENTIC" }
         : {}),
-      ...(input.cursor ? { id: { lt: input.cursor } } : {}),
+      ...(input.cursor
+        ? {
+            OR: [
+              { updatedAt: { lt: input.cursor.updatedAt } },
+              { updatedAt: input.cursor.updatedAt, id: { lt: input.cursor.id } },
+            ],
+          }
+        : {}),
     };
 
     const rows = await prisma.conversation.findMany({
@@ -150,6 +177,7 @@ export const conversationRouter = router({
         id: true,
         title: true,
         mode: true,
+        pinned: true,
         updatedAt: true,
         createdAt: true,
         messages: {
@@ -161,18 +189,23 @@ export const conversationRouter = router({
       },
     });
 
-    const items: ConversationListItem[] = rows.slice(0, input.limit).map((row) => ({
+    const items = rows.slice(0, input.limit).map((row) => ({
       id: row.id,
       title: row.title,
       mode: row.mode,
+      pinned: row.pinned,
       updatedAt: row.updatedAt,
       createdAt: row.createdAt,
       preview: row.messages[0]?.content?.slice(0, 90) ?? "",
       messageCount: row._count.messages,
     }));
 
-    const nextCursor = rows.length > input.limit ? rows[input.limit]?.id : undefined;
-    return { items, nextCursor: nextCursor ?? null };
+    const lastItem = rows.length > input.limit ? rows[input.limit - 1] : undefined;
+    const nextCursor =
+      rows.length > input.limit && lastItem
+        ? { updatedAt: lastItem.updatedAt, id: lastItem.id }
+        : null;
+    return { items, nextCursor };
   }),
 
   getById: protectedProcedure
@@ -231,8 +264,11 @@ export const conversationRouter = router({
     .mutation(async ({ ctx, input }) => {
       const user = ctx.user as AuthedUser;
       await ensureOwnership(user, input.id);
-      await prisma.conversation.delete({ where: { id: input.id } });
-      logger.info({ conversationId: input.id, userId: user.id }, "[CONV] deleted");
+      await prisma.conversation.update({
+        where: { id: input.id },
+        data: { deletedAt: new Date() },
+      });
+      logger.info({ conversationId: input.id, userId: user.id }, "[CONV] soft deleted");
       return { success: true };
     }),
 
@@ -247,59 +283,66 @@ export const conversationRouter = router({
       });
       const ownedIds = owned.map((row) => row.id);
       if (ownedIds.length > 0) {
-        await prisma.conversation.deleteMany({ where: { id: { in: ownedIds } } });
+        await prisma.conversation.updateMany({
+          where: { id: { in: ownedIds } },
+          data: { deletedAt: new Date() },
+        });
       }
       logger.info(
         { deleted: ownedIds.length, requested: ids.length, userId: user.id },
-        "[CONV] bulk deleted",
+        "[CONV] bulk soft deleted",
       );
       return { success: true, deleted: ownedIds.length };
     }),
 
-  clearAll: protectedProcedure.mutation(async ({ ctx }) => {
-    const user = ctx.user as AuthedUser;
-    const result = await prisma.conversation.deleteMany({ where: { userId: user.id } });
-    logger.info({ deleted: result.count, userId: user.id }, "[CONV] cleared all");
-    return { success: true, deleted: result.count };
-  }),
-
-  restore: protectedProcedure
+  clearAll: protectedProcedure
     .input(
-      z.object({
-        title: z.string().trim().max(200),
-        mode: chatModeSchema.default("agentic"),
-        messages: z
-          .array(
-            z.object({
-              role: z.enum(["USER", "ASSISTANT"]),
-              content: z.string(),
-              sources: z.unknown().optional(),
-              metadata: z.unknown().optional(),
-            }),
-          )
-          .max(500),
-      }),
+      z
+        .object({
+          search: z.string().trim().max(200).optional(),
+          mode: chatModeSchema.optional(),
+          ids: z.array(z.string().min(1)).optional(),
+        })
+        .optional(),
     )
     .mutation(async ({ ctx, input }) => {
       const user = ctx.user as AuthedUser;
-      const conversation = await prisma.conversation.create({
-        data: {
-          userId: user.id,
-          title: input.title || "New conversation",
-          mode: input.mode === "standard" ? "STANDARD" : "AGENTIC",
-          messages: {
-            create: input.messages.map((message) => ({
-              role: message.role,
-              content: message.content,
-              sources: (message.sources as Prisma.InputJsonValue | undefined) ?? undefined,
-              metadata: (message.metadata as Prisma.InputJsonValue | undefined) ?? undefined,
-            })),
-          },
-        },
+      const where: Prisma.ConversationWhereInput = {
+        userId: user.id,
+        deletedAt: null,
+        ...(input?.ids ? { id: { in: input.ids } } : {}),
+        ...(input?.search
+          ? { title: { contains: input.search, mode: Prisma.QueryMode.insensitive } }
+          : {}),
+        ...(input?.mode
+          ? { mode: input.mode === "standard" ? "STANDARD" : "AGENTIC" }
+          : {}),
+      };
+      const result = await prisma.conversation.updateMany({
+        where,
+        data: { deletedAt: new Date() },
+      });
+      logger.info({ deleted: result.count, userId: user.id }, "[CONV] cleared filtered");
+      return { success: true, deleted: result.count };
+    }),
+
+  restore: protectedProcedure
+    .input(z.object({ id: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user as AuthedUser;
+      const conversation = await prisma.conversation.findFirst({
+        where: { id: input.id, userId: user.id },
         select: { id: true },
       });
-      logger.info({ conversationId: conversation.id, userId: user.id }, "[CONV] restored");
-      return { id: conversation.id };
+      if (!conversation) {
+        throw new NotFoundError("Conversation", input.id);
+      }
+      await prisma.conversation.update({
+        where: { id: input.id },
+        data: { deletedAt: null },
+      });
+      logger.info({ conversationId: input.id, userId: user.id }, "[CONV] restored");
+      return { success: true, id: input.id };
     }),
 
   clear: protectedProcedure
@@ -357,4 +400,110 @@ export const conversationRouter = router({
 
       return { markdown: lines.join("\n") };
     }),
+
+  setPinned: protectedProcedure
+    .input(z.object({ id: z.string().min(1), pinned: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const user = ctx.user as AuthedUser;
+      await ensureOwnership(user, input.id);
+      const updated = await prisma.conversation.update({
+        where: { id: input.id },
+        data: { pinned: input.pinned },
+        select: { id: true, pinned: true },
+      });
+      logger.info(
+        { conversationId: input.id, pinned: input.pinned, userId: user.id },
+        "[CONV] pinned status updated",
+      );
+      return updated;
+    }),
+
+  count: protectedProcedure
+    .input(
+      z
+        .object({
+          search: z.string().trim().max(200).optional(),
+          mode: chatModeSchema.optional(),
+          pinnedOnly: z.boolean().default(false),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const user = ctx.user as AuthedUser;
+      const count = await prisma.conversation.count({
+        where: {
+          userId: user.id,
+          deletedAt: null,
+          ...(input?.pinnedOnly ? { pinned: true } : {}),
+          ...(input?.search
+            ? { title: { contains: input.search, mode: Prisma.QueryMode.insensitive } }
+            : {}),
+          ...(input?.mode
+            ? { mode: input.mode === "standard" ? "STANDARD" : "AGENTIC" }
+            : {}),
+        },
+      });
+      return { count };
+    }),
+
+  stats: protectedProcedure.query(async ({ ctx }) => {
+    const user = ctx.user as AuthedUser;
+    const [total, pinned, deleted, messageAggregate] = await Promise.all([
+      prisma.conversation.count({
+        where: { userId: user.id, deletedAt: null },
+      }),
+      prisma.conversation.count({
+        where: { userId: user.id, deletedAt: null, pinned: true },
+      }),
+      prisma.conversation.count({
+        where: { userId: user.id, deletedAt: { not: null } },
+      }),
+      prisma.message.count({
+        where: { conversation: { userId: user.id, deletedAt: null } },
+      }),
+    ]);
+    return {
+      totalConversations: total,
+      pinnedConversations: pinned,
+      deletedConversations: deleted,
+      totalMessages: messageAggregate,
+    };
+  }),
+
+  exportAll: protectedProcedure.query(async ({ ctx }) => {
+    const user = ctx.user as AuthedUser;
+    const conversations = await prisma.conversation.findMany({
+      where: { userId: user.id, deletedAt: null },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        messages: {
+          orderBy: { createdAt: "asc" },
+          select: { role: true, content: true, createdAt: true },
+        },
+      },
+    });
+
+    const documentParts: string[] = [
+      `# Behörden-Bot Complete Export`,
+      `Exported at: ${new Date().toISOString()}`,
+      `Total Conversations: ${conversations.length}`,
+      `---\n`,
+    ];
+
+    for (const conv of conversations) {
+      documentParts.push(
+        `## ${conv.title ?? "Untitled Conversation"}`,
+        `- ID: ${conv.id}`,
+        `- Mode: ${conv.mode}`,
+        `- Updated: ${conv.updatedAt.toISOString()}`,
+        "",
+      );
+      for (const msg of conv.messages) {
+        documentParts.push(`**${msg.role}:** ${msg.content}\n`);
+      }
+      documentParts.push("---\n");
+    }
+
+    return { markdown: documentParts.join("\n") };
+  }),
 });

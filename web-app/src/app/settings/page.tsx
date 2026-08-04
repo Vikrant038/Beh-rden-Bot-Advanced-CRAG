@@ -2,6 +2,7 @@
 
 import { signOut, useSession } from "next-auth/react";
 import { Contrast, LogOut, MousePointer2, Type } from "lucide-react";
+import { BackButton } from "@/components/ui/back-button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
 import {
@@ -17,6 +18,7 @@ export default function SettingsPage() {
 
   return (
     <div id="main" className="mx-auto max-w-2xl space-y-6 px-4 py-8">
+      <BackButton href="/chat" label="Back to chat" />
       <h1 className="text-2xl font-semibold">Settings</h1>
 
       <section className="rounded-2xl border border-border bg-surface p-5">
@@ -111,15 +113,24 @@ export default function SettingsPage() {
 
       <section className="rounded-2xl border border-border bg-surface p-5">
         <h2 className="mb-1 text-sm font-semibold">Account</h2>
-        <p className="mb-3 text-sm text-muted">Sign out of Behoerden-Bot on this device.</p>
-        <button
-          type="button"
-          onClick={() => void signOut({ callbackUrl: "/" })}
-          className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm transition hover:bg-surface-hover"
-        >
-          <LogOut className="h-4 w-4" />
-          Sign out
-        </button>
+        {user ? (
+          <>
+            <p className="mb-3 text-sm text-muted">Sign out of Behoerden-Bot on this device.</p>
+            <button
+              type="button"
+              onClick={() => void signOut({ callbackUrl: "/" })}
+              className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm transition hover:bg-surface-hover"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </button>
+          </>
+        ) : (
+          <p className="text-sm text-muted">
+            You&apos;re browsing as a guest — your conversations stay on this device. Use the
+            sidebar&apos;s “Leave guest mode” to end this session, or sign in above to keep your data.
+          </p>
+        )}
       </section>
     </div>
   );

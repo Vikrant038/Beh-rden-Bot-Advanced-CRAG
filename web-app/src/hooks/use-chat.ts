@@ -14,17 +14,22 @@ const RETRY_BACKOFF_MS = 500;
 
 export interface UseChatOptions {
   conversationId: string | null;
-  onNotFound?: () => void;
 }
 
 export interface UseChatReturn {
   messages: ChatMessage[];
   isStreaming: boolean;
+  /** True while the initial getById fetch is in flight. */
+  isLoading: boolean;
+  /** True when the conversation 404'd or the user lacks access. */
+  notFound: boolean;
   status: PipelineStage;
   error: string | null;
+  /** Transient, non-fatal progress text (e.g. an automatic retry in flight). */
+  notice: string | null;
   disambiguationOptions: string[];
   sendMessage: (query: string, mode?: ChatMode) => Promise<void>;
-  regenerate: () => Promise<void>;
+  regenerate: (mode?: ChatMode) => Promise<void>;
   stop: () => void;
   resetMessages: () => void;
 }
@@ -63,18 +68,24 @@ function sleep(ms: number): Promise<void> {
  * Transient stream failures (network / 5xx) are retried up to MAX_STREAM_RETRIES
  * times with exponential backoff before surfacing an error to the user.
  */
-export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChatReturn {
+export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
   const utils = api.useUtils();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<PipelineStage>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [disambiguationOptions, setDisambiguationOptions] = useState<string[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [notFound, setNotFound] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const currentConvIdRef = useRef<string | null>(null);
+  // The server persists the user message and bumps updatedAt before the first
+  // status event; refresh the sidebar list once per send so the conversation
+  // moves to the top / updates its count promptly instead of only after the
+  // whole stream finishes.
+  const listRefreshedRef = useRef(false);
 
   const regenerateMutation = api.chat.regenerate.useMutation();
-  const savePartialMutation = api.chat.savePartial.useMutation();
 
   const {
     data: conversation,
@@ -92,64 +103,77 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
         setDisambiguationOptions([]);
         currentConvIdRef.current = conversation.id;
       }
+      setNotFound(false);
       setStatus("idle");
     }
   }, [conversation]);
 
   useEffect(() => {
-    // Only redirect if query is finished and returned null or errored
+    // A finished query that returned null or errored means the conversation is
+    // gone or inaccessible. We surface a notFound flag instead of navigating —
+    // a redirect loop here is what used to spawn a fresh empty conversation on
+    // every cycle (see /chat lazy-create).
     if (!isLoading && conversationId && (conversation === null || isError)) {
-      onNotFound?.();
+      setNotFound(true);
     }
-  }, [conversation, isLoading, isError, conversationId, onNotFound]);
+  }, [conversation, isLoading, isError, conversationId]);
 
-  const handleEvent = useCallback((event: ChatStreamEvent) => {
-    switch (event.type) {
-      case "status":
-        setStatus(mapChatStageToPipeline(event.stage));
-        break;
-      case "token":
-        setMessages((prev) =>
-          prev.map((message) =>
-            message.id === STREAMING_ID
-              ? { ...message, content: message.content + event.content }
-              : message,
-          ),
-        );
-        break;
-      case "disambiguation":
-        setMessages((prev) => prev.filter((message) => message.id !== STREAMING_ID));
-        setDisambiguationOptions(event.options);
-        setStatus("idle");
-        break;
-      case "done":
-        setMessages((prev) =>
-          prev.map((message) =>
-            message.id === STREAMING_ID
-              ? {
-                  id: event.messageId,
-                  role: "ASSISTANT",
-                  content: message.content,
-                  sources: event.sources,
-                  metadata: event.metadata,
-                  createdAt: nowIso(),
-                }
-              : message,
-          ),
-        );
-        setStatus("done");
-        break;
-      case "error":
-        setError(event.message);
-        setMessages((prev) =>
-          prev.map((message) =>
-            message.id === STREAMING_ID ? { ...message, content: event.message } : message,
-          ),
-        );
-        setStatus("done");
-        break;
-    }
-  }, []);
+  const handleEvent = useCallback(
+    (event: ChatStreamEvent) => {
+      switch (event.type) {
+        case "status":
+          if (!listRefreshedRef.current) {
+            listRefreshedRef.current = true;
+            void utils.conversation.list.invalidate();
+          }
+          setStatus(mapChatStageToPipeline(event.stage));
+          break;
+        case "token":
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === STREAMING_ID
+                ? { ...message, content: message.content + event.content }
+                : message,
+            ),
+          );
+          break;
+        case "disambiguation":
+          setMessages((prev) => prev.filter((message) => message.id !== STREAMING_ID));
+          setDisambiguationOptions(event.options);
+          setStatus("idle");
+          break;
+        case "done":
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === STREAMING_ID
+                ? {
+                    id: event.messageId,
+                    role: "ASSISTANT",
+                    content: message.content,
+                    sources: event.sources,
+                    metadata: event.metadata,
+                    createdAt: nowIso(),
+                  }
+                : message,
+            ),
+          );
+          setStatus("done");
+          break;
+        case "error":
+          setError(event.message);
+          // The server follows an `error` event with the same text as `token`
+          // chunks, so clear the bubble here rather than writing the message in —
+          // otherwise the apology is appended onto itself and shown twice.
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === STREAMING_ID ? { ...message, content: "" } : message,
+            ),
+          );
+          break;
+      }
+    },
+    [utils],
+  );
 
   const consumeStream = useCallback(
     async (payload: { query: string; mode: ChatMode; bypassCache?: boolean }) => {
@@ -239,12 +263,16 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
       }
 
       setError(null);
+      setNotice(null);
       setDisambiguationOptions([]);
+      listRefreshedRef.current = false;
 
       const userMessage: ChatMessage = {
         id: `user-${Date.now()}`,
         role: "USER",
         content: trimmed,
+        // Record the mode so a later regenerate() can reuse it.
+        metadata: { mode },
         createdAt: nowIso(),
       };
       const placeholder: ChatMessage = {
@@ -258,6 +286,10 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
       let lastErr: unknown;
       for (let attempt = 0; attempt <= MAX_STREAM_RETRIES; attempt++) {
         if (attempt > 0) {
+          // Re-arm the sidebar refresh for the retry: the previous attempt may
+          // have already consumed its first status event, and a fresh attempt
+          // bumps updatedAt again on the server — the list should refresh again.
+          listRefreshedRef.current = false;
           // Reset the streaming placeholder content between retries so tokens
           // don't double-accumulate if a partial stream succeeded then failed.
           setMessages((prev) =>
@@ -277,11 +309,12 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
           if (!isRetryableError(err) || attempt === MAX_STREAM_RETRIES) {
             break; // non-retryable or exhausted — stop
           }
-          // Transient error — log and retry
-          setError(`Retrying… (attempt ${attempt + 1}/${MAX_STREAM_RETRIES})`);
+          // Transient error — surface as a non-fatal notice, not an error alert.
+          setNotice(`Retrying… (attempt ${attempt + 1}/${MAX_STREAM_RETRIES})`);
         }
       }
 
+      setNotice(null);
       if (lastErr) {
         const message = lastErr instanceof Error ? lastErr.message : "Streaming request failed";
         setError(message);
@@ -299,82 +332,81 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
     [conversationId, consumeStream, invalidateConversation, isStreaming],
   );
 
-  const regenerate = useCallback(async () => {
-    if (!conversationId || isStreaming) {
-      return;
-    }
-
-    setError(null);
-    let result: { userMessageId: string; query: string; conversationId: string };
-    try {
-      result = await regenerateMutation.mutateAsync({ conversationId });
-    } catch {
-      setError("Could not regenerate the previous response.");
-      return;
-    }
-
-    setMessages((prev) => {
-      const next = [...prev];
-      for (let i = next.length - 1; i >= 0; i -= 1) {
-        if (next[i].role === "ASSISTANT") {
-          next.splice(i, 1);
-          break;
-        }
+  const regenerate = useCallback(
+    async (mode?: ChatMode) => {
+      if (!conversationId || isStreaming) {
+        return;
       }
-      return next;
-    });
 
-    const lastUser = messages.filter((message) => message.role === "USER").at(-1);
-    const mode = lastUser?.metadata?.mode ?? "agentic";
+      setError(null);
+      setNotice(null);
+      listRefreshedRef.current = false;
+      let result: { userMessageId: string; query: string; conversationId: string };
+      try {
+        result = await regenerateMutation.mutateAsync({ conversationId });
+      } catch {
+        setError("Could not regenerate the previous response.");
+        return;
+      }
 
-    setMessages((prev) => [
-      ...prev,
-      { id: STREAMING_ID, role: "ASSISTANT", content: "", createdAt: nowIso() },
-    ]);
+      setMessages((prev) => {
+        const next = [...prev];
+        for (let i = next.length - 1; i >= 0; i -= 1) {
+          if (next[i].role === "ASSISTANT") {
+            next.splice(i, 1);
+            break;
+          }
+        }
+        return next;
+      });
 
-    await consumeStream({ query: result.query, mode, bypassCache: true });
-    await invalidateConversation();
-  }, [
-    conversationId,
-    consumeStream,
-    invalidateConversation,
-    isStreaming,
-    messages,
-    regenerateMutation,
-  ]);
+      const lastUser = messages.filter((message) => message.role === "USER").at(-1);
+      const effectiveMode = mode ?? lastUser?.metadata?.mode ?? "agentic";
+
+      setMessages((prev) => [
+        ...prev,
+        { id: STREAMING_ID, role: "ASSISTANT", content: "", createdAt: nowIso() },
+      ]);
+
+      try {
+        await consumeStream({ query: result.query, mode: effectiveMode, bypassCache: true });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Regenerate failed";
+        setError(message);
+        setMessages((prev) => prev.filter((msg) => msg.id !== STREAMING_ID));
+      }
+      await invalidateConversation();
+    },
+    [
+      conversationId,
+      consumeStream,
+      invalidateConversation,
+      isStreaming,
+      messages,
+      regenerateMutation,
+    ],
+  );
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
 
-    // Capture whatever tokens arrived before the abort so we can persist them.
-    let partialContent = "";
+    // Detach the streaming placeholder so the tokens received so far stay
+    // visible for this session.
     setMessages((prev) =>
-      prev.map((message) => {
-        if (message.id === STREAMING_ID) {
-          partialContent = message.content;
-          return { ...message, id: `stopped-${Date.now()}`, createdAt: nowIso() };
-        }
-        return message;
-      }),
+      prev.map((message) =>
+        message.id === STREAMING_ID
+          ? { ...message, id: `stopped-${Date.now()}`, createdAt: nowIso() }
+          : message,
+      ),
     );
 
     setStatus("done");
 
-    // Persist the partial message so it survives a conversation reload.
-    // Fire-and-forget: a failure here is non-fatal (the message is still
-    // visible in the current session via local state).
-    if (conversationId && partialContent.trim()) {
-      void savePartialMutation
-        .mutateAsync({ conversationId, content: partialContent })
-        .then(() => invalidateConversation())
-        .catch(() => {
-          // Persistence failed — the partial content remains in local state
-          // for the current session but won't survive a reload.
-        });
-    } else {
-      void invalidateConversation();
-    }
-  }, [conversationId, invalidateConversation, savePartialMutation]);
+    // No partial write here: the pipeline persists the complete answer before it
+    // streams a single token, so the reloaded conversation already holds the
+    // full text. Writing the truncated copy too would create a duplicate row.
+    void invalidateConversation();
+  }, [invalidateConversation]);
 
   const resetMessages = useCallback(() => {
     setMessages([]);
@@ -386,8 +418,11 @@ export function useChat({ conversationId, onNotFound }: UseChatOptions): UseChat
   return {
     messages,
     isStreaming,
+    isLoading,
+    notFound,
     status,
     error,
+    notice,
     disambiguationOptions,
     sendMessage,
     regenerate,

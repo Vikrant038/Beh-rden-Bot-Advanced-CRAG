@@ -65,4 +65,43 @@ export const sourceRouter = router({
       const nextCursor = rows.length > input.limit ? rows[input.limit]?.id : undefined;
       return { items, nextCursor: nextCursor ?? null };
     }),
+
+  stats: protectedProcedure.query(async () => {
+    const [totalSources, totalChunks, statusGroups] = await Promise.all([
+      prisma.document.count(),
+      prisma.documentChunk.count(),
+      prisma.document.groupBy({
+        by: ["status"],
+        _count: { _all: true },
+      }),
+    ]);
+    const synced = statusGroups.find((g) => g.status === "SYNCED")?._count._all ?? 0;
+    const failed = statusGroups.find((g) => g.status === "FAILED")?._count._all ?? 0;
+    const pending = statusGroups.find((g) => g.status === "PENDING" || g.status === "INGESTING")?._count._all ?? 0;
+    return {
+      totalSources,
+      totalChunks,
+      syncedSources: synced,
+      failedSources: failed,
+      pendingSources: pending,
+    };
+  }),
+
+  searchChunks: protectedProcedure
+    .input(
+      z.object({
+        query: z.string().trim().min(1).max(200),
+        limit: z.number().int().min(1).max(50).default(20),
+      }),
+    )
+    .query(async ({ input }) => {
+      const chunks = await prisma.documentChunk.findMany({
+        where: {
+          text: { contains: input.query, mode: "insensitive" },
+        },
+        take: input.limit,
+        select: { id: true, sourceName: true, sourceUrl: true, text: true, createdAt: true },
+      });
+      return { items: chunks };
+    }),
 });

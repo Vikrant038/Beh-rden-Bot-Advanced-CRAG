@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Eye,
   FileText,
   Link as LinkIcon,
   RefreshCw,
@@ -14,6 +17,16 @@ import {
 import { api } from "@/lib/trpc/client";
 import { formatRelativeTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/lib/toast";
 
 interface DocumentItem {
   id: string;
@@ -23,6 +36,8 @@ interface DocumentItem {
   updatedAt: string;
   chunkCount: number;
 }
+
+type SortKey = "updated" | "title" | "chunks";
 
 const MAX_UI_PDF_MB = 4;
 const STALE_AFTER_MS = 30 * 86_400_000;
@@ -44,8 +59,81 @@ function IndeterminateBar({ label }: { label: string }) {
   );
 }
 
+/**
+ * 10.3 — Detail modal for a document: title/url/status plus its first chunks.
+ */
+function DocumentPreviewModal({
+  document,
+  onClose,
+}: {
+  document: DocumentItem;
+  onClose: () => void;
+}) {
+  const chunks = api.source.getChunks.useInfiniteQuery(
+    { documentId: document.id, limit: 10 },
+    { getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined },
+  );
+  const items = chunks.data?.pages.flatMap((page) => page.items) ?? [];
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="truncate">{document.title}</DialogTitle>
+          <DialogDescription className="truncate">
+            <a
+              href={document.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent underline-offset-2 hover:underline"
+            >
+              {document.url || "no URL"}
+            </a>
+            {" · "}
+            {document.chunkCount} child chunks · updated {formatRelativeTime(document.updatedAt)}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+          {chunks.isLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ) : items.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted">
+              This document has no indexed chunks yet.
+            </p>
+          ) : (
+            items.map((chunk) => (
+              <div key={chunk.id} className="rounded-xl border border-border bg-background p-3">
+                <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed">
+                  {chunk.text}
+                </p>
+                <p className="mt-1.5 text-[10px] text-muted">#{chunk.id}</p>
+              </div>
+            ))
+          )}
+        </div>
+        {chunks.hasNextPage && (
+          <button
+            type="button"
+            onClick={() => void chunks.fetchNextPage()}
+            disabled={chunks.isFetchingNextPage}
+            className="mt-3 w-full rounded-lg border border-border py-2 text-xs text-muted transition hover:bg-surface-hover disabled:opacity-60"
+          >
+            {chunks.isFetchingNextPage ? "Loading…" : "Load more chunks"}
+          </button>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function DocumentManager() {
   const utils = api.useUtils();
+  const { toast } = useToast();
   const [url, setUrl] = useState("");
   const [ingestFeedback, setIngestFeedback] = useState<string | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -54,12 +142,17 @@ export function DocumentManager() {
   const [pdfFeedback, setPdfFeedback] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortKey>("updated");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
   const [confirmClearCache, setConfirmClearCache] = useState(false);
 
   const documents = api.source.list.useQuery();
   const ingestMutation = api.document.ingestUrl.useMutation();
   const syncMutation = api.document.sync.useMutation();
   const deleteMutation = api.document.delete.useMutation();
+  const deleteManyMutation = api.document.deleteMany.useMutation();
   const clearCacheMutation = api.admin.clearCache.useMutation();
 
   const refresh = () => {
@@ -70,10 +163,39 @@ export function DocumentManager() {
     void utils.admin.recentQueries.invalidate();
   };
 
-  const filtered =
-    documents.data?.filter((document) =>
+  const filtered = useMemo(() => {
+    const base = documents.data ?? [];
+    const searched = base.filter((document) =>
       document.title.toLowerCase().includes(search.trim().toLowerCase()),
-    ) ?? [];
+    );
+    return [...searched].sort((a, b) => {
+      if (sort === "title") {
+        return a.title.localeCompare(b.title);
+      }
+      if (sort === "chunks") {
+        return b.chunkCount - a.chunkCount;
+      }
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+  }, [documents.data, search, sort]);
+
+  const isAllSelected = filtered.length > 0 && filtered.every((doc) => selected.has(doc.id));
+
+  const toggleSelect = (id: string) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelected(isAllSelected ? new Set() : new Set(filtered.map((doc) => doc.id)));
+  };
 
   const handleIngest = () => {
     const trimmed = url.trim();
@@ -120,22 +242,47 @@ export function DocumentManager() {
     deleteMutation.mutate(
       { id: document.id },
       {
-        onSuccess: () => refresh(),
+        onSuccess: () => {
+          setSelected((current) => {
+            const next = new Set(current);
+            next.delete(document.id);
+            return next;
+          });
+          refresh();
+        },
+      },
+    );
+  };
+
+  const handleBulkDelete = () => {
+    const ids = [...selected];
+    if (ids.length === 0) {
+      return;
+    }
+    deleteManyMutation.mutate(
+      { ids },
+      {
+        onSuccess: () => {
+          setSelected(new Set());
+          setConfirmBulkDelete(false);
+          toast({ title: `${ids.length} documents deleted`, variant: "success" });
+          refresh();
+        },
+        onError: (error) => {
+          toast({ title: `Could not delete: ${error.message}`, variant: "error" });
+        },
       },
     );
   };
 
   const handleClearCache = () => {
-    if (!confirmClearCache) {
-      setConfirmClearCache(true);
-      window.setTimeout(() => setConfirmClearCache(false), 4000);
-      return;
-    }
     clearCacheMutation.mutate(undefined, {
       onSuccess: () => {
         setConfirmClearCache(false);
+        toast({ title: "Semantic cache cleared", variant: "success" });
         refresh();
       },
+      onError: () => toast({ title: "Could not clear cache", variant: "error" }),
     });
   };
 
@@ -263,6 +410,8 @@ export function DocumentManager() {
           </button>
         </div>
         {syncPending ? <IndeterminateBar label="Syncing all documents…" /> : null}
+        {/* 10.2 — URL ingest now shows an indeterminate progress bar too. */}
+        {ingestMutation.isPending ? <IndeterminateBar label="Ingesting URL…" /> : null}
         {ingestFeedback && (
           <p
             className={cn(
@@ -296,10 +445,8 @@ export function DocumentManager() {
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
           className={cn(
-            "flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed p-8 text-center transition",
-            dragging
-              ? "border-primary/70 bg-primary/5"
-              : "border-glass-border hover:border-primary/60",
+            "relative flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed p-8 text-center transition",
+            dragging ? "border-primary/70 bg-primary/5" : "border-glass-border hover:border-primary/60",
           )}
         >
           <UploadCloud className="h-8 w-8 text-muted" />
@@ -317,20 +464,20 @@ export function DocumentManager() {
           <p className="text-xs text-muted">
             Up to 4 MB — text-based PDFs only (scanned pages cannot be read)
           </p>
-          {pdfFile && (
+          {pdfFile && !uploading && (
             <button
               type="button"
               onClick={uploadPdf}
-              disabled={uploading}
-              className="text-xs text-accent underline-offset-2 hover:underline"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition hover:bg-primary-hover active:scale-[0.98]"
             >
-              {uploading ? "Uploading & embedding…" : `Upload ${pdfFile.name}`}
+              <UploadCloud className="h-3.5 w-3.5" />
+              Upload {pdfFile.name}
             </button>
           )}
           {uploading ? (
             <div className="w-full max-w-xs">
               <div className="flex items-center justify-between text-[10px] text-muted">
-                <span>Uploading</span>
+                <span>Uploading & embedding…</span>
                 <span className="tabular-nums">{uploadPercentLabel ?? "…"}</span>
               </div>
               <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-hover">
@@ -351,11 +498,23 @@ export function DocumentManager() {
               {pdfFeedback}
             </p>
           )}
+
+          {/* 10.8 — Full drag & drop overlay */}
+          {dragging ? (
+            <div
+              className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-primary bg-background/80 backdrop-blur-sm"
+              aria-hidden="true"
+            >
+              <UploadCloud className="h-10 w-10 text-primary" />
+              <p className="text-sm font-semibold">Drop to upload</p>
+              <p className="text-xs text-muted">PDF up to 4 MB</p>
+            </div>
+          ) : null}
         </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-1 items-center gap-3">
+        <div className="flex flex-1 flex-wrap items-center gap-3">
           <h2 className="shrink-0 text-sm font-semibold">
             Knowledge base ({filtered.length}/{documents.data?.length ?? 0} documents)
           </h2>
@@ -370,22 +529,44 @@ export function DocumentManager() {
               className="w-full rounded-xl border border-border bg-background py-2 pl-8 pr-3 text-sm outline-none transition placeholder:text-muted focus:border-primary"
             />
           </div>
+          {/* 10.6 — Sort control */}
+          <label className="sr-only" htmlFor="document-sort">
+            Sort documents
+          </label>
+          <select
+            id="document-sort"
+            value={sort}
+            onChange={(event) => setSort(event.target.value as SortKey)}
+            className="rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none transition focus:border-primary"
+          >
+            <option value="updated">Sort: recently updated</option>
+            <option value="title">Sort: title</option>
+            <option value="chunks">Sort: most chunks</option>
+          </select>
         </div>
-        <button
-          type="button"
-          onClick={handleClearCache}
-          disabled={clearCacheMutation.isPending}
-          className={cn(
-            "text-xs underline-offset-2 transition hover:underline",
-            confirmClearCache
-              ? "font-medium text-destructive hover:text-destructive"
-              : "text-muted hover:text-destructive",
-          )}
-        >
-          {confirmClearCache
-            ? "Click again to confirm — clear cache"
-            : "Clear semantic cache"}
-        </button>
+        <div className="flex items-center gap-3">
+          {/* 10.4 — Bulk delete entry point */}
+          {selected.size > 0 ? (
+            <button
+              type="button"
+              onClick={() => setConfirmBulkDelete(true)}
+              disabled={deleteManyMutation.isPending}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-destructive/15 px-3 py-2 text-xs font-medium text-destructive transition hover:bg-destructive/25 disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete selected ({selected.size})
+            </button>
+          ) : null}
+          {/* 10.9 — Clear cache via confirmation dialog (replaces two-click inline) */}
+          <button
+            type="button"
+            onClick={() => setConfirmClearCache(true)}
+            disabled={clearCacheMutation.isPending}
+            className="text-xs text-muted underline-offset-2 transition hover:text-destructive hover:underline"
+          >
+            {clearCacheMutation.isPending ? "Clearing…" : "Clear semantic cache"}
+          </button>
+        </div>
       </div>
 
       {documents.isLoading ? (
@@ -407,11 +588,30 @@ export function DocumentManager() {
         <ul className="space-y-2">
           {filtered.map((document) => {
             const status = documentStatus(document.updatedAt);
+            const checked = selected.has(document.id);
             return (
               <li
                 key={document.id}
-                className="glass-card group flex items-center gap-3 rounded-xl px-4 py-3"
+                className={cn(
+                  "glass-card group flex items-center gap-3 rounded-xl px-4 py-3",
+                  checked && "border-primary/50",
+                )}
               >
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={checked}
+                  aria-label={`Select ${document.title}`}
+                  onClick={() => toggleSelect(document.id)}
+                  className={cn(
+                    "grid h-6 w-6 shrink-0 place-items-center rounded-md border transition",
+                    checked
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border hover:border-primary",
+                  )}
+                >
+                  {checked ? <CheckCircle2 className="h-4 w-4" /> : null}
+                </button>
                 <FileText className="h-4 w-4 shrink-0 text-accent" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -448,10 +648,19 @@ export function DocumentManager() {
                   <span className="hidden sm:inline">{formatRelativeTime(document.updatedAt)}</span>
                   <button
                     type="button"
+                    aria-label={`Preview ${document.title}`}
+                    title="Preview chunks"
+                    onClick={() => setPreviewDoc(document)}
+                    className="grid min-h-11 min-w-11 place-items-center rounded-lg p-2 text-muted transition hover:bg-surface-hover hover:text-foreground"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
                     aria-label={`Delete ${document.title}`}
                     onClick={() => handleDelete(document)}
                     disabled={deleteMutation.isPending}
-                    className="rounded-lg p-1.5 text-muted transition hover:bg-surface-hover hover:text-destructive focus-visible:ring-2 focus-visible:ring-primary"
+                    className="grid min-h-11 min-w-11 place-items-center rounded-lg p-2 text-muted transition hover:bg-surface-hover hover:text-destructive focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -461,6 +670,52 @@ export function DocumentManager() {
           })}
         </ul>
       )}
+
+      <div className="flex items-center justify-between text-xs text-muted">
+        <span>
+          {selected.size > 0 ? `${selected.size} selected` : `${filtered.length} documents`}
+        </span>
+        {filtered.length > 0 ? (
+          <button
+            type="button"
+            onClick={toggleSelectAll}
+            className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 transition hover:bg-surface-hover"
+          >
+            {isAllSelected ? (
+              <ChevronUp className="h-3 w-3" />
+            ) : (
+              <ChevronDown className="h-3 w-3" />
+            )}
+            {isAllSelected ? "Clear all" : "Select all"}
+          </button>
+        ) : null}
+      </div>
+
+      {/* 10.4 — Bulk delete confirmation */}
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        onOpenChange={setConfirmBulkDelete}
+        title={`Delete ${selected.size} documents?`}
+        description="The documents and all their chunks will be permanently removed and the semantic cache invalidated. This cannot be undone."
+        confirmLabel={`Delete ${selected.size}`}
+        isPending={deleteManyMutation.isPending}
+        onConfirm={handleBulkDelete}
+      />
+
+      {/* 10.9 — Clear cache confirmation */}
+      <ConfirmDialog
+        open={confirmClearCache}
+        onOpenChange={setConfirmClearCache}
+        title="Clear semantic cache?"
+        description="All cached answers will be evicted and the next matching queries will run the full pipeline again. This cannot be undone."
+        confirmLabel="Clear cache"
+        isPending={clearCacheMutation.isPending}
+        onConfirm={handleClearCache}
+      />
+
+      {previewDoc ? (
+        <DocumentPreviewModal document={previewDoc} onClose={() => setPreviewDoc(null)} />
+      ) : null}
     </div>
   );
 }

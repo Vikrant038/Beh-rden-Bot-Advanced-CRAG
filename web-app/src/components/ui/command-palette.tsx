@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/trpc/client";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/lib/toast";
+import { GUEST_CONVERSATION_LIMIT, GUEST_LIMIT_REACHED_CODE } from "@/lib/guest";
 
 interface Command {
   id: string;
@@ -31,6 +33,7 @@ interface Command {
 export function CommandPalette() {
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
+  const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -54,8 +57,22 @@ export function CommandPalette() {
         icon: Plus,
         keywords: "new chat conversation start",
         run: async () => {
-          const conversation = await createMutation.mutateAsync({});
-          router.push(`/chat/${conversation.id}`);
+          try {
+            const conversation = await createMutation.mutateAsync({});
+            router.push(`/chat/${conversation.id}`);
+          } catch (error) {
+            const code = (error as { data?: { code?: string } }).data?.code;
+            if (code === GUEST_LIMIT_REACHED_CODE) {
+              toast({
+                title: "Guest limit reached",
+                description: `Free browsing includes ${GUEST_CONVERSATION_LIMIT} conversations. Sign in to keep chatting.`,
+                variant: "warning",
+                action: { label: "Sign in", onClick: () => router.push("/login") },
+              });
+            } else {
+              toast({ title: "Could not start a new chat", variant: "error" });
+            }
+          }
         },
       },
       {
@@ -112,7 +129,7 @@ export function CommandPalette() {
     });
 
     return base;
-  }, [createMutation, resolvedTheme, router, setTheme]);
+  }, [createMutation, resolvedTheme, router, setTheme, toast]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

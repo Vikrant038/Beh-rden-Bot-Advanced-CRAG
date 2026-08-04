@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -11,6 +13,7 @@ import {
   List,
   RefreshCw,
   Search,
+  ShieldCheck,
 } from "lucide-react";
 import { api } from "@/lib/trpc/client";
 import { formatRelativeTime } from "@/lib/utils";
@@ -61,7 +64,45 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
+/**
+ * 8.11 — Honest relevance score for a chunk against the active within-document
+ * search. There is no persisted retrieval score on DocumentChunk rows, so when
+ * a search is active we derive a deterministic relevance score from term
+ * coverage (weighted) plus a proximity bonus for matches near the chunk start.
+ * Returns 0 when there is no query.
+ */
+function chunkRelevanceScore(text: string, query: string): number | null {
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) {
+    return null;
+  }
+  const lower = text.toLowerCase();
+  const matching = terms.filter((term) => lower.includes(term));
+  const coverage = matching.length / terms.length;
+  const firstHit = matching.length
+    ? Math.min(...matching.map((term) => lower.indexOf(term)))
+    : lower.length;
+  const position = lower.length > 0 ? 1 - firstHit / Math.max(1, lower.length) : 0;
+  // Coverage dominates; position breaks ties so earlier matches win.
+  return Math.min(1, coverage * 0.7 + position * 0.3);
+}
+
+/**
+ * 8.5 — Step through individual chunks of the selected document.
+ */
+function useChunkNavigator(count: number) {
+  const [index, setIndex] = useState(0);
+  return {
+    index,
+    // Clamp into [0, max(0, count - 1)] so an empty list never yields -1.
+    clamp: (next: number) => setIndex(Math.min(Math.max(0, next), Math.max(0, count - 1))),
+    select: setIndex,
+  };
+}
+
 export function SourceBrowser() {
+  const router = useRouter();
+  const { data: session } = useSession();
   const utils = api.useUtils();
   const { toast } = useToast();
   const [selected, setSelected] = useState<SourceListItem | null>(null);
@@ -91,14 +132,42 @@ export function SourceBrowser() {
   );
 
   const selectedIndex = selected ? items.findIndex((item) => item.id === selected.id) : -1;
-  const lastSynced = documents.data?.reduce((latest, doc) => {
-    return new Date(doc.updatedAt) > new Date(latest) ? doc.updatedAt : latest;
-  }, "");
+  const lastSynced = useMemo(() => {
+    const docs = documents.data ?? [];
+    if (docs.length === 0) return null;
+    let maxMs = 0;
+    let latestIso = "";
+    for (const doc of docs) {
+      const ms = new Date(doc.updatedAt).getTime();
+      if (ms > maxMs) {
+        maxMs = ms;
+        latestIso = doc.updatedAt;
+      }
+    }
+    return latestIso || null;
+  }, [documents.data]);
   const totalChunks = documents.data?.reduce((sum, doc) => sum + doc.chunkCount, 0) ?? 0;
 
   const allChunks = chunks.data?.pages.flatMap((page) => page.items) ?? [];
   const visibleChunks = allChunks.filter((chunk) =>
     chunk.text.toLowerCase().includes(chunkSearch.trim().toLowerCase()),
+  );
+  const chunkNavigator = useChunkNavigator(visibleChunks.length);
+  // Keep the navigator in bounds when search/filtering shrinks the list.
+  useEffect(() => {
+    if (chunkNavigator.index > Math.max(0, visibleChunks.length - 1)) {
+      chunkNavigator.select(Math.max(0, visibleChunks.length - 1));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleChunks.length]);
+
+  const scoredChunks = useMemo(
+    () =>
+      visibleChunks.map((chunk) => ({
+        chunk,
+        score: chunkRelevanceScore(chunk.text, chunkSearch),
+      })),
+    [visibleChunks, chunkSearch],
   );
 
   const refresh = () => {
@@ -230,6 +299,18 @@ export function SourceBrowser() {
                   : "Nothing indexed yet. Add documents from the admin panel."
               }
               icon={FileText}
+              action={
+                session?.user?.role === "ADMIN" && !documents.data?.length ? (
+                  <button
+                    type="button"
+                    onClick={() => router.push("/admin/documents")}
+                    className="mt-1 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition hover:bg-primary-hover"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Add documents in the admin panel
+                  </button>
+                ) : undefined
+              }
               className="py-8"
             />
           ) : view === "grid" ? (
@@ -332,7 +413,7 @@ export function SourceBrowser() {
                     }}
                     disabled={selectedIndex <= 0}
                     aria-label="Previous document"
-                    className="grid h-9 w-9 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
+                    className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </button>
@@ -345,7 +426,7 @@ export function SourceBrowser() {
                     }}
                     disabled={selectedIndex < 0 || selectedIndex >= items.length - 1}
                     aria-label="Next document"
-                    className="grid h-9 w-9 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
+                    className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </button>
@@ -382,29 +463,81 @@ export function SourceBrowser() {
                   className="py-10"
                 />
               ) : (
-                <ul className="space-y-3">
-                  {visibleChunks.map((chunk) => (
-                    <li
-                      key={chunk.id}
-                      className="group rounded-xl border border-border bg-background p-4"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="text-sm leading-relaxed">
-                          {highlightMatches(chunk.text, chunkSearch)}
-                        </p>
+                <>
+                  <ul className="space-y-3">
+                    {scoredChunks.map(({ chunk, score }, listIndex) => (
+                      <li
+                        key={chunk.id}
+                        className={`group rounded-xl border p-4 transition ${
+                          listIndex === chunkNavigator.index
+                            ? "border-primary/60 bg-primary/5"
+                            : "border-border bg-background"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-sm leading-relaxed">
+                            {highlightMatches(chunk.text, chunkSearch)}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => void handleCopyChunk(chunk.text)}
+                            aria-label={`Copy chunk #${chunk.id}`}
+                            className="shrink-0 rounded-lg p-2 text-muted opacity-0 transition group-hover:opacity-100 hover:bg-surface-hover hover:text-foreground"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <p className="text-[10px] text-muted">#{chunk.id}</p>
+                          {score !== null ? (
+                            <div className="flex flex-1 items-center gap-1.5">
+                              <span
+                                className="h-1 flex-1 overflow-hidden rounded-full bg-border"
+                                role="img"
+                                aria-label={`Relevance ${Math.round(score * 100)}%`}
+                              >
+                                <span
+                                  className="block h-full rounded-full bg-accent"
+                                  style={{ width: `${Math.round(score * 100)}%` }}
+                                />
+                              </span>
+                              <span className="font-mono text-[10px] text-muted tabular-nums">
+                                {Math.round(score * 100)}%
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  {scoredChunks.length > 1 ? (
+                    <div className="mt-4 flex items-center justify-between gap-2">
+                      <p className="text-xs text-muted" aria-live="polite">
+                        Chunk {chunkNavigator.index + 1} of {scoredChunks.length}
+                      </p>
+                      <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => void handleCopyChunk(chunk.text)}
-                          aria-label={`Copy chunk #${chunk.id}`}
-                          className="shrink-0 rounded-lg p-1.5 text-muted opacity-0 transition group-hover:opacity-100 hover:bg-surface-hover hover:text-foreground"
+                          onClick={() => chunkNavigator.clamp(chunkNavigator.index - 1)}
+                          disabled={chunkNavigator.index <= 0}
+                          aria-label="Previous chunk"
+                          className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
                         >
-                          <Copy className="h-3.5 w-3.5" />
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => chunkNavigator.clamp(chunkNavigator.index + 1)}
+                          disabled={chunkNavigator.index >= scoredChunks.length - 1}
+                          aria-label="Next chunk"
+                          className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
+                        >
+                          <ChevronRight className="h-4 w-4" />
                         </button>
                       </div>
-                      <p className="mt-2 text-[10px] text-muted">#{chunk.id}</p>
-                    </li>
-                  ))}
-                </ul>
+                    </div>
+                  ) : null}
+                </>
               )}
               {chunks.hasNextPage && (
                 <button

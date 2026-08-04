@@ -5,13 +5,14 @@ import { NotFoundError, ValidationError } from "@/server/lib/errors";
 import { createLogger } from "@/server/lib/logger";
 import type { AuthedUser } from "@/server/trpc/t";
 import type { ChatMode } from "@/lib/chat/types";
+import { MAX_QUERY_LENGTH } from "@/lib/chat/types";
 import { chatModeSchema } from "@/server/routers/conversation";
 
 const logger = createLogger("chat-router");
 
 export const sendMessageSchema = z.object({
   conversationId: z.string().min(1),
-  query: z.string().trim().min(1).max(2000),
+  query: z.string().trim().min(1).max(MAX_QUERY_LENGTH),
   mode: chatModeSchema.default("agentic"),
 });
 
@@ -24,10 +25,6 @@ export interface RegenerateResult {
   userMessageId: string;
   query: string;
   conversationId: string;
-}
-
-export interface SavePartialResult {
-  messageId: string;
 }
 
 async function ensureOwnership(user: AuthedUser, conversationId: string) {
@@ -120,45 +117,48 @@ export const chatRouter = router({
       };
     }),
 
-  /**
-   * Persists a partial (user-stopped) assistant response to the database.
-   * Called by the client's stop() handler so truncated answers survive a
-   * conversation reload. Content is trimmed and capped at 10 000 chars to
-   * prevent oversized payloads from a very long partial stream.
-   * Silently no-ops (returns null messageId) when content is empty.
-   */
-  savePartial: protectedProcedure
+  feedback: protectedProcedure
     .input(
       z.object({
-        conversationId: z.string().min(1),
-        content: z.string().max(10_000),
+        messageId: z.string().min(1),
+        rating: z.enum(["UP", "DOWN"]).nullable(),
       }),
     )
-    .mutation(async ({ ctx, input }): Promise<SavePartialResult> => {
+    .mutation(async ({ ctx, input }) => {
       const user = ctx.user as AuthedUser;
-      await ensureOwnership(user, input.conversationId);
-
-      const trimmed = input.content.trim();
-      if (!trimmed) {
-        // Nothing streamed yet — no point persisting an empty message.
-        return { messageId: "" };
+      const message = await prisma.message.findUnique({
+        where: { id: input.messageId },
+        select: { id: true, conversation: { select: { userId: true } } },
+      });
+      if (!message || message.conversation.userId !== user.id) {
+        throw new NotFoundError("Message", input.messageId);
       }
 
-      const message = await prisma.message.create({
-        data: {
-          conversationId: input.conversationId,
-          role: "ASSISTANT",
-          content: trimmed,
-          metadata: { partial: true },
+      if (input.rating === null) {
+        await prisma.messageFeedback.deleteMany({
+          where: { messageId: input.messageId, userId: user.id },
+        });
+        return { rating: null };
+      }
+
+      const feedback = await prisma.messageFeedback.upsert({
+        where: {
+          messageId_userId: {
+            messageId: input.messageId,
+            userId: user.id,
+          },
         },
-        select: { id: true },
+        create: {
+          messageId: input.messageId,
+          userId: user.id,
+          rating: input.rating,
+        },
+        update: {
+          rating: input.rating,
+        },
+        select: { rating: true },
       });
 
-      logger.info(
-        { conversationId: input.conversationId, messageId: message.id },
-        "[CHAT] partial assistant message persisted",
-      );
-
-      return { messageId: message.id };
+      return { rating: feedback.rating };
     }),
 });

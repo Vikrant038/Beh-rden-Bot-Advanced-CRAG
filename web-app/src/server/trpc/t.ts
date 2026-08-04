@@ -1,8 +1,11 @@
 import { initTRPC, TRPCError } from "@trpc/server";
+import { Prisma } from "@prisma/client";
 import type { Session } from "next-auth";
 import { ZodError } from "zod";
 import { DomainError, ErrorCode } from "@/server/lib/errors";
 import type { Context } from "@/server/trpc/context";
+import { prisma } from "@/server/db";
+import { guestEmail } from "@/server/guest";
 
 const t = initTRPC.context<Context>().create({
   errorFormatter({ shape, error }) {
@@ -24,17 +27,43 @@ export const publicProcedure = t.procedure;
 export interface AuthedUser {
   id: string;
   role: "USER" | "ADMIN";
+  /** True when the request is a device-scoped guest (no real account). */
+  isGuest?: boolean;
 }
 
-const isAuthenticated = t.middleware(({ ctx, next }) => {
+const isAuthenticated = t.middleware(async ({ ctx, next }) => {
   const session = ctx.session as Session | null;
-  if (!session?.user?.id) {
+  const guestId = (ctx as Context & { guestId?: string }).guestId;
+
+  if (!session?.user?.id && !guestId) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
-  const user: AuthedUser = {
-    id: session.user.id,
-    role: session.user.role,
-  };
+
+  let user: AuthedUser;
+  if (session?.user?.id) {
+    user = { id: session.user.id, role: session.user.role, isGuest: false };
+  } else {
+    // Guest admission: the id is signed (server/guest.ts), so treating it as a
+    // User id cannot claim another account. Lazy-provision the row once so
+    // conversation FKs resolve; guests are plain USER-role users. A single
+    // create per device (P2002 = already provisioned on a previous request).
+    try {
+      await prisma.user.create({
+        data: { id: guestId, email: guestEmail(guestId), name: "Guest" },
+      });
+    } catch (error) {
+      const alreadyExists =
+        error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+      if (!alreadyExists) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: error instanceof Error ? error.message : "Invalid guest session",
+        });
+      }
+    }
+    user = { id: guestId, role: "USER", isGuest: true };
+  }
+
   return next({ ctx: { ...ctx, user } });
 });
 

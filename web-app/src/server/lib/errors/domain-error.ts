@@ -41,6 +41,15 @@ export class RateLimitedError extends DomainError {
   }
 }
 
+export class GuestLimitReachedError extends DomainError {
+  constructor(limit: number) {
+    super(
+      `Guest limit reached: free guest browsing allows ${limit} conversations. Please sign in to continue.`,
+      ErrorCode.GUEST_CONVERSATION_LIMIT,
+    );
+  }
+}
+
 export class ExternalApiError extends DomainError {
   constructor(message: string, details?: unknown) {
     super(message, ErrorCode.EXTERNAL_API_ERROR, details);

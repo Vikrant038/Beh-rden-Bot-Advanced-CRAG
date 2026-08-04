@@ -29,6 +29,23 @@ enum EngineMode {
   AGENTIC
 }
 
+enum FeedbackRating {
+  UP
+  DOWN
+}
+
+enum DocumentStatus {
+  PENDING
+  INGESTING
+  SYNCED
+  FAILED
+}
+
+enum DocumentSourceType {
+  URL
+  PDF
+}
+
 // ─── Authentication ────────────────────────────────────────────
 
 model User {
@@ -44,6 +61,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   conversations Conversation[]
+  feedback      MessageFeedback[]
 
   @@map("users")
 }
@@ -85,14 +103,21 @@ model Conversation {
   title     String?
   userId    String
   mode      EngineMode @default(AGENTIC)
+  pinned    Boolean    @default(false)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
+
+  // Soft delete: `delete` sets this, `restore` clears it. Keeping the row means
+  // undo restores the original id (permalinks survive) and preserves message
+  // roles, timestamps and memory, none of which a re-create can reproduce.
+  deletedAt DateTime?
 
   user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages Message[]
   memory   ConversationMemory?
 
   @@index([userId, updatedAt(sort: Desc)])
+  @@index([userId, deletedAt, pinned, updatedAt(sort: Desc)])
   @@map("conversations")
 }
 
@@ -105,11 +130,30 @@ model Message {
   sources        Json?
   createdAt      DateTime    @default(now())
 
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  feedback     MessageFeedback[]
 
   @@index([conversationId, createdAt])
   @@index([role, createdAt])
   @@map("messages")
+}
+
+/// Thumbs up/down on an assistant answer. Unique per (message, user) so a user's
+/// rating is idempotent — toggling replaces rather than accumulating rows.
+model MessageFeedback {
+  id        String         @id @default(cuid())
+  messageId String
+  userId    String
+  rating    FeedbackRating
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([rating, createdAt])
+  @@map("message_feedback")
 }
 
 model ConversationMemory {
@@ -136,12 +180,18 @@ model Document {
   url        String                @unique
   hash       String
   chunkCount Int                   @default(0)
+  // Real ingest state, so the UI can distinguish "still working" from "failed"
+  // instead of inferring staleness from updatedAt.
+  status     DocumentStatus        @default(SYNCED)
+  sourceType DocumentSourceType    @default(URL)
+  lastError  String?
   createdAt  DateTime              @default(now())
   updatedAt  DateTime              @updatedAt
 
   chunks  DocumentChunk[]
   parents DocumentParentChunk[]
 
+  @@index([status, updatedAt(sort: Desc)])
   @@map("documents")
 }
 
@@ -178,6 +228,24 @@ model DocumentChunk {
   @@index([sourceName])
   @@index([parentId])
   @@map("document_chunks")
+}
+
+// ─── Admin Diagnostics ──────────────────────────────────────────
+
+/// One glass-box pipeline test run from the admin pipeline tester. The full
+/// AgenticRagResponse trace is stored as JSON so a run can be re-inspected
+/// after the fact (retrieval steps, analysis matrix, sources, latency).
+model PipelineRun {
+  id        String   @id @default(cuid())
+  prompt    String
+  traceJson Json
+  latencyMs Int
+  status    String   @default("SUCCESS")
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@map("pipeline_runs")
 }
 
 // ─── Semantic Cache ─────────────────────────────────────────────

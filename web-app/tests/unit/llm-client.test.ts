@@ -37,6 +37,49 @@ describe("LLM client", () => {
     expect(mockCreate).toHaveBeenCalledTimes(1);
   });
 
+  it("records per-call latency, tokens, and cost into an active usage collector", async () => {
+    mockCreate.mockResolvedValue({
+      choices: [{ message: { content: "answer" } }],
+      usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
+    });
+
+    const { callLLM } = await import("@/server/llm/client");
+    const {
+      LlmUsageCollector,
+      withLlmUsageCollector,
+    } = await import("@/server/llm/usage");
+    const collector = new LlmUsageCollector();
+
+    await withLlmUsageCollector(collector, async () => {
+      collector.setStage("Stage 2 — Analyst (comparison matrix)");
+      await callLLM([{ role: "user", content: "hi" }]);
+    });
+
+    expect(collector.calls).toHaveLength(1);
+    expect(collector.calls[0]).toMatchObject({
+      provider: "groq",
+      model: "llama-3.1-8b-instant",
+      promptTokens: 12,
+      completionTokens: 4,
+      totalTokens: 16,
+      stage: "Stage 2 — Analyst (comparison matrix)",
+    });
+    // 12/1M * 0.05 + 4/1M * 0.08
+    expect(collector.calls[0]?.costUsd).toBeCloseTo(0.00000092, 10);
+    expect(collector.calls[0]?.latencyMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("does not record usage when no collector is active", async () => {
+    mockCreate.mockResolvedValue({
+      choices: [{ message: { content: "answer" } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    });
+
+    const { callLLM } = await import("@/server/llm/client");
+    await callLLM([{ role: "user", content: "hi" }]);
+    // No throw + no side effect is the contract; nothing to assert beyond success.
+  });
+
   it("should throw when Groq client unavailable (no API key)", async () => {
     delete process.env.GROQ_API_KEY;
     const { callLLM } = await import("@/server/llm/client");

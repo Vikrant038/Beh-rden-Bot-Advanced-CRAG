@@ -7,6 +7,8 @@ import { Markdown } from "@/components/chat/markdown";
 import { StageNode, type StageStatus } from "@/components/admin/pipeline/stage-node";
 import { ReactStep } from "@/components/admin/pipeline/react-step";
 import { SourcePanel } from "@/components/admin/pipeline/source-panel";
+import { LlmCostPanel } from "@/components/admin/pipeline/llm-cost-panel";
+import { formatUsd } from "@/lib/utils";
 
 interface PipelineVisualizerProps {
   trace: AgenticRagResponse;
@@ -17,6 +19,9 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
   const cacheHit = trace.researchSteps[0]?.action === "Semantic Cache Hit";
 
   const stages = useMemo(() => {
+    // Fall back to the total for traces stored before per-stage timings existed.
+    const stageDuration = (index: number): number =>
+      trace.stages?.[index]?.durationMs ?? Math.max(0, trace.totalLatencyMs);
     const stages: Array<{
       title: string;
       status: StageStatus;
@@ -26,7 +31,7 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
       {
         title: "Stage 0 — Query disambiguation & guardrail",
         status: guardrailBlocked ? "warning" : "done",
-        durationMs: Math.max(0, trace.totalLatencyMs),
+        durationMs: stageDuration(0),
         body: (
           <div className="space-y-2">
             <div className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2 text-xs">
@@ -61,7 +66,7 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
       {
         title: "Stage 1 — Research agent (ReAct)",
         status: guardrailBlocked ? "skipped" : trace.sources.length > 0 ? "done" : "warning",
-        durationMs: Math.max(0, trace.totalLatencyMs),
+        durationMs: stageDuration(1),
         body: (
           <div className="space-y-2">
             <div className="space-y-2">
@@ -91,7 +96,7 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
       {
         title: "Stage 2 — Analyst (comparison matrix)",
         status: guardrailBlocked ? "skipped" : "done",
-        durationMs: Math.max(0, trace.totalLatencyMs),
+        durationMs: stageDuration(2),
         body: (
           <div className="space-y-2">
             <div className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2 text-xs">
@@ -135,7 +140,7 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
       {
         title: "Stage 3 — Writer (markdown synthesis)",
         status: guardrailBlocked ? "skipped" : "done",
-        durationMs: Math.max(0, trace.totalLatencyMs),
+        durationMs: stageDuration(3),
         body: (
           <div className="rounded-lg border border-glass-border bg-surface/60 px-3 py-2">
             <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted">
@@ -174,6 +179,9 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
       <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-glass-border pb-3">
         <p className="text-sm font-semibold text-foreground">Pipeline trace</p>
         <span className="font-mono text-xs text-muted">{trace.totalLatencyMs}ms total</span>
+        <span className="font-mono text-xs text-muted">
+          ≈ {formatUsd(trace.totalCostUsd ?? 0)}
+        </span>
         <span className="font-mono text-xs text-muted">{trace.sources.length} sources</span>
         {cacheHit ? (
           <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">
@@ -186,6 +194,11 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
           </span>
         ) : null}
       </div>
+
+      <LlmCostPanel
+        calls={trace.llmCalls ?? []}
+        totalCostUsd={trace.totalCostUsd ?? 0}
+      />
 
       <ol className="divide-y divide-glass-border">
         {stages.map((stage, index) => (

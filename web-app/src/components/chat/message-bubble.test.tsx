@@ -89,7 +89,8 @@ describe("MessageBubble", () => {
     const { container } = render(
       <MessageBubble message={message({ role: "ASSISTANT", content: "Answer" })} streaming />,
     );
-    expect(container.querySelector(".streaming-cursor")).not.toBeNull();
+    // The live markdown renderer carries the inline cursor marker while streaming.
+    expect(container.querySelector(".markdown-streaming")).not.toBeNull();
   });
 
   it("flags cached responses", () => {
@@ -103,7 +104,7 @@ describe("MessageBubble", () => {
         streaming={false}
       />,
     );
-    expect(screen.getByText("Served from semantic cache.")).toBeInTheDocument();
+    expect(screen.getByText(/Answered from cache/)).toBeInTheDocument();
   });
 
   it("shows a thinking placeholder for empty assistant content", () => {

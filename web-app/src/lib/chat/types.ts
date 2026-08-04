@@ -1,5 +1,16 @@
 export type ChatMode = "standard" | "agentic";
 
+/**
+ * @shared-source Single source of truth for chat payload limits, imported by
+ * both the client (`chat-input.tsx`) and the server Zod schemas
+ * (`api/chat/stream/route.ts`, `routers/chat.ts`). Keeping the value here
+ * prevents the client from accepting input the server will reject with a 422.
+ */
+export const MAX_QUERY_LENGTH = 4000;
+
+/** Cap on a stopped/partial assistant response persisted via `chat.savePartial`. */
+export const MAX_PARTIAL_CONTENT_LENGTH = 20_000;
+
 export interface ChatSource {
   name: string;
   url: string;

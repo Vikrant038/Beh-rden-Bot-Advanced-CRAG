@@ -36,6 +36,12 @@ test("lists conversations and filters by search", async ({ page }) => {
         : CONVERSATIONS;
       return { items, nextCursor: null };
     },
+    "conversation.stats": () => ({
+      totalConversations: 2,
+      pinnedConversations: 0,
+      deletedConversations: 0,
+      totalMessages: 6,
+    }),
   });
 
   await page.goto("/history");
@@ -61,6 +67,12 @@ test("shows the empty state when there are no conversations", async ({ page }) =
 
   await mockTrpc(page, {
     "conversation.list": () => ({ items: [], nextCursor: null }),
+    "conversation.stats": () => ({
+      totalConversations: 0,
+      pinnedConversations: 0,
+      deletedConversations: 0,
+      totalMessages: 0,
+    }),
   });
 
   await page.goto("/history");

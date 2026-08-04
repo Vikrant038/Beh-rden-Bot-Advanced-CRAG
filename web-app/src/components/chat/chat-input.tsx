@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, BookOpen, ClipboardPaste, SendHorizontal, Sparkles, Square, X, Zap } from "lucide-react";
 import type { ChatMode } from "@/lib/chat/types";
+import { MAX_QUERY_LENGTH } from "@/lib/chat/types";
 import { cn } from "@/lib/utils";
 
-const MAX_QUERY_LENGTH = 4000;
+/** Fraction of the cap at which the counter warns the user they're running out of room. */
+const WARN_THRESHOLD = 0.9;
 
 interface ChatInputProps {
   conversationId?: string;
@@ -17,6 +19,8 @@ interface ChatInputProps {
   mode?: ChatMode;
   onModeChange?: (mode: ChatMode) => void;
   suggestions?: string[];
+  /** Called when the clipboard cannot be read, so the caller can surface a toast. */
+  onPasteUnavailable?: () => void;
 }
 
 function draftKey(conversationId: string): string {
@@ -33,19 +37,20 @@ export function ChatInput({
   mode = "agentic",
   onModeChange,
   suggestions = [],
+  onPasteUnavailable,
 }: ChatInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const atLimit = value.length >= MAX_QUERY_LENGTH;
+  const nearLimit = value.length >= MAX_QUERY_LENGTH * WARN_THRESHOLD;
 
+  // Restore this conversation's draft, and clear any draft carried over from a
+  // previously viewed conversation (ChatInterface is not remounted per id).
   useEffect(() => {
     if (!conversationId) {
       return;
     }
-    const saved = window.localStorage.getItem(draftKey(conversationId));
-    if (saved) {
-      setValue(saved);
-    }
+    setValue(window.localStorage.getItem(draftKey(conversationId)) ?? "");
   }, [conversationId]);
 
   useEffect(() => {
@@ -66,7 +71,9 @@ export function ChatInput({
 
   const submit = () => {
     const trimmed = value.trim();
-    if (!trimmed || disabled) {
+    // Guard on isStreaming too: useChat ignores sends mid-stream, so without
+    // this the text would be cleared and silently lost.
+    if (!trimmed || disabled || isStreaming) {
       return;
     }
     onSubmit(trimmed);
@@ -88,10 +95,11 @@ export function ChatInput({
       if (el) {
         const start = el.selectionStart ?? value.length;
         const end = el.selectionEnd ?? value.length;
-        const next = value.slice(0, start) + text + value.slice(end);
-        setValue(next.slice(0, MAX_QUERY_LENGTH));
+        const next = (value.slice(0, start) + text + value.slice(end)).slice(0, MAX_QUERY_LENGTH);
+        setValue(next);
         window.setTimeout(() => {
           el.focus();
+          // Clamp against the truncated value, not the pre-slice length.
           const caret = Math.min(start + text.length, next.length);
           el.setSelectionRange(caret, caret);
         }, 0);
@@ -99,7 +107,9 @@ export function ChatInput({
         setValue((current) => (current + text).slice(0, MAX_QUERY_LENGTH));
       }
     } catch {
-      // Clipboard read permission unavailable (non-secure context / denied).
+      // Firefox has no readText(), and permission can be denied. Tell the user
+      // rather than leaving the button looking broken.
+      onPasteUnavailable?.();
     }
   };
 
@@ -151,7 +161,7 @@ export function ChatInput({
         )}
         <div
           className={cn(
-            "flex items-end gap-2 rounded-xl border border-border bg-surface px-2 transition focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15",
+            "flex items-end gap-2 rounded-xl border border-border bg-surface px-2 transition",
             atLimit && "border-warning",
           )}
         >
@@ -166,10 +176,12 @@ export function ChatInput({
               }
             }}
             rows={1}
+            maxLength={MAX_QUERY_LENGTH}
             placeholder="Ask about visas, APS, blocked accounts, university admissions…"
             disabled={disabled}
-            aria-describedby={atLimit ? "chat-input-limit" : undefined}
-            className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm outline-none transition placeholder:text-muted disabled:opacity-60"
+            aria-label="Ask a question"
+            aria-describedby="chat-input-limit"
+            className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm outline-none transition-[height] duration-150 placeholder:text-muted disabled:opacity-60"
           />
           {value && !isStreaming && (
             <button
@@ -179,7 +191,7 @@ export function ChatInput({
                 textareaRef.current?.focus();
               }}
               aria-label="Clear input"
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
             >
               <X className="h-4 w-4" />
             </button>
@@ -190,7 +202,7 @@ export function ChatInput({
               onClick={() => void pasteFromClipboard()}
               aria-label="Paste from clipboard"
               title="Paste from clipboard"
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
             >
               <ClipboardPaste className="h-4 w-4" />
             </button>
@@ -218,9 +230,9 @@ export function ChatInput({
             <button
               type="button"
               onClick={submit}
-              disabled={disabled || !value.trim() || atLimit}
+              disabled={disabled || !value.trim()}
               aria-label="Send message"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary text-white shadow-glass transition hover:-translate-y-px hover:bg-primary-hover hover:shadow-lg active:translate-y-0 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted transition hover:text-foreground hover:shadow-sm hover:[&_svg]:stroke-[2.5] disabled:pointer-events-none disabled:opacity-40"
             >
               <SendHorizontal className="h-4 w-4" />
             </button>
@@ -251,7 +263,8 @@ export function ChatInput({
           <p
             className={cn(
               "font-mono text-[10px] text-muted",
-              atLimit && "text-warning",
+              nearLimit && "text-warning",
+              atLimit && "text-destructive",
             )}
             id="chat-input-limit"
           >

@@ -13,6 +13,7 @@ export interface MockPrisma {
     findFirst: MockFn;
     create: MockFn;
     update: MockFn;
+    updateMany: MockFn;
     delete: MockFn;
     deleteMany: MockFn;
     count: MockFn;
@@ -40,6 +41,13 @@ export interface MockPrisma {
   user: {
     count: MockFn;
     findMany: MockFn;
+    create: MockFn;
+    upsert: MockFn;
+    delete: MockFn;
+  };
+  messageFeedback: {
+    updateMany: MockFn;
+    deleteMany: MockFn;
   };
   semanticCacheEntry: {
     deleteMany: MockFn;
@@ -49,6 +57,11 @@ export interface MockPrisma {
   conversationMemory: {
     findUnique: MockFn;
     upsert: MockFn;
+  };
+  pipelineRun: {
+    create: MockFn;
+    findMany: MockFn;
+    findUnique: MockFn;
   };
   $queryRaw: MockFn;
 }

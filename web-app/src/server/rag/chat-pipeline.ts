@@ -18,6 +18,7 @@ import type {
   ChatStage,
   ChatStreamEvent,
 } from "@/lib/chat/types";
+import { MAX_QUERY_LENGTH } from "@/lib/chat/types";
 
 const logger = createLogger("chat-stream");
 
@@ -42,16 +43,19 @@ const GENERIC_ERROR_MESSAGE =
 
 const TOKEN_DELAY_MS = 24;
 const WORDS_PER_CHUNK = 3;
-const MAX_QUERY_LENGTH = 2000;
 
 function chunkText(text: string, wordsPerChunk: number = WORDS_PER_CHUNK): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
-  if (words.length === 0) {
+  // Keep each word's trailing whitespace (spaces + newlines) attached so that
+  // concatenating the chunks reconstructs the original text exactly. Splitting
+  // on \s+ and re-joining words dropped the space between chunk boundaries
+  // ("ensure a" + "smooth…" → "ensure asmooth…") and flattened markdown.
+  const tokens = text.match(/\S+\s*/g) ?? [];
+  if (tokens.length === 0) {
     return [""];
   }
   const chunks: string[] = [];
-  for (let i = 0; i < words.length; i += wordsPerChunk) {
-    chunks.push(words.slice(i, i + wordsPerChunk).join(" "));
+  for (let i = 0; i < tokens.length; i += wordsPerChunk) {
+    chunks.push(tokens.slice(i, i + wordsPerChunk).join(""));
   }
   return chunks;
 }
@@ -115,12 +119,19 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
 
   await findOrCreateUserMessage(conversationId, trimmedQuery, mode);
 
-  if (!conversation.title || conversation.title === "New conversation") {
-    await prisma.conversation.update({
-      where: { id: conversationId },
-      data: { title: trimmedQuery.slice(0, 48) },
-    });
-  }
+  // Always bump updatedAt when a message is sent so the conversation moves to
+  // the top of the sidebar immediately (not only after the stream finishes).
+  // The first message also claims the title from the query.
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: {
+      title:
+        conversation.title && conversation.title !== "New conversation"
+          ? conversation.title
+          : trimmedQuery.slice(0, 48),
+      updatedAt: new Date(),
+    },
+  });
 
   yield { type: "status", stage: "guardrail" };
 

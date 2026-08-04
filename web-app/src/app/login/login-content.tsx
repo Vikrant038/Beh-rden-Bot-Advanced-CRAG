@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   Bookmark,
@@ -14,6 +14,7 @@ import {
   Download,
 } from "lucide-react";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
+import { GUEST_CONVERSATION_LIMIT } from "@/lib/guest";
 
 const BENEFITS = [
   { icon: Bookmark, text: "Save conversations" },
@@ -42,9 +43,35 @@ function friendlyError(error: string | null): string | null {
 }
 
 export function LoginContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [guestOpen, setGuestOpen] = useState(false);
+  const [startingGuest, setStartingGuest] = useState(false);
+  const [guestError, setGuestError] = useState<string | null>(null);
   const error = friendlyError(searchParams.get("error"));
+
+  const continueAsGuest = async () => {
+    if (startingGuest) {
+      return;
+    }
+    setStartingGuest(true);
+    setGuestError(null);
+    try {
+      const response = await fetch("/api/guest", { method: "POST" });
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as { error?: string } | null;
+        setGuestError(data?.error ?? "Could not start guest browsing. Please try again.");
+        setGuestOpen(true);
+        return;
+      }
+      router.push("/chat");
+    } catch {
+      setGuestError("Could not start guest browsing. Please try again.");
+      setGuestOpen(true);
+    } finally {
+      setStartingGuest(false);
+    }
+  };
 
   return (
     <div id="main" className="relative min-h-screen overflow-hidden bg-background">
@@ -137,18 +164,25 @@ export function LoginContent() {
 
             <button
               type="button"
-              onClick={() => setGuestOpen((open) => !open)}
+              onClick={() => void continueAsGuest()}
+              disabled={startingGuest}
               aria-expanded={guestOpen}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm text-muted transition hover:bg-surface-hover hover:text-foreground"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm text-muted transition hover:bg-surface-hover hover:text-foreground disabled:opacity-60"
             >
               <LogIn className="h-4 w-4" />
-              Continue as guest
+              {startingGuest ? "Starting…" : "Continue as guest"}
             </button>
 
             {guestOpen && (
               <div className="mt-3 rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-[11px] leading-relaxed text-muted">
-                Guest browsing isn&apos;t available yet — create a free account above to save your
-                conversations and export answers.
+                Browse and ask questions without an account — free guest browsing includes up to{" "}
+                {GUEST_CONVERSATION_LIMIT} conversations. Your chats stay on this device, and when
+                you sign in they&apos;re saved to your account automatically.
+                {guestError ? (
+                  <span className="mt-1.5 block text-destructive" role="alert">
+                    {guestError}
+                  </span>
+                ) : null}
               </div>
             )}
 

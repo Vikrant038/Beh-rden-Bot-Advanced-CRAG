@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/server/auth";
+import { readGuestIdFromRequest } from "@/server/guest";
 import { chatRateLimiter } from "@/server/lib/security/rate-limiter";
 import { runChatStream } from "@/server/rag/chat-pipeline";
 import { chatModeSchema } from "@/server/routers/conversation";
+import { MAX_QUERY_LENGTH } from "@/lib/chat/types";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("chat-stream-route");
@@ -12,7 +14,7 @@ export const runtime = "nodejs";
 
 const streamRequestSchema = z.object({
   conversationId: z.string().min(1),
-  query: z.string().trim().min(1).max(2000),
+  query: z.string().trim().min(1).max(MAX_QUERY_LENGTH),
   mode: chatModeSchema.default("agentic"),
   bypassCache: z.boolean().optional(),
 });
@@ -26,11 +28,14 @@ const SSE_HEADERS = {
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user?.id) {
+  // Guest admission (3.10): no real session, but a valid signed guest cookie
+  // still names the user (the guest id is the User id).
+  const userId = session?.user?.id ?? readGuestIdFromRequest(request);
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const rateLimit = await chatRateLimiter.check(`chat:${session.user.id}`);
+  const rateLimit = await chatRateLimiter.check(`chat:${userId}`);
   if (!rateLimit.success) {
     return NextResponse.json(
       {
@@ -65,7 +70,7 @@ export async function POST(request: Request) {
       try {
         for await (const event of runChatStream({
           conversationId: body.conversationId,
-          userId: session.user.id,
+          userId,
           query: body.query,
           mode: body.mode,
           bypassCache: body.bypassCache,

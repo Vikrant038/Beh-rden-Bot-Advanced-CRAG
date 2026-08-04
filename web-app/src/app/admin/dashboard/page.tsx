@@ -26,9 +26,13 @@ export default function AdminDashboardPage() {
   const modeSplit = api.admin.modeSplit.useQuery(undefined, {
     refetchInterval: REFRESH_INTERVAL_MS,
   });
-  const recentQueries = api.admin.recentQueries.useQuery(undefined, {
-    refetchInterval: REFRESH_INTERVAL_MS,
-  });
+  const recentQueries = api.admin.recentQueries.useInfiniteQuery(
+    { limit: 10 },
+    {
+      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      refetchInterval: REFRESH_INTERVAL_MS,
+    },
+  );
   const topQuestions = api.admin.topQuestions.useQuery({ days });
   const failedQueries = api.admin.failedQueries.useQuery(undefined, {
     refetchInterval: REFRESH_INTERVAL_MS,
@@ -36,7 +40,7 @@ export default function AdminDashboardPage() {
 
   const data = metrics.data;
 
-  const trend = useMemo(() => {
+  const totalQueriesTrend = useMemo(() => {
     const points = dailyQueries.data ?? [];
     if (points.length < 4) {
       return null;
@@ -49,6 +53,10 @@ export default function AdminDashboardPage() {
     }
     return Math.round(((current - previous) / previous) * 100);
   }, [dailyQueries.data]);
+
+  const dailyCounts = useMemo(() => dailyQueries.data?.map((point) => point.count) ?? [], [
+    dailyQueries.data,
+  ]);
 
   const refresh = () => {
     setManualRefreshing(true);
@@ -134,6 +142,9 @@ export default function AdminDashboardPage() {
           value={data?.totalMessages ?? 0}
           icon={MessageSquare}
           accent="accent"
+          trend={totalQueriesTrend}
+          trendLabel={`vs previous ${days / 2}d`}
+          sparkline={dailyCounts}
           loading={metrics.isLoading}
         />
         <MetricCard
@@ -141,8 +152,7 @@ export default function AdminDashboardPage() {
           value={data?.queriesToday ?? 0}
           icon={Zap}
           accent="warning"
-          trend={trend}
-          trendLabel="vs previous period"
+          sparkline={dailyCounts.slice(-7)}
           loading={metrics.isLoading}
         />
         <MetricCard
@@ -170,8 +180,11 @@ export default function AdminDashboardPage() {
       <FailedQueriesCard queries={failedQueries.data ?? []} loading={failedQueries.isLoading} />
 
       <RecentQueriesTable
-        queries={recentQueries.data ?? []}
+        queries={recentQueries.data?.pages.flatMap((page) => page.items) ?? []}
         loading={recentQueries.isLoading}
+        hasMore={Boolean(recentQueries.hasNextPage)}
+        onLoadMore={() => void recentQueries.fetchNextPage()}
+        loadingMore={recentQueries.isFetchingNextPage}
       />
     </div>
   );

@@ -10,6 +10,7 @@ vi.mock("@/server/db", () => ({
     document: { count: vi.fn() },
     semanticCacheEntry: { deleteMany: vi.fn() },
     conversationMemory: { upsert: vi.fn() },
+    pipelineRun: { create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     $queryRaw: vi.fn(),
   },
 }));
@@ -74,6 +75,35 @@ function fullTrace(): AgenticRagResponse {
       },
     ],
     totalLatencyMs: 2400,
+    stages: [
+      { index: 0, name: "Query disambiguation & guardrail", durationMs: 400, status: "executed" },
+      { index: 1, name: "Research agent (ReAct)", durationMs: 1200, status: "executed" },
+      { index: 2, name: "Analyst (comparison matrix)", durationMs: 500, status: "executed" },
+      { index: 3, name: "Writer (markdown synthesis)", durationMs: 300, status: "executed" },
+    ],
+    llmCalls: [
+      {
+        stage: "Stage 2 — Analyst (comparison matrix)",
+        provider: "groq",
+        model: "llama-3.1-8b-instant",
+        latencyMs: 500,
+        promptTokens: 900,
+        completionTokens: 220,
+        totalTokens: 1120,
+        costUsd: 0.0000626,
+      },
+      {
+        stage: "Stage 3 — Writer (markdown synthesis)",
+        provider: "groq",
+        model: "llama-3.1-8b-instant",
+        latencyMs: 300,
+        promptTokens: 700,
+        completionTokens: 480,
+        totalTokens: 1180,
+        costUsd: 0.0000734,
+      },
+    ],
+    totalCostUsd: 0.000136,
   };
 }
 
@@ -97,6 +127,7 @@ describe("admin.testPipeline", () => {
 
   it("returns the full AgenticRagResponse trace without writing conversation memory", async () => {
     mockRunAgenticRag.mockResolvedValue(fullTrace());
+    prismaMock.pipelineRun?.create.mockResolvedValue({ id: "run-1" } as never);
     const caller = makeCaller();
 
     const result = await caller.admin.testPipeline({
@@ -111,6 +142,18 @@ describe("admin.testPipeline", () => {
 
     // The NoopMemory adapter must prevent any ConversationMemory write.
     expect(prismaMock.conversationMemory?.upsert).not.toHaveBeenCalled();
+
+    // A PipelineRun row is persisted so the trace can be re-inspected later.
+    expect(prismaMock.pipelineRun?.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          prompt: "What documents are required for a German student visa?",
+          status: "SUCCESS",
+          latencyMs: 2400,
+          traceJson: expect.objectContaining({ finalAnswer: expect.any(String) }),
+        }),
+      }),
+    );
 
     // Called with a NoopMemory instance and cache bypassed.
     const [query, options] = mockRunAgenticRag.mock.calls[0] ?? [];
@@ -166,11 +209,118 @@ describe("admin.testPipeline", () => {
     expect(result.researchSteps[0]?.action).toBe("Semantic Cache Hit");
   });
 
-  it("does not persist a conversation or message row", async () => {
+  it("persists only the pipeline run — never a conversation or message row", async () => {
     mockRunAgenticRag.mockResolvedValue(fullTrace());
+    prismaMock.pipelineRun?.create.mockResolvedValue({ id: "run-1" } as never);
     const caller = makeCaller();
     await caller.admin.testPipeline({ prompt: "What is an APS certificate?" });
+    expect(prismaMock.pipelineRun?.create).toHaveBeenCalledTimes(1);
     expect(prismaMock.conversation.create).not.toHaveBeenCalled();
     expect(prismaMock.message.create).not.toHaveBeenCalled();
+  });
+
+  it("persists a FAILED run and rethrows when the pipeline throws", async () => {
+    mockRunAgenticRag.mockRejectedValue(new Error("LLM provider down"));
+    prismaMock.pipelineRun?.create.mockResolvedValue({ id: "run-err" } as never);
+    const caller = makeCaller();
+
+    await expect(
+      caller.admin.testPipeline({ prompt: "Why is my visa delayed?" }),
+    ).rejects.toThrow("LLM provider down");
+
+    expect(prismaMock.pipelineRun?.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          error: "LLM provider down",
+          traceJson: {},
+        }),
+      }),
+    );
+  });
+
+  it("listTestRuns: returns paginated run summaries with nextCursor", async () => {
+    prismaMock.pipelineRun?.findMany.mockResolvedValue([
+      {
+        id: "run-1",
+        prompt: "Visa documents?",
+        latencyMs: 2400,
+        status: "SUCCESS",
+        error: null,
+        createdAt: new Date("2026-08-01T10:00:00Z"),
+      },
+      {
+        id: "run-2",
+        prompt: "Out of domain",
+        latencyMs: 120,
+        status: "FAILED",
+        error: "boom",
+        createdAt: new Date("2026-08-01T09:00:00Z"),
+      },
+    ] as never);
+    const caller = makeCaller();
+    const result = await caller.admin.listTestRuns({ limit: 2 });
+    expect(result.items).toHaveLength(2);
+    expect(result.nextCursor).toBeNull();
+    expect(result.items[0].status).toBe("SUCCESS");
+    expect(result.items[1].status).toBe("FAILED");
+    expect(result.items[1].error).toBe("boom");
+  });
+
+  it("listTestRuns: exposes nextCursor when a further page exists", async () => {
+    prismaMock.pipelineRun?.findMany.mockResolvedValue([
+      {
+        id: "run-1",
+        prompt: "a",
+        latencyMs: 1,
+        status: "SUCCESS",
+        error: null,
+        createdAt: new Date("2026-08-01T10:00:00Z"),
+      },
+      {
+        id: "run-2",
+        prompt: "b",
+        latencyMs: 1,
+        status: "SUCCESS",
+        error: null,
+        createdAt: new Date("2026-08-01T09:00:00Z"),
+      },
+      {
+        id: "run-3",
+        prompt: "c",
+        latencyMs: 1,
+        status: "SUCCESS",
+        error: null,
+        createdAt: new Date("2026-08-01T08:00:00Z"),
+      },
+    ] as never);
+    const caller = makeCaller();
+    const result = await caller.admin.listTestRuns({ limit: 2 });
+    expect(result.items).toHaveLength(2);
+    expect(result.nextCursor).toEqual({
+      createdAt: new Date("2026-08-01T09:00:00Z"),
+      id: "run-2",
+    });
+  });
+
+  it("getTestRun: returns the stored trace for a run id", async () => {
+    prismaMock.pipelineRun?.findUnique.mockResolvedValue({
+      id: "run-1",
+      prompt: "Visa documents?",
+      traceJson: fullTrace(),
+      latencyMs: 2400,
+      status: "SUCCESS",
+      error: null,
+      createdAt: new Date("2026-08-01T10:00:00Z"),
+    } as never);
+    const caller = makeCaller();
+    const run = await caller.admin.getTestRun({ id: "run-1" });
+    expect(run.traceJson).toMatchObject({ finalAnswer: expect.stringContaining("passport") });
+  });
+
+  it("getTestRun: throws NotFoundError for an unknown run", async () => {
+    prismaMock.pipelineRun?.findUnique.mockResolvedValue(null as never);
+    const caller = makeCaller();
+    await expect(caller.admin.getTestRun({ id: "missing" })).rejects.toThrow();
   });
 });

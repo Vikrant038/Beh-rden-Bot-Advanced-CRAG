@@ -1,26 +1,41 @@
 "use client";
 
-import { useState } from "react";
-import { Check, Copy, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, Copy, RefreshCw, ThumbsDown, ThumbsUp, Zap } from "lucide-react";
 import type { ChatMessage } from "@/lib/chat/types";
 import { cn } from "@/lib/utils";
-import { StreamingText } from "@/components/chat/streaming-text";
 import { Markdown } from "@/components/chat/markdown";
 import { SourceCitation } from "@/components/chat/source-citation";
 
 type Feedback = "up" | "down" | null;
 
+const COPIED_RESET_MS = 1600;
+
 function MessageActions({
   content,
+  currentFeedback,
   onRegenerate,
   onFeedback,
+  onCopied,
+  onCopyFailed,
 }: {
   content: string;
+  currentFeedback: Feedback;
   onRegenerate?: () => void;
-  onFeedback?: (feedback: "up" | "down") => void;
+  onFeedback?: (feedback: Feedback) => void;
+  onCopied?: () => void;
+  onCopyFailed?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const [feedback, setFeedback] = useState<Feedback>(null);
+  const copyTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   const copy = async () => {
     if (!content) {
@@ -29,27 +44,29 @@ function MessageActions({
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
+      onCopied?.();
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = window.setTimeout(() => setCopied(false), COPIED_RESET_MS);
     } catch {
-      // clipboard unavailable (e.g. non-secure context) — fail silently
+      // Clipboard unavailable (non-secure context / denied permission). Tell the
+      // user rather than leaving the button looking inert.
+      onCopyFailed?.();
     }
   };
 
   const submitFeedback = (value: "up" | "down") => {
-    const next: Feedback = feedback === value ? null : value;
-    setFeedback(next);
-    if (next) {
-      onFeedback?.(next);
-    }
+    onFeedback?.(currentFeedback === value ? null : value);
   };
 
   return (
-    <div className="mt-2 flex items-center gap-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
+    <div className="mt-2 flex items-center gap-1 opacity-100 transition focus-within:opacity-100 md:opacity-0 md:group-hover:opacity-100">
       <button
         type="button"
         onClick={() => void copy()}
         aria-label="Copy answer"
-        className="grid h-7 w-7 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
+        className="grid h-9 w-9 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
       >
         {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
       </button>
@@ -58,11 +75,11 @@ function MessageActions({
           <button
             type="button"
             onClick={() => submitFeedback("up")}
-            aria-pressed={feedback === "up"}
+            aria-pressed={currentFeedback === "up"}
             aria-label="Mark answer as helpful"
             className={cn(
-              "grid h-7 w-7 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground",
-              feedback === "up" && "text-success",
+              "grid h-9 w-9 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground",
+              currentFeedback === "up" && "text-success",
             )}
           >
             <ThumbsUp className="h-3.5 w-3.5" />
@@ -70,11 +87,11 @@ function MessageActions({
           <button
             type="button"
             onClick={() => submitFeedback("down")}
-            aria-pressed={feedback === "down"}
+            aria-pressed={currentFeedback === "down"}
             aria-label="Mark answer as not helpful"
             className={cn(
-              "grid h-7 w-7 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground",
-              feedback === "down" && "text-destructive",
+              "grid h-9 w-9 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground",
+              currentFeedback === "down" && "text-destructive",
             )}
           >
             <ThumbsDown className="h-3.5 w-3.5" />
@@ -86,7 +103,7 @@ function MessageActions({
           type="button"
           onClick={onRegenerate}
           aria-label="Regenerate answer"
-          className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted transition hover:bg-surface-hover hover:text-foreground"
+          className="flex min-h-9 items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted transition hover:bg-surface-hover hover:text-foreground"
         >
           <RefreshCw className="h-3 w-3" />
           Regenerate
@@ -99,13 +116,19 @@ function MessageActions({
 export function MessageBubble({
   message,
   streaming,
+  feedback = null,
   onRegenerate,
   onFeedback,
+  onCopied,
+  onCopyFailed,
 }: {
   message: ChatMessage;
   streaming: boolean;
+  feedback?: Feedback;
   onRegenerate?: () => void;
-  onFeedback?: (feedback: "up" | "down") => void;
+  onFeedback?: (feedback: Feedback) => void;
+  onCopied?: () => void;
+  onCopyFailed?: () => void;
 }) {
   if (message.role === "USER") {
     return (
@@ -129,14 +152,14 @@ export function MessageBubble({
 
   const hasSources = Boolean(message.sources && message.sources.length > 0);
   const showActions = !streaming && Boolean(message.content);
+  const latencyMs = message.metadata?.latencyMs;
+  const cachedLatencySeconds = latencyMs ? (latencyMs / 1000).toFixed(1) : null;
 
   return (
     <div className="group flex justify-start">
       <div className="max-w-[85%] rounded-2xl rounded-bl-sm border border-glass-border bg-glass px-4 py-3 text-sm backdrop-blur">
         {streaming ? (
-          <div className="whitespace-pre-wrap">
-            <StreamingText text={message.content} streaming />
-          </div>
+          <Markdown content={message.content} streaming />
         ) : message.content ? (
           <Markdown content={message.content} />
         ) : (
@@ -146,15 +169,30 @@ export function MessageBubble({
         {showActions && (
           <MessageActions
             content={message.content}
+            currentFeedback={feedback}
             onRegenerate={onRegenerate}
             onFeedback={onFeedback}
+            onCopied={onCopied}
+            onCopyFailed={onCopyFailed}
           />
         )}
 
         {hasSources && !streaming && <SourceCitation sources={message.sources ?? []} />}
 
         {message.metadata?.isCached && !streaming && (
-          <p className="mt-2 text-[10px] text-muted">Served from semantic cache.</p>
+          <span
+            className="mt-2 inline-flex items-center gap-1 rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent"
+            title={
+              cachedLatencySeconds
+                ? `Answered from the semantic cache in ${cachedLatencySeconds}s — no pipeline run needed.`
+                : "Answered from the semantic cache — no pipeline run needed."
+            }
+          >
+            <Zap className="h-3 w-3" aria-hidden="true" />
+            {cachedLatencySeconds
+              ? `Answered from cache (${cachedLatencySeconds}s)`
+              : "Answered from cache"}
+          </span>
         )}
       </div>
     </div>

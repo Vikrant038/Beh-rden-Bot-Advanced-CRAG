@@ -1,13 +1,28 @@
 "use client";
 
-import { useState } from "react";
-import { Check, Copy, FlaskConical, GraduationCap, Landmark, Play, Scale } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  Check,
+  CheckCircle2,
+  Clock,
+  Copy,
+  FlaskConical,
+  GraduationCap,
+  History,
+  Landmark,
+  Play,
+  Scale,
+  XCircle,
+  Zap,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { api } from "@/lib/trpc/client";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { PipelineVisualizer } from "@/components/admin/pipeline/pipeline-visualizer";
 import { useToast } from "@/lib/toast";
+import { formatRelativeTime, formatUsd } from "@/lib/utils";
+import type { AgenticRagResponse } from "@/server/rag/agents/orchestrator";
 
 const EXAMPLES: Array<{ label: string; prompt: string; icon: LucideIcon }> = [
   {
@@ -29,26 +44,51 @@ const EXAMPLES: Array<{ label: string; prompt: string; icon: LucideIcon }> = [
 
 export default function AdminPipelineTesterPage() {
   const { toast } = useToast();
+  const utils = api.useUtils();
   const [prompt, setPrompt] = useState("");
   const [copied, setCopied] = useState(false);
+  const [bypassCache, setBypassCache] = useState(true);
+  // A stored trace being inspected from the recent-runs list. When null the
+  // visualizer shows the freshest run (testPipeline.data).
+  const [selectedTrace, setSelectedTrace] = useState<AgenticRagResponse | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+
   const testPipeline = api.admin.testPipeline.useMutation({
     retry: false,
+    onSuccess: () => {
+      setSelectedRunId(null);
+      setSelectedTrace(null);
+      void utils.admin.listTestRuns.invalidate();
+    },
   });
+
+  const recentRuns = api.admin.listTestRuns.useQuery({ limit: 10 });
+  const selectedRun = api.admin.getTestRun.useQuery(
+    { id: selectedRunId ?? "" },
+    { enabled: Boolean(selectedRunId) },
+  );
+
+  useEffect(() => {
+    if (selectedRun.data) {
+      setSelectedTrace(selectedRun.data.traceJson as AgenticRagResponse);
+    }
+  }, [selectedRun.data]);
 
   const run = () => {
     const trimmed = prompt.trim();
     if (!trimmed || testPipeline.isPending) {
       return;
     }
-    testPipeline.mutate({ prompt: trimmed });
+    testPipeline.mutate({ prompt: trimmed, bypassCache });
   };
 
   const copyTrace = async () => {
-    if (!testPipeline.data) {
+    const trace = selectedTrace ?? testPipeline.data;
+    if (!trace) {
       return;
     }
     try {
-      await navigator.clipboard.writeText(JSON.stringify(testPipeline.data, null, 2));
+      await navigator.clipboard.writeText(JSON.stringify(trace, null, 2));
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
       toast({ title: "Trace copied to clipboard", variant: "success" });
@@ -57,13 +97,22 @@ export default function AdminPipelineTesterPage() {
     }
   };
 
+  const loadRun = (id: string) => {
+    setSelectedRunId(id);
+    // Clear the fresh trace immediately so the visualizer doesn't flicker
+    // between the old run and the stored one.
+    testPipeline.reset();
+  };
+
+  const displayedTrace = selectedTrace ?? testPipeline.data;
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Pipeline tester</h1>
         <p className="mt-1 text-sm text-muted">
           Run a single glass-box trace through the 3-agent ReAct pipeline and inspect every stage —
-          including parent-child chunk expansion.
+          including parent-child chunk expansion. Every run is stored so past traces can be revisited.
         </p>
       </div>
 
@@ -93,7 +142,7 @@ export default function AdminPipelineTesterPage() {
           </button>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           {EXAMPLES.map((example) => (
             <button
               key={example.label}
@@ -108,10 +157,35 @@ export default function AdminPipelineTesterPage() {
               {example.label}
             </button>
           ))}
+
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={bypassCache}
+              aria-label="Toggle cache bypass"
+              onClick={() => setBypassCache((v) => !v)}
+              className={`relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors focus-visible:ring-2 focus-visible:ring-primary ${
+                bypassCache
+                  ? "border-primary/50 bg-primary/15"
+                  : "border-border bg-surface-hover"
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-foreground transition-transform ${
+                  bypassCache ? "translate-x-5" : "translate-x-1"
+                }`}
+              />
+            </button>
+            <span className="inline-flex items-center gap-1 text-xs text-muted">
+              <Zap className={`h-3.5 w-3.5 ${bypassCache ? "text-warning" : ""}`} />
+              Bypass cache
+            </span>
+          </div>
         </div>
 
         <p className="mt-3 text-xs text-muted">
-          Queries run with PII masking, no conversation memory, and bypass the semantic cache so
+          Queries run with PII masking, no conversation memory, and{bypassCache ? " bypass" : " use"} the semantic cache so
           every stage executes live.
         </p>
       </div>
@@ -133,17 +207,22 @@ export default function AdminPipelineTesterPage() {
         />
       ) : null}
 
-      {testPipeline.isSuccess && testPipeline.data ? (
+      {displayedTrace ? (
         <div className="space-y-4">
           <div className="glass-card flex flex-wrap items-center gap-3 rounded-2xl p-4">
             <p className="min-w-0 flex-1 truncate text-sm font-medium">
-              Query: {prompt}
+              {selectedRunId ? "Stored trace" : `Query: ${prompt}`}
             </p>
+            {selectedRunId ? (
+              <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[10px] font-medium text-muted">
+                {formatRelativeTime(selectedRun.data?.createdAt ?? "")}
+              </span>
+            ) : null}
             <span className="font-mono text-xs text-muted">
-              {testPipeline.data.totalLatencyMs}ms
+              {displayedTrace.totalLatencyMs}ms · ≈ {formatUsd(displayedTrace.totalCostUsd ?? 0)}
             </span>
             <span className="font-mono text-xs text-muted">
-              {testPipeline.data.sources.length} sources
+              {displayedTrace.sources.length} sources
             </span>
             <button
               type="button"
@@ -154,17 +233,64 @@ export default function AdminPipelineTesterPage() {
               {copied ? "Copied" : "Copy trace"}
             </button>
           </div>
-          <PipelineVisualizer trace={testPipeline.data} />
+          <PipelineVisualizer trace={displayedTrace} />
         </div>
       ) : null}
 
-      {!testPipeline.isPending && !testPipeline.isError && !testPipeline.isSuccess ? (
+      {!testPipeline.isPending && !testPipeline.isError && !displayedTrace ? (
         <EmptyState
           icon={FlaskConical}
           title="No trace yet"
           description="Type a query above and run a trace to inspect every pipeline stage."
         />
       ) : null}
+
+      <div className="glass-card rounded-2xl p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <History className="h-4 w-4 text-muted" />
+          <h2 className="text-sm font-semibold">Recent traces</h2>
+        </div>
+        {recentRuns.isLoading ? (
+          <p className="text-xs text-muted">Loading past runs…</p>
+        ) : recentRuns.data?.items.length ? (
+          <ul className="divide-y divide-glass-border">
+            {recentRuns.data.items.map((run) => (
+              <li key={run.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+                <p className="min-w-0 flex-1 truncate text-sm">{run.prompt}</p>
+                {run.status === "SUCCESS" ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-success">
+                    <CheckCircle2 className="h-3 w-3" /> success
+                  </span>
+                ) : (
+                  <span
+                    className="inline-flex items-center gap-1 text-xs text-warning"
+                    title={run.error ?? undefined}
+                  >
+                    <XCircle className="h-3 w-3" /> failed
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1 text-xs text-muted">
+                  <Clock className="h-3 w-3" /> {run.latencyMs}ms
+                </span>
+                <span className="text-xs text-muted">{formatRelativeTime(run.createdAt)}</span>
+                <button
+                  type="button"
+                  onClick={() => loadRun(run.id)}
+                  disabled={run.status !== "SUCCESS" || selectedRun.isFetching}
+                  title={run.status === "SUCCESS" ? undefined : "No trace stored for failed runs"}
+                  className="rounded-lg border border-border px-2.5 py-1 text-xs transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {selectedRunId === run.id && selectedRun.isFetching ? "Loading…" : "View"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-muted">
+            No stored runs yet — run a trace above and it will appear here.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

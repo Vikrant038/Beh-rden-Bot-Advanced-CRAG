@@ -31,7 +31,7 @@ async function openDocuments(page: Page, uploadHandler?: (route: Route) => Promi
     }),
     "admin.dailyQueries": () => [],
     "admin.modeSplit": () => [],
-    "admin.recentQueries": () => [],
+    "admin.recentQueries": () => ({ items: [], nextCursor: null }),
   });
   if (uploadHandler) {
     await page.route("**/api/admin/documents/upload", uploadHandler);

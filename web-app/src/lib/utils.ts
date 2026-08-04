@@ -50,3 +50,22 @@ export function formatRelativeDay(date: string): string {
   }
   return target.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
+
+/**
+ * Formats a USD amount for cost readouts. Sub-cent values are shown with
+ * enough precision to stay honest (e.g. "$0.0004"), larger values compact.
+ */
+export function formatUsd(usd: number): string {
+  if (!Number.isFinite(usd) || usd <= 0) {
+    return "$0.00";
+  }
+  if (usd >= 1) {
+    return `$${usd.toFixed(2)}`;
+  }
+  if (usd >= 0.01) {
+    return `$${usd.toFixed(3)}`;
+  }
+  // Sub-cent: keep 4 significant digits after the leading zeros.
+  const decimals = Math.max(4, 2 + Math.ceil(-Math.log10(usd)));
+  return `$${usd.toFixed(Math.min(decimals, 9))}`;
+}

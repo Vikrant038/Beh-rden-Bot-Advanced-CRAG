@@ -18,6 +18,7 @@
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
     "ingest": "tsx src/server/ingest/cli.ts",
+    "storage:estimate": "tsx scripts/estimate-storage.ts",
     "prepare": "husky"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
     "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^5.5.7",
     "@prisma/client": "^6.19.3",
+    "@radix-ui/react-dialog": "^1.1.23",
     "@tanstack/react-query": "^5.101.4",
     "@trpc/client": "^11.18.0",
     "@trpc/react-query": "^11.18.0",

@@ -49,4 +49,26 @@ export const documentRouter = router({
       logger.info({ url: input.url, status: result.status }, "[DOCUMENT] ingest complete");
       return result;
     }),
+
+  deleteMany: adminProcedure
+    .input(z.object({ ids: z.array(z.string().min(1)).min(1).max(100) }))
+    .mutation(async ({ input }) => {
+      const docs = await prisma.document.findMany({
+        where: { id: { in: input.ids } },
+        select: { id: true, chunkCount: true },
+      });
+      const ids = docs.map((doc) => doc.id);
+      const totalChunks = docs.reduce((acc, doc) => acc + doc.chunkCount, 0);
+
+      if (ids.length > 0) {
+        await prisma.document.deleteMany({ where: { id: { in: ids } } });
+        for (const id of ids) {
+          await semanticCache.invalidateForDocument(id);
+        }
+        await getCorpusProvider().invalidate();
+      }
+
+      logger.info({ deleted: ids.length, totalChunks }, "[DOCUMENT] bulk deleted documents");
+      return { success: true, deletedCount: ids.length, deletedChunks: totalChunks };
+    }),
 });

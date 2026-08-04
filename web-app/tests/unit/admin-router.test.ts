@@ -148,6 +148,7 @@ describe("admin router", () => {
     prismaMock.$queryRaw.mockResolvedValue([
       {
         id: "m1",
+        conversationId: "c1",
         query: "How do I open a blocked account?",
         createdAt: new Date("2026-07-31T10:00:00Z"),
         mode: "agentic",
@@ -157,6 +158,7 @@ describe("admin router", () => {
       },
       {
         id: "m2",
+        conversationId: "c2",
         query: "Visa fee?",
         createdAt: new Date("2026-07-31T09:00:00Z"),
         mode: "standard",
@@ -167,15 +169,85 @@ describe("admin router", () => {
     ] as never);
     const caller = makeCaller();
     const result = await caller.admin.recentQueries();
-    expect(result).toHaveLength(2);
-    expect(result[0].mode).toBe("agentic");
-    expect(result[1].isCached).toBe(true);
+    expect(result.items).toHaveLength(2);
+    expect(result.nextCursor).toBeNull();
+    expect(result.items[0].mode).toBe("agentic");
+    expect(result.items[1].isCached).toBe(true);
   });
 
-  it("recentQueries: falls back to empty list on aggregation failure", async () => {
+  it("recentQueries: exposes a nextCursor when a further page exists", async () => {
+    prismaMock.$queryRaw.mockResolvedValue([
+      {
+        id: "m1",
+        conversationId: "c1",
+        query: "q1",
+        createdAt: new Date("2026-07-31T10:00:00Z"),
+        mode: "agentic",
+        latencyMs: 1,
+        isCached: false,
+        retrievalPath: "p",
+      },
+      {
+        id: "m2",
+        conversationId: "c2",
+        query: "q2",
+        createdAt: new Date("2026-07-31T09:00:00Z"),
+        mode: "standard",
+        latencyMs: 1,
+        isCached: false,
+        retrievalPath: "p",
+      },
+      {
+        id: "m3",
+        conversationId: "c3",
+        query: "q3",
+        createdAt: new Date("2026-07-31T08:00:00Z"),
+        mode: "agentic",
+        latencyMs: 1,
+        isCached: false,
+        retrievalPath: "p",
+      },
+    ] as never);
+    const caller = makeCaller();
+    const result = await caller.admin.recentQueries({ limit: 2 });
+    expect(result.items).toHaveLength(2);
+    expect(result.nextCursor).toEqual({
+      createdAt: new Date("2026-07-31T09:00:00Z"),
+      id: "m2",
+    });
+  });
+
+  it("recentQueries: passes the cursor through as a keyset predicate", async () => {
+    prismaMock.$queryRaw.mockResolvedValue([] as never);
+    const caller = makeCaller();
+    const cursor = { createdAt: new Date("2026-07-31T09:00:00Z"), id: "m2" };
+    await caller.admin.recentQueries({ limit: 10, cursor });
+    const call = prismaMock.$queryRaw.mock.calls[0] ?? [];
+
+    // The literal SQL keeps the DESC keyset ordering.
+    const literals = call.filter((arg) => Array.isArray(arg)).flat();
+    expect(literals.join(" ")).toContain('ORDER BY m."createdAt" DESC, m."id" DESC');
+
+    // The cursor predicate is interpolated as a Prisma.sql fragment (a tagged
+    // template object whose `strings` carry the comparison operators) and the
+    // cursor id travels as a bound parameter.
+    const fragments = call.filter(
+      (arg): arg is { strings: string[] } =>
+        typeof arg === "object" &&
+        arg !== null &&
+        "strings" in arg &&
+        Array.isArray((arg as { strings?: unknown }).strings),
+    );
+    const fragmentText = fragments.map((fragment) => fragment.strings.join("?")).join(" ");
+    expect(fragmentText).toContain('m."createdAt" <');
+    expect(fragmentText).toContain('m."id" <');
+    expect(JSON.stringify(call)).toContain(cursor.id);
+  });
+
+  it("recentQueries: falls back to an empty page on aggregation failure", async () => {
     prismaMock.$queryRaw.mockRejectedValue(new Error("db down"));
     const caller = makeCaller();
     const result = await caller.admin.recentQueries();
-    expect(result).toEqual([]);
+    expect(result).toEqual({ items: [], nextCursor: null });
   });
 });

@@ -6,9 +6,12 @@ import {
   BookOpen,
   CheckSquare,
   Download,
+  Eye,
   FileDown,
   Loader2,
   MessageSquare,
+  MessagesSquare,
+  Pin,
   Search,
   Trash2,
   Zap,
@@ -18,6 +21,14 @@ import { formatRelativeTime, cn } from "@/lib/utils";
 import { useDebouncedValue } from "@/hooks/use-debounce";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { useToast } from "@/lib/toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 type ModeFilter = "all" | "standard" | "agentic";
 type DateRange = "all" | "7d" | "30d";
@@ -66,6 +77,12 @@ export function HistoryList() {
     { limit: 15, search: search || undefined, mode: modeFilter === "all" ? undefined : modeFilter },
     { getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined },
   );
+  const stats = api.conversation.stats.useQuery();
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const preview = api.conversation.getById.useQuery(
+    { id: previewId ?? "" },
+    { enabled: Boolean(previewId) },
+  );
 
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
@@ -109,7 +126,6 @@ export function HistoryList() {
     title: string | null;
   }) => {
     try {
-      const full = await utils.conversation.getById.fetch({ id: conversation.id });
       await deleteMutation.mutateAsync({ id: conversation.id });
       refresh();
       toast({
@@ -120,20 +136,11 @@ export function HistoryList() {
           label: "Undo",
           onClick: () => {
             restoreMutation.mutate(
+              { id: conversation.id },
               {
-                title: full.title ?? "Untitled conversation",
-                mode: full.mode === "STANDARD" ? "standard" : "agentic",
-                messages: full.messages.map((message) => ({
-                  role: message.role === "ASSISTANT" ? "ASSISTANT" : "USER",
-                  content: message.content,
-                  sources: message.sources as unknown,
-                  metadata: message.metadata as unknown,
-                })),
-              },
-              {
-                onSuccess: (result) => {
+                onSuccess: () => {
                   refresh();
-                  router.push(`/chat/${result.id}`);
+                  router.push(`/chat/${conversation.id}`);
                 },
               },
             );
@@ -169,13 +176,25 @@ export function HistoryList() {
       window.setTimeout(() => setConfirmClearAll(false), 4000);
       return;
     }
-    clearAllMutation.mutate(undefined, {
-      onSuccess: () => {
-        setConfirmClearAll(false);
-        refresh();
-        toast({ title: "All conversations deleted", variant: "success" });
+    const hasFilters = search || modeFilter !== "all";
+    clearAllMutation.mutate(
+      {
+        search: search || undefined,
+        mode: modeFilter === "all" ? undefined : modeFilter,
       },
-    });
+      {
+        onSuccess: (data) => {
+          setConfirmClearAll(false);
+          refresh();
+          toast({
+            title: hasFilters
+              ? `${data.deleted} matching conversation${data.deleted === 1 ? "" : "s"} deleted`
+              : "All conversations deleted",
+            variant: "success",
+          });
+        },
+      },
+    );
   };
 
   const handleExport = async (id: string, title: string | null) => {
@@ -210,7 +229,9 @@ export function HistoryList() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = filename.replace(/[^a-z0-9-]+/gi, "-");
+    const base = filename.endsWith(".md") ? filename.slice(0, -3) : filename;
+    const sanitized = base.replace(/[^a-z0-9-]+/gi, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    link.download = `${sanitized || "export"}.md`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -227,8 +248,45 @@ export function HistoryList() {
     });
   };
 
+  const previewConversation = preview.data;
+
   return (
     <div className="mt-6">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-xl border border-border bg-surface p-3">
+          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
+            <MessageSquare className="h-3.5 w-3.5" /> Conversations
+          </p>
+          <p className="mt-1 text-xl font-semibold tabular-nums">
+            {stats.isLoading ? "…" : stats.data?.totalConversations ?? 0}
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-surface p-3">
+          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
+            <MessagesSquare className="h-3.5 w-3.5" /> Messages
+          </p>
+          <p className="mt-1 text-xl font-semibold tabular-nums">
+            {stats.isLoading ? "…" : stats.data?.totalMessages ?? 0}
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-surface p-3">
+          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
+            <Pin className="h-3.5 w-3.5" /> Pinned
+          </p>
+          <p className="mt-1 text-xl font-semibold tabular-nums">
+            {stats.isLoading ? "…" : stats.data?.pinnedConversations ?? 0}
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-surface p-3">
+          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
+            <Trash2 className="h-3.5 w-3.5" /> Deleted
+          </p>
+          <p className="mt-1 text-xl font-semibold tabular-nums">
+            {stats.isLoading ? "…" : stats.data?.deletedConversations ?? 0}
+          </p>
+        </div>
+      </div>
+
       <div className="space-y-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -404,8 +462,11 @@ export function HistoryList() {
           {items.map((conversation) => (
             <li
               key={conversation.id}
+              role="button"
+              tabIndex={0}
+              aria-label={`Open conversation: ${conversation.title ?? "Untitled conversation"}`}
               className={cn(
-                "group flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 transition hover:border-primary/40",
+                "group flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 transition hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                 selected.has(conversation.id) && "border-primary/50 bg-primary/5",
               )}
               onClick={() => {
@@ -413,6 +474,16 @@ export function HistoryList() {
                   toggleSelect(conversation.id);
                 } else {
                   router.push(`/chat/${conversation.id}`);
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  if (selectMode) {
+                    toggleSelect(conversation.id);
+                  } else {
+                    router.push(`/chat/${conversation.id}`);
+                  }
                 }
               }}
             >
@@ -466,13 +537,25 @@ export function HistoryList() {
                 <div className="flex shrink-0 items-center gap-1 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
                   <button
                     type="button"
+                    aria-label="Preview conversation"
+                    title="Quick preview"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setPreviewId(conversation.id);
+                    }}
+                    className="grid min-h-11 min-w-11 place-items-center rounded-lg p-2 text-muted transition hover:bg-surface-hover hover:text-foreground"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
                     aria-label="Export conversation"
                     title="Export as Markdown"
                     onClick={(event) => {
                       event.stopPropagation();
                       void handleExport(conversation.id, conversation.title);
                     }}
-                    className="rounded-lg p-2 text-muted transition hover:bg-surface-hover hover:text-foreground"
+                    className="grid min-h-11 min-w-11 place-items-center rounded-lg p-2 text-muted transition hover:bg-surface-hover hover:text-foreground"
                   >
                     <Download className="h-4 w-4" />
                   </button>
@@ -484,7 +567,7 @@ export function HistoryList() {
                       event.stopPropagation();
                       void deleteWithUndo(conversation);
                     }}
-                    className="rounded-lg p-2 text-muted transition hover:bg-surface-hover hover:text-destructive"
+                    className="grid min-h-11 min-w-11 place-items-center rounded-lg p-2 text-muted transition hover:bg-surface-hover hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -507,6 +590,74 @@ export function HistoryList() {
           Deleting…
         </div>
       ) : null}
+
+      {/* 7.5 — Quick-preview modal (no navigation required). */}
+      <Dialog open={Boolean(previewId)} onOpenChange={(open) => !open && setPreviewId(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="truncate">
+              {previewConversation?.title ?? "Untitled conversation"}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {previewConversation
+                ? `${previewConversation.mode} · ${previewConversation.messages.length} message${
+                    previewConversation.messages.length === 1 ? "" : "s"
+                  } · updated ${formatRelativeTime(previewConversation.updatedAt)}`
+                : "Loading…"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[50vh] space-y-3 overflow-y-auto pr-1">
+            {preview.isLoading ? (
+              <p className="py-8 text-center text-sm text-muted">Loading messages…</p>
+            ) : previewConversation && previewConversation.messages.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted">No messages in this conversation.</p>
+            ) : (
+              previewConversation?.messages.map((message) => (
+                <div key={message.id} className="rounded-xl border border-border bg-background p-3">
+                  <p
+                    className={cn(
+                      "mb-1 text-[10px] font-semibold uppercase tracking-wide",
+                      message.role === "USER" ? "text-accent" : "text-primary",
+                    )}
+                  >
+                    {message.role === "USER" ? "You" : "Behörden-Bot"}
+                  </p>
+                  <p className="line-clamp-4 whitespace-pre-wrap text-sm leading-relaxed">
+                    {message.content}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              variant="outline"
+              size="md"
+              disabled={preview.isLoading || !previewConversation}
+              onClick={() =>
+                void handleExport(previewConversation?.id ?? "", previewConversation?.title ?? null)
+              }
+            >
+              <Download className="mr-1.5 h-4 w-4" />
+              Export
+            </Button>
+            <Button
+              size="md"
+              onClick={() => {
+                const id = previewId;
+                setPreviewId(null);
+                if (id) {
+                  router.push(`/chat/${id}`);
+                }
+              }}
+            >
+              Open conversation
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

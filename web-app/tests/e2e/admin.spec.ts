@@ -22,7 +22,7 @@ test("allows an admin to view the dashboard", async ({ page }) => {
     }),
     "admin.dailyQueries": () => [],
     "admin.modeSplit": () => [],
-    "admin.recentQueries": () => [],
+    "admin.recentQueries": () => ({ items: [], nextCursor: null }),
   });
 
   await page.goto("/admin/dashboard");

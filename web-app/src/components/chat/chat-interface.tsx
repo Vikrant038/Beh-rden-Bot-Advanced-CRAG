@@ -4,14 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowDown,
-  BadgeCheck,
   BookOpen,
   Copy,
-  FileText,
-  Landmark,
   MessageCircle,
   Plus,
-  Scale,
   Trash2,
   Zap,
 } from "lucide-react";
@@ -21,43 +17,13 @@ import type { ChatMode, PipelineStage } from "@/lib/chat/types";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import { PipelineStatus } from "@/components/chat/pipeline-status";
 import { ChatInput } from "@/components/chat/chat-input";
+import { ChatEmptyState, QUICK_PROMPTS } from "@/components/chat/chat-empty-state";
 import { DisambiguationCards } from "@/components/chat/disambiguation-cards";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/lib/toast";
+import { GUEST_CONVERSATION_LIMIT, GUEST_LIMIT_REACHED_CODE } from "@/lib/guest";
 import { api } from "@/lib/trpc/client";
-
-const SUGGESTED_PROMPTS = [
-  {
-    title: "Visa documents",
-    description: "What do I need for a German student visa?",
-    query: "What documents do I need for a German student visa?",
-    icon: FileText,
-  },
-  {
-    title: "Blocked account",
-    description: "How much for 2026?",
-    query: "How much do I need in a blocked account for 2026?",
-    icon: Landmark,
-  },
-  {
-    title: "APS certificate",
-    description: "What is it and how long does it take?",
-    query: "What is the APS certificate and how long does it take?",
-    icon: BadgeCheck,
-  },
-  {
-    title: "Funding options",
-    description: "Blocked account vs scholarship",
-    query: "Compare blocked account vs scholarship funding options.",
-    icon: Scale,
-  },
-];
-
-const QUICK_PROMPTS = [
-  "APS verification timeline",
-  "Blocked account amount for 2026",
-  "Student visa appointment checklist",
-];
 
 const FOLLOW_UP_BANK: Array<{ keywords: string[]; prompts: string[] }> = [
   {
@@ -146,52 +112,71 @@ function ThinkingIndicator() {
   );
 }
 
-function ChatEmptyIllustration() {
-  const reduceMotion = useReducedMotion();
-  return (
-    <div
-      className="relative mx-auto grid h-28 w-28 place-items-center rounded-3xl border border-glass-border bg-glass shadow-glass backdrop-blur"
-      aria-hidden="true"
-    >
-      <motion.div
-        className="grid h-14 w-14 place-items-center rounded-2xl bg-primary/15 text-primary"
-        animate={reduceMotion ? undefined : { y: [0, -4, 0] }}
-        transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
-      >
-        <MessageCircle className="h-7 w-7" />
-      </motion.div>
-      <motion.div
-        className="absolute -right-2 top-4 h-5 w-5 rounded-lg bg-accent/25"
-        animate={reduceMotion ? undefined : { y: [0, 5, 0], opacity: [0.4, 1, 0.4] }}
-        transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <motion.div
-        className="absolute -bottom-2 left-4 h-4 w-4 rounded-lg bg-warning/25"
-        animate={reduceMotion ? undefined : { y: [0, -4, 0], opacity: [0.4, 1, 0.4] }}
-        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-      />
-    </div>
-  );
-}
-
-export function ChatInterface({ conversationId }: { conversationId: string }) {
+export function ChatInterface({
+  conversationId,
+  initialQuery,
+  initialMode,
+}: {
+  conversationId: string;
+  /** First message handed off from /chat via ?q= (auto-sent once, then dropped). */
+  initialQuery?: string;
+  /** Mode handed off from /chat via ?m= (falls back to the default). */
+  initialMode?: ChatMode;
+}) {
   const router = useRouter();
   const utils = api.useUtils();
   const { toast } = useToast();
   const createMutation = api.conversation.create.useMutation();
   const clearMutation = api.conversation.clear.useMutation();
-  const { messages, isStreaming, status, error, disambiguationOptions, sendMessage, regenerate, stop, resetMessages } =
-    useChat({ conversationId, onNotFound: () => router.replace("/chat") });
+  const feedbackMutation = api.chat.feedback.useMutation();
+  const [feedbackState, setFeedbackState] = useState<Record<string, "up" | "down" | null>>({});
+  const {
+    messages,
+    isStreaming,
+    isLoading,
+    notFound,
+    status,
+    error,
+    notice,
+    disambiguationOptions,
+    sendMessage,
+    regenerate,
+    stop,
+    resetMessages,
+  } = useChat({ conversationId });
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [mode, setMode] = useState<ChatMode>("agentic");
+  const [mode, setMode] = useState<ChatMode>(initialMode ?? "agentic");
   const [showScrollButton, setShowScrollButton] = useState(false);
+
+  // ── First-message handoff from the /chat composer ───────────────────────
+  // /chat creates the conversation and redirects with ?q=<query>. Auto-send it
+  // exactly once once the conversation has loaded, then strip the param so a
+  // reload never re-sends (or re-creates) anything.
+  const initialSentRef = useRef(false);
+  useEffect(() => {
+    if (initialSentRef.current || !initialQuery || isLoading || notFound) {
+      return;
+    }
+    initialSentRef.current = true;
+    void sendMessage(initialQuery, mode);
+    router.replace(`/chat/${conversationId}`, { scroll: false });
+  }, [initialQuery, isLoading, notFound, sendMessage, mode, router, conversationId]);
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const reduceMotion = useReducedMotion();
 
+  // Only follow the stream while the user is already at the bottom, so scrolling
+  // up to re-read an earlier answer doesn't yank them back down.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, status]);
+    if (showScrollButton) {
+      return;
+    }
+    bottomRef.current?.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "end",
+    });
+  }, [messages, status, showScrollButton, reduceMotion]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -206,10 +191,16 @@ export function ChatInterface({ conversationId }: { conversationId: string }) {
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  const isEmpty = messages.length === 0 && !isStreaming && disambiguationOptions.length === 0;
+  // A missing/inaccessible conversation renders the not-found panel instead of
+  // the empty state, so the two never appear together.
+  const isEmpty =
+    !notFound && messages.length === 0 && !isStreaming && disambiguationOptions.length === 0;
   const isThinking = isStreaming && status === "idle";
+  // Must be the newest assistant message: chat.regenerate deletes the newest one
+  // server-side, so excluding cached answers here would delete a different
+  // message than the one the button is attached to.
   const lastAssistantIndex = messages.findLastIndex(
-    (message) => message.role === "ASSISTANT" && message.content && !message.metadata?.isCached,
+    (message) => message.role === "ASSISTANT" && Boolean(message.content),
   );
   const lastAssistant = lastAssistantIndex >= 0 ? messages[lastAssistantIndex] : undefined;
   const lastUserContent = [...messages].reverse().find((message) => message.role === "USER")?.content ?? "";
@@ -227,8 +218,17 @@ export function ChatInterface({ conversationId }: { conversationId: string }) {
         onSuccess: (conversation) => {
           router.push(`/chat/${conversation.id}`);
         },
-        onError: () => {
-          toast({ title: "Could not start a new chat", variant: "error" });
+        onError: (error) => {
+          if (error.data?.code === GUEST_LIMIT_REACHED_CODE) {
+            toast({
+              title: "Guest limit reached",
+              description: `Free browsing includes ${GUEST_CONVERSATION_LIMIT} conversations. Sign in to keep chatting.`,
+              variant: "warning",
+              action: { label: "Sign in", onClick: () => router.push("/login") },
+            });
+          } else {
+            toast({ title: "Could not start a new chat", variant: "error" });
+          }
         },
       },
     );
@@ -257,12 +257,14 @@ export function ChatInterface({ conversationId }: { conversationId: string }) {
       { id: conversationId },
       {
         onSuccess: () => {
+          setConfirmClearOpen(false);
           resetMessages();
           void utils.conversation.getById.invalidate({ id: conversationId });
           void utils.conversation.list.invalidate();
           toast({ title: "Conversation cleared", variant: "success" });
         },
         onError: () => {
+          setConfirmClearOpen(false);
           toast({ title: "Could not clear the conversation", variant: "error" });
         },
       },
@@ -294,17 +296,17 @@ export function ChatInterface({ conversationId }: { conversationId: string }) {
             onClick={() => void copyConversation()}
             aria-label="Copy conversation"
             title="Copy conversation"
-            className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
+            className="grid h-9 w-9 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
           >
             <Copy className="h-4 w-4" />
           </button>
           <button
             type="button"
-            onClick={clearConversation}
-            disabled={clearMutation.isPending}
+            onClick={() => setConfirmClearOpen(true)}
+            disabled={clearMutation.isPending || messages.length === 0}
             aria-label="Clear conversation"
             title="Clear conversation"
-            className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground disabled:opacity-50"
+            className="grid h-9 w-9 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground disabled:opacity-50"
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -321,37 +323,15 @@ export function ChatInterface({ conversationId }: { conversationId: string }) {
       </header>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6">
+        <div
+          className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions text"
+          aria-label="Conversation"
+        >
           {isEmpty && (
-            <div className="flex flex-1 flex-col items-center justify-center py-14 text-center">
-              <ChatEmptyIllustration />
-              <h2 className="mt-6 text-xl font-semibold">How can I help you today?</h2>
-              <p className="mt-2 max-w-md text-sm text-muted">
-                Ask about German student visas, APS certification, blocked accounts, or university
-                applications.
-              </p>
-              <div className="mt-6 grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
-                {SUGGESTED_PROMPTS.map((prompt) => {
-                  const Icon = prompt.icon;
-                  return (
-                    <button
-                      key={prompt.title}
-                      type="button"
-                      onClick={() => void sendMessage(prompt.query, mode)}
-                      className="group flex items-start gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-left transition hover:border-primary hover:bg-surface-hover"
-                    >
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      <span>
-                        <span className="block text-sm font-medium">{prompt.title}</span>
-                        <span className="mt-0.5 block text-xs text-muted">{prompt.description}</span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <ChatEmptyState onSubmit={(query, promptMode) => void sendMessage(query, promptMode)} />
           )}
 
           {messages.map((message, index) => {
@@ -375,7 +355,37 @@ export function ChatInterface({ conversationId }: { conversationId: string }) {
                   <MessageBubble
                     message={message}
                     streaming={message.id === STREAMING_ID}
-                    onRegenerate={isLastAssistant ? () => void regenerate() : undefined}
+                    feedback={feedbackState[message.id] ?? null}
+                    onRegenerate={isLastAssistant ? () => void regenerate(mode) : undefined}
+                    onFeedback={(rating) => {
+                      setFeedbackState((prev) => ({ ...prev, [message.id]: rating }));
+                      feedbackMutation.mutate(
+                        {
+                          messageId: message.id,
+                          rating: rating === "up" ? "UP" : rating === "down" ? "DOWN" : null,
+                        },
+                        {
+                          onError: () => {
+                            toast({
+                              title: "Could not save feedback",
+                              variant: "error",
+                            });
+                          },
+                        },
+                      );
+                    }}
+                    onCopied={() =>
+                      toast({
+                        title: "Copied to clipboard",
+                        variant: "success",
+                      })
+                    }
+                    onCopyFailed={() =>
+                      toast({
+                        title: "Clipboard access unavailable",
+                        variant: "error",
+                      })
+                    }
                   />
                 </motion.div>
               </div>
@@ -409,12 +419,44 @@ export function ChatInterface({ conversationId }: { conversationId: string }) {
             </div>
           )}
 
+          {notice && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="rounded-xl border border-border bg-surface px-4 py-3 text-sm text-muted"
+            >
+              {notice}
+            </div>
+          )}
+
           {error && !isStreaming && (
             <div
               role="alert"
               className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
             >
               {error}
+            </div>
+          )}
+
+          {notFound && !isLoading && (
+            <div className="grid h-full place-items-center px-4">
+              <div className="max-w-sm rounded-2xl border border-glass-border bg-glass p-8 text-center shadow-glass backdrop-blur">
+                <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                  <MessageCircle className="h-6 w-6" />
+                </span>
+                <h2 className="mt-5 text-lg font-semibold">Conversation not found</h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                  This conversation may have been deleted, or you don&apos;t have access to it.
+                </p>
+                <button
+                  type="button"
+                  onClick={newChat}
+                  className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover"
+                >
+                  <Plus className="h-4 w-4" />
+                  Start a new chat
+                </button>
+              </div>
             </div>
           )}
 
@@ -433,15 +475,30 @@ export function ChatInterface({ conversationId }: { conversationId: string }) {
         </button>
       )}
 
-      <ChatInput
-        conversationId={conversationId}
-        onSubmit={(query) => void sendMessage(query, mode)}
-        onStop={stop}
-        isStreaming={isStreaming}
-        progress={progress}
-        mode={mode}
-        onModeChange={setMode}
-        suggestions={QUICK_PROMPTS}
+      {!notFound && (
+        <ChatInput
+          conversationId={conversationId}
+          onSubmit={(query) => void sendMessage(query, mode)}
+          onStop={stop}
+          isStreaming={isStreaming}
+          progress={progress}
+          mode={mode}
+          onModeChange={setMode}
+          suggestions={QUICK_PROMPTS}
+          onPasteUnavailable={() =>
+            toast({ title: "Clipboard access is unavailable in this browser", variant: "error" })
+          }
+        />
+      )}
+
+      <ConfirmDialog
+        open={confirmClearOpen}
+        onOpenChange={setConfirmClearOpen}
+        title="Clear this conversation?"
+        description={`This permanently deletes all ${messages.length} message${messages.length === 1 ? "" : "s"} in this conversation. This cannot be undone.`}
+        confirmLabel="Clear conversation"
+        isPending={clearMutation.isPending}
+        onConfirm={clearConversation}
       />
     </div>
   );

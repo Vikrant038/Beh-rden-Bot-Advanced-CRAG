@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { setSessionCookie } from "./helpers/auth";
-import { mockChatStream, mockTrpc } from "./helpers/trpc-mock";
+import { mockTrpc } from "./helpers/trpc-mock";
 
 const CONVERSATION_ID = "conv-e2e";
 const ISO = "2026-08-01T00:00:00.000Z";
@@ -34,8 +34,73 @@ const EMPTY_CONVERSATION = {
   messages: [],
 };
 
-function mockConversationRouters(page: import("@playwright/test").Page, fixture: unknown) {
+function mockConversationRouters(
+  page: import("@playwright/test").Page,
+  fixture: unknown,
+  onCreate?: () => void,
+) {
   return mockTrpc(page, {
+    "conversation.create": () => {
+      onCreate?.();
+      return {
+        id: CONVERSATION_ID,
+        title: "New conversation",
+        mode: "AGENTIC",
+        createdAt: ISO,
+        updatedAt: ISO,
+      };
+    },
+    "conversation.getById": () => fixture,
+    "conversation.list": () => ({ items: [], nextCursor: null }),
+  });
+}
+
+test("composer stays put until a message is sent (no eager conversation)", async ({ page }) => {
+  await setSessionCookie(page.context());
+  let createCalls = 0;
+  await mockConversationRouters(page, EMPTY_CONVERSATION, () => {
+    createCalls += 1;
+  });
+
+  await page.goto("/chat");
+
+  // /chat is a lazy composer: no auto-create, no redirect, empty state shown.
+  await expect(page).toHaveURL(/\/chat$/);
+  await expect(page.getByRole("heading", { name: "How can I help you today?" })).toBeVisible();
+  expect(createCalls).toBe(0);
+});
+
+test("sends the first message, creates the conversation, and renders the streamed reply", async ({
+  page,
+}) => {
+  await setSessionCookie(page.context());
+
+  // The stream route flips this flag; once consumed, getById returns the
+  // conversation as the server would persist it (user message + full answer),
+  // so the post-stream invalidateConversation refetch doesn't wipe the text.
+  let streamed = false;
+  const POST_STREAM_CONVERSATION = {
+    ...PERSISTED_CONVERSATION,
+    messages: [
+      {
+        id: "user-e2e",
+        role: "USER",
+        content: "What do I need for a student visa?",
+        metadata: { mode: "agentic" },
+        createdAt: ISO,
+      },
+      {
+        id: "assistant-streamed",
+        role: "ASSISTANT",
+        content: "Hello from E2E assistant",
+        sources: [],
+        metadata: { stage: "done" },
+        createdAt: ISO,
+      },
+    ],
+  };
+
+  await mockTrpc(page, {
     "conversation.create": () => ({
       id: CONVERSATION_ID,
       title: "New conversation",
@@ -43,50 +108,58 @@ function mockConversationRouters(page: import("@playwright/test").Page, fixture:
       createdAt: ISO,
       updatedAt: ISO,
     }),
-    "conversation.getById": () => fixture,
+    "conversation.getById": () => (streamed ? POST_STREAM_CONVERSATION : PERSISTED_CONVERSATION),
     "conversation.list": () => ({ items: [], nextCursor: null }),
-    "chat.sendMessage": () => ({
-      messageId: "user-e2e",
-      conversationId: CONVERSATION_ID,
-    }),
   });
-}
 
-test("sends a message and renders the streamed assistant reply", async ({ page }) => {
-  await setSessionCookie(page.context());
-  await mockConversationRouters(page, PERSISTED_CONVERSATION);
-
-  await mockChatStream(page, [
+  // Inline the stream route so we can flip the persisted-state flag exactly
+  // when the SSE payload is consumed (mockChatStream can't signal that).
+  const streamEvents = [
     { type: "status", stage: "retrieval" },
     { type: "token", content: "Hello from E2E assistant" },
     { type: "done", messageId: "assistant-streamed", sources: [], metadata: { stage: "done" } },
-  ]);
+  ];
+  const body = streamEvents.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("");
+  await page.route("**/api/chat/stream", async (route) => {
+    streamed = true;
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream; charset=utf-8",
+      body,
+    });
+  });
 
   await page.goto("/chat");
 
-  // /chat auto-creates a conversation and redirects to /chat/:id.
-  await expect(page).toHaveURL(new RegExp(`/chat/${CONVERSATION_ID}$`));
-
-  // The persisted assistant message renders before we send anything.
-  await expect(page.getByText("Welcome back to your conversation")).toBeVisible();
-
-  // Send a message from the input box.
+  // Send a message from the composer input.
   const input = page.getByPlaceholder(/Ask about visas/);
   await input.fill("What do I need for a student visa?");
   await page.getByRole("button", { name: "Send message" }).click();
 
-  // The user bubble and the newly streamed assistant reply appear.
+  // The first message creates the conversation and redirects to it. The URL's
+  // ?q= param is stripped immediately by the interface after the handoff, so
+  // we only assert the conversation URL — the auto-sent user bubble below is
+  // what proves the handoff itself worked.
+  await expect(page).toHaveURL(new RegExp(`/chat/${CONVERSATION_ID}$`));
+
+  // The handed-off query is auto-sent; the streamed assistant reply appears.
   await expect(page.getByText("What do I need for a student visa?")).toBeVisible();
   await expect(page.getByText("Hello from E2E assistant")).toBeVisible();
 });
 
-test("shows the empty state for a fresh conversation", async ({ page }) => {
+test("shows the empty state for a fresh conversation without creating another", async ({
+  page,
+}) => {
   await setSessionCookie(page.context());
-  await mockConversationRouters(page, EMPTY_CONVERSATION);
+  let createCalls = 0;
+  await mockConversationRouters(page, EMPTY_CONVERSATION, () => {
+    createCalls += 1;
+  });
 
-  await page.goto("/chat");
-  await expect(page).toHaveURL(new RegExp(`/chat/${CONVERSATION_ID}$`));
+  await page.goto(`/chat/${CONVERSATION_ID}`);
   await expect(page.getByRole("heading", { name: "How can I help you today?" })).toBeVisible();
+  // Merely viewing a conversation must never create a new one.
+  expect(createCalls).toBe(0);
 });
 
 test("renders an error banner when the stream fails", async ({ page }) => {
@@ -103,11 +176,13 @@ test("renders an error banner when the stream fails", async ({ page }) => {
   );
 
   await page.goto("/chat");
-  await expect(page).toHaveURL(new RegExp(`/chat/${CONVERSATION_ID}$`));
+  await expect(page).toHaveURL(/\/chat$/);
 
   const input = page.getByPlaceholder(/Ask about visas/);
   await input.fill("Trigger an error");
   await page.getByRole("button", { name: "Send message" }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/chat/${CONVERSATION_ID}`));
 
   // Scoped to the banner: Next.js also injects a hidden route announcer with role="alert".
   const alert = page.getByRole("alert").filter({ hasText: "Streaming request failed" });

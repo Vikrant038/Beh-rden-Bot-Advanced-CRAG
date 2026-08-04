@@ -1,5 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { runChatStream } from "@/server/rag/chat-pipeline";
+import { runChatStream, chunkText } from "@/server/rag/chat-pipeline";
 import type { ChatStreamEvent } from "@/lib/chat/types";
 
 vi.mock("@/server/db", () => ({
@@ -50,6 +50,7 @@ import { runStandardCrag } from "@/server/rag/pipeline";
 import { runAgenticRag } from "@/server/rag/agents/orchestrator";
 import { disambiguateQuery } from "@/server/rag/disambiguation";
 import { isQueryOutOfDomain } from "@/server/rag/guardrail";
+import type { AgenticRagResponse } from "@/server/rag/agents/orchestrator";
 
 const prismaMock = prisma as unknown as MockPrisma;
 const mockedStandard = vi.mocked(runStandardCrag);
@@ -67,7 +68,7 @@ const standardResult = {
   isCached: false,
 };
 
-const agenticResult = {
+const agenticResult: AgenticRagResponse = {
   userQuery: "q",
   maskedQuery: "q",
   guardrail: { passed: true, reason: "In-domain" },
@@ -76,6 +77,25 @@ const agenticResult = {
   analysisMatrix: { summary: "s", structured_table: "", key_insights: [], verified_facts: [] },
   sources: [{ name: "doc", url: "https://example.com", score: 0.8, documentId: "d1" }],
   totalLatencyMs: 500,
+  stages: [
+    { index: 0, name: "Query disambiguation & guardrail", durationMs: 80, status: "executed" },
+    { index: 1, name: "Research agent (ReAct)", durationMs: 120, status: "executed" },
+    { index: 2, name: "Analyst (comparison matrix)", durationMs: 150, status: "executed" },
+    { index: 3, name: "Writer (markdown synthesis)", durationMs: 150, status: "executed" },
+  ],
+  llmCalls: [
+    {
+      stage: "Stage 2 — Analyst (comparison matrix)",
+      provider: "groq",
+      model: "llama-3.1-8b-instant",
+      latencyMs: 150,
+      promptTokens: 900,
+      completionTokens: 220,
+      totalTokens: 1120,
+      costUsd: 0.0000626,
+    },
+  ],
+  totalCostUsd: 0.0000626,
 };
 
 async function collect(input: Parameters<typeof runChatStream>[0]): Promise<ChatStreamEvent[]> {
@@ -142,11 +162,27 @@ describe("runChatStream (SSE event generation)", () => {
       expect(done.metadata.retrievalPath).toBe("HYBRID_RRF_CROSS_ENCODER");
     }
 
-    expect(prismaMock.conversation.update).toHaveBeenCalledWith({
-      where: { id: "conv-1" },
-      data: { title: "What is the blocked account total?" },
-    });
+    expect(prismaMock.conversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "conv-1" },
+        data: expect.objectContaining({ title: "What is the blocked account total?" }),
+      }),
+    );
     expect(prismaMock.message.create).toHaveBeenCalledTimes(2);
+  });
+
+  it("chunkText preserves spaces and newlines across chunk boundaries", () => {
+    // Regression: chunks used to be re-joined with a space, dropping the
+    // whitespace BETWEEN chunks ("ensure a" + "smooth…" → "ensure asmooth…")
+    // and flattening markdown. Concatenating the streamed tokens must
+    // reconstruct the source text exactly.
+    const prose =
+      "To ensure a smooth student visa application process, it's essential to prepare all " +
+      "required documents and follow the correct application process.";
+    expect(chunkText(prose).join("")).toBe(prose);
+
+    const markdown = "## Answer\n\n### Actionable Next Steps\n\n1. Step one.";
+    expect(chunkText(markdown).join("")).toBe(markdown);
   });
 
   it("agentic mode: emits agent stage statuses and the final answer tokens", async () => {

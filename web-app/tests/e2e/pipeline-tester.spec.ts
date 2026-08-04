@@ -32,12 +32,44 @@ const fullTrace = {
     },
   ],
   totalLatencyMs: 2400,
+  stages: [
+    { index: 0, name: "Query disambiguation & guardrail", durationMs: 400, status: "executed" },
+    { index: 1, name: "Research agent (ReAct)", durationMs: 1200, status: "executed" },
+    { index: 2, name: "Analyst (comparison matrix)", durationMs: 500, status: "executed" },
+    { index: 3, name: "Writer (markdown synthesis)", durationMs: 300, status: "executed" },
+  ],
+  llmCalls: [
+    {
+      stage: "Stage 2 — Analyst (comparison matrix)",
+      provider: "groq",
+      model: "llama-3.1-8b-instant",
+      latencyMs: 500,
+      promptTokens: 900,
+      completionTokens: 220,
+      totalTokens: 1120,
+      costUsd: 0.0000626,
+    },
+  ],
+  totalCostUsd: 0.0000626,
+};
+
+const noRuns = { items: [], nextCursor: null };
+
+const storedRun = {
+  id: "run-1",
+  prompt: "Stored visa question",
+  traceJson: fullTrace,
+  latencyMs: 2400,
+  status: "SUCCESS",
+  error: null,
+  createdAt: "2026-08-01T10:00:00.000Z",
 };
 
 async function openTester(page: import("@playwright/test").Page) {
   await setSessionCookie(page.context(), { role: "ADMIN" });
   await mockTrpc(page, {
     "admin.testPipeline": () => fullTrace,
+    "admin.listTestRuns": () => noRuns,
     "admin.metrics": () => ({
       totalUsers: 1,
       totalMessages: 1,
@@ -117,6 +149,7 @@ test("surfaces an out-of-domain guardrail block", async ({ page }) => {
       sources: [],
       totalLatencyMs: 120,
     }),
+    "admin.listTestRuns": () => noRuns,
     "admin.metrics": () => ({
       totalUsers: 1,
       totalMessages: 1,
@@ -160,6 +193,7 @@ test("marks a cache-hit trace with a badge", async ({ page }) => {
       },
       totalLatencyMs: 45,
     }),
+    "admin.listTestRuns": () => noRuns,
     "admin.metrics": () => ({
       totalUsers: 1,
       totalMessages: 1,
@@ -180,4 +214,29 @@ test("marks a cache-hit trace with a badge", async ({ page }) => {
 test("shows the empty state before the first run", async ({ page }) => {
   await openTester(page);
   await expect(page.getByText("No trace yet")).toBeVisible();
+  await expect(page.getByText("No stored runs yet — run a trace above and it will appear here.")).toBeVisible();
+});
+
+test("loads a stored trace from the recent-runs list", async ({ page }) => {
+  await setSessionCookie(page.context(), { role: "ADMIN" });
+  await mockTrpc(page, {
+    "admin.testPipeline": () => fullTrace,
+    "admin.listTestRuns": () => ({ items: [storedRun], nextCursor: null }),
+    "admin.getTestRun": () => storedRun,
+    "admin.metrics": () => ({
+      totalUsers: 1,
+      totalMessages: 1,
+      queriesToday: 0,
+      cacheHitRate: 0,
+      avgLatencyMs: 0,
+    }),
+  });
+  await page.goto("/admin/pipeline-tester");
+
+  await expect(page.getByText("Stored visa question")).toBeVisible();
+  await page.getByRole("button", { name: "View" }).click();
+
+  await expect(page.getByText("Stored trace")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("Pipeline trace")).toBeVisible();
+  await expect(page.getByText(fullTrace.finalAnswer, { exact: true })).toBeVisible();
 });

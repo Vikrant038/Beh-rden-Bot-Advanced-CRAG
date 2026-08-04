@@ -4,6 +4,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { StageNode } from "@/components/admin/pipeline/stage-node";
 import { ReactStep } from "@/components/admin/pipeline/react-step";
 import { SourcePanel } from "@/components/admin/pipeline/source-panel";
+import { LlmCostPanel } from "@/components/admin/pipeline/llm-cost-panel";
 import type { ResearchStep } from "@/server/rag/agents/research";
 
 const step: ResearchStep = {
@@ -57,6 +58,40 @@ describe("ReactStep", () => {
     expect(screen.getByText(/Primary query received/)).toBeInTheDocument();
     expect(screen.getByText(/Retrieved 3 relevant chunks/)).toBeInTheDocument();
     expect(screen.getByText("iteration 1")).toBeInTheDocument();
+  });
+});
+
+describe("LlmCostPanel", () => {
+  it("renders per-call latency, tokens, cost, and the summed total", () => {
+    render(
+      <LlmCostPanel
+        calls={[
+          {
+            stage: "Stage 2 — Analyst (comparison matrix)",
+            provider: "groq",
+            model: "llama-3.1-8b-instant",
+            latencyMs: 500,
+            promptTokens: 900,
+            completionTokens: 220,
+            totalTokens: 1120,
+            costUsd: 0.0000626,
+          },
+        ]}
+        totalCostUsd={0.0000626}
+      />,
+    );
+    expect(screen.getByText("LLM calls & cost")).toBeInTheDocument();
+    expect(screen.getByText(/Stage 2 — Analyst/)).toBeInTheDocument();
+    expect(screen.getByText("Groq")).toBeInTheDocument();
+    expect(screen.getByText("900 in · 220 out")).toBeInTheDocument();
+    expect(screen.getByText("500ms")).toBeInTheDocument();
+  });
+
+  it("renders the zero-call notice when no LLM calls were made", () => {
+    render(<LlmCostPanel calls={[]} totalCostUsd={0} />);
+    expect(
+      screen.getByText(/No LLM calls were made — this trace was served without a model call/),
+    ).toBeInTheDocument();
   });
 });
 

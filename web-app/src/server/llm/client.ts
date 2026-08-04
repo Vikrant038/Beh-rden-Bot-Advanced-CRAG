@@ -4,6 +4,12 @@ import { CircuitBreaker } from "@/server/llm/circuit-breaker";
 import { createLogger } from "@/server/lib/logger";
 import { LLMProviderError } from "@/server/llm/errors";
 import { observeGeneration } from "@/server/tracing";
+import {
+  estimateLlmCostUsd,
+  estimateTokensFromText,
+  getActiveLlmUsageCollector,
+  type LlmProvider,
+} from "@/server/llm/usage";
 
 const logger = createLogger("llm");
 
@@ -67,22 +73,35 @@ export interface HfTextGenerationRequest {
   parameters: { max_new_tokens: number; temperature: number };
 }
 
+/** Token usage reported by a provider, with a text-based fallback. */
+export interface LlmUsageInfo {
+  promptTokens: number;
+  completionTokens: number;
+}
+
+interface LlmProviderResult extends LlmUsageInfo {
+  text: string;
+  provider: LlmProvider;
+  model: string;
+}
+
 async function callHfRaw(
   prompt: string,
   maxTokens: number,
   temperature: number,
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<{ text: string; usage: LlmUsageInfo }> {
   if (!env.HF_TOKEN) {
     throw new LLMProviderError("HF_TOKEN not configured");
   }
+  const model = env.HF_LLM_MODEL ?? DEFAULT_HF_MODEL;
   const body: HfTextGenerationRequest = {
-    model: env.HF_LLM_MODEL ?? DEFAULT_HF_MODEL,
+    model,
     inputs: prompt,
     parameters: { max_new_tokens: maxTokens, temperature },
   };
 
-  const response = await fetch(`${env.HF_INFERENCE_URL}/models/${encodeURIComponent(body.model)}`, {
+  const response = await fetch(`${env.HF_INFERENCE_URL}/models/${encodeURIComponent(model)}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${env.HF_TOKEN}`,
@@ -99,14 +118,35 @@ async function callHfRaw(
   }
 
   const data = (await response.json()) as
-    { generated_text?: string } | Array<{ generated_text?: string }>;
+    | { generated_text?: string; usage?: { input_tokens?: number; output_tokens?: number } }
+    | Array<{ generated_text?: string; usage?: { input_tokens?: number; output_tokens?: number } }>;
   const generated = Array.isArray(data)
     ? data[0]?.generated_text
     : (data as { generated_text?: string }).generated_text;
   if (!generated) {
     throw new LLMProviderError("HuggingFace returned empty response");
   }
-  return generated.trim();
+
+  // HF Inference API reports usage in the `X-Usage` response header when the
+  // model supports it; fall back to a character-based estimate otherwise.
+  let usage: LlmUsageInfo = {
+    promptTokens: estimateTokensFromText(prompt),
+    completionTokens: estimateTokensFromText(generated),
+  };
+  const xUsage = response.headers?.get?.("x-usage");
+  if (xUsage) {
+    try {
+      const parsed = JSON.parse(xUsage) as { input_tokens?: number; output_tokens?: number };
+      usage = {
+        promptTokens: parsed.input_tokens ?? usage.promptTokens,
+        completionTokens: parsed.output_tokens ?? usage.completionTokens,
+      };
+    } catch {
+      // Keep the estimate; a malformed header must not break the call.
+    }
+  }
+
+  return { text: generated.trim(), usage };
 }
 
 function formatPromptForHf(messages: LlmMessage[]): string {
@@ -118,12 +158,13 @@ async function callGroqWithRetry(
   maxTokens: number,
   temperature: number,
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<LlmProviderResult> {
   const client = getGroqClient();
   if (!client) {
     throw new LLMProviderError("Groq client unavailable (GROQ_API_KEY not configured)");
   }
 
+  const model = env.GROQ_MODEL ?? DEFAULT_GROQ_MODEL;
   let lastError: unknown;
   for (let attempt = 1; attempt <= GROQ_MAX_RETRIES; attempt += 1) {
     try {
@@ -131,7 +172,7 @@ async function callGroqWithRetry(
       try {
         const response = await client.chat.completions.create(
           {
-            model: env.GROQ_MODEL ?? DEFAULT_GROQ_MODEL,
+            model,
             messages: messages as unknown as OpenAI.Chat.ChatCompletionMessageParam[],
             max_tokens: maxTokens,
             temperature,
@@ -142,7 +183,15 @@ async function callGroqWithRetry(
         if (!content) {
           throw new LLMProviderError("Groq returned empty completion");
         }
-        return content.trim();
+        const promptText = messages.map((m) => m.content).join("\n");
+        return {
+          text: content.trim(),
+          provider: "groq",
+          model,
+          promptTokens: response.usage?.prompt_tokens ?? estimateTokensFromText(promptText),
+          completionTokens:
+            response.usage?.completion_tokens ?? estimateTokensFromText(content),
+        };
       } finally {
         releaseSemaphore();
       }
@@ -163,14 +212,21 @@ async function callHfWithRetry(
   maxTokens: number,
   temperature: number,
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<LlmProviderResult> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= HF_MAX_RETRIES; attempt += 1) {
     try {
       await acquireSemaphore(signal);
       try {
         const prompt = formatPromptForHf(messages);
-        return await callHfRaw(prompt, maxTokens, temperature, signal);
+        const { text, usage } = await callHfRaw(prompt, maxTokens, temperature, signal);
+        return {
+          text,
+          provider: "huggingface",
+          model: env.HF_LLM_MODEL ?? DEFAULT_HF_MODEL,
+          promptTokens: usage.promptTokens,
+          completionTokens: usage.completionTokens,
+        };
       } finally {
         releaseSemaphore();
       }
@@ -186,9 +242,35 @@ async function callHfWithRetry(
   );
 }
 
+/** Records a successful provider call into the active usage collector (if any). */
+function recordUsageCall(result: LlmProviderResult, latencyMs: number): void {
+  const collector = getActiveLlmUsageCollector();
+  if (!collector) {
+    return;
+  }
+  collector.record({
+    provider: result.provider,
+    model: result.model,
+    latencyMs,
+    promptTokens: result.promptTokens,
+    completionTokens: result.completionTokens,
+    totalTokens: result.promptTokens + result.completionTokens,
+    costUsd: estimateLlmCostUsd(
+      result.provider,
+      result.model,
+      result.promptTokens,
+      result.completionTokens,
+    ),
+  });
+}
+
 /**
  * Centralized resilient LLM caller with circuit breakers + semaphore.
  * Groq primary; HuggingFace fallback. Ported from `src/llm_client.py:call_llm`.
+ *
+ * When a `LlmUsageCollector` is active on this async chain (pipeline tracer),
+ * the successful provider call is recorded with its own latency + tokens so
+ * the trace shows per-call timings and cost estimates.
  */
 export async function callLLM(
   messages: LlmMessage[],
@@ -197,6 +279,7 @@ export async function callLLM(
   const maxTokens = options.maxTokens ?? 600;
   const temperature = options.temperature ?? 0.1;
   const { signal } = options;
+  const startedAt = Date.now();
 
   const generation = observeGeneration("llm.call", {
     model: env.GROQ_MODEL ?? DEFAULT_GROQ_MODEL,
@@ -207,8 +290,9 @@ export async function callLLM(
     const groqResult = await groqBreaker.execute(() =>
       callGroqWithRetry(messages, maxTokens, temperature, signal),
     );
-    generation.end(groqResult);
-    return groqResult;
+    generation.end(groqResult.text);
+    recordUsageCall(groqResult, Date.now() - startedAt);
+    return groqResult.text;
   } catch (error) {
     logger.warn(
       { error: String(error) },
@@ -220,8 +304,9 @@ export async function callLLM(
     const hfResult = await hfBreaker.execute(() =>
       callHfWithRetry(messages, maxTokens, temperature, signal),
     );
-    generation.end(hfResult);
-    return hfResult;
+    generation.end(hfResult.text);
+    recordUsageCall(hfResult, Date.now() - startedAt);
+    return hfResult.text;
   } catch (error) {
     logger.warn({ error: String(error) }, "[CIRCUIT BREAKER] HuggingFace also failed");
     generation.endError(error);

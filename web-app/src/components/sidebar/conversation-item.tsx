@@ -6,6 +6,7 @@ import { Check, Pencil, Pin, PinOff, Trash2, X } from "lucide-react";
 import { api } from "@/lib/trpc/client";
 import type { ConversationSummary } from "@/lib/chat/types";
 import { cn, formatRelativeTime } from "@/lib/utils";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 interface ConversationItemProps {
   conversation: ConversationSummary;
@@ -63,10 +64,6 @@ export function ConversationItem({
   };
 
   const remove = () => {
-    if (!confirming) {
-      setConfirming(true);
-      return;
-    }
     setConfirming(false);
     deleteMutation.mutate(
       { id: conversation.id },
@@ -143,59 +140,49 @@ export function ConversationItem({
         </p>
       </button>
 
-      {confirming ? (
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={remove}
-            aria-label="Confirm delete"
-            className="rounded-md bg-destructive/15 px-1.5 py-1 text-xs font-medium text-destructive transition hover:bg-destructive/25"
-          >
-            Delete
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirming(false)}
-            aria-label="Cancel delete"
-            className="rounded-md px-1.5 py-1 text-xs text-muted transition hover:text-foreground"
-          >
-            Cancel
-          </button>
-        </div>
-      ) : (
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
-          <button
-            type="button"
-            onClick={onTogglePin}
-            aria-label={pinned ? "Unpin conversation" : "Pin conversation"}
-            title={pinned ? "Unpin" : "Pin"}
-            className={cn(
-              "rounded p-1 transition hover:bg-surface-hover hover:text-foreground",
-              pinned ? "text-accent opacity-100" : "text-muted",
-            )}
-          >
-            {pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
-          </button>
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            aria-label="Rename conversation"
-            title="Rename"
-            className="rounded p-1 text-muted transition hover:bg-surface-hover hover:text-foreground"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={remove}
-            aria-label="Delete conversation"
-            title="Delete"
-            className="rounded p-1 text-muted transition hover:bg-surface-hover hover:text-destructive"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
+      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
+        <button
+          type="button"
+          onClick={onTogglePin}
+          aria-label={pinned ? "Unpin conversation" : "Pin conversation"}
+          title={pinned ? "Unpin" : "Pin"}
+          className={cn(
+            "grid min-h-11 min-w-9 place-items-center rounded-lg p-1 transition hover:bg-surface-hover hover:text-foreground",
+            pinned ? "text-accent opacity-100" : "text-muted",
+          )}
+        >
+          {pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+        </button>
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          aria-label="Rename conversation"
+          title="Rename"
+          className="grid min-h-11 min-w-9 place-items-center rounded-lg p-1 text-muted transition hover:bg-surface-hover hover:text-foreground"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          aria-label="Delete conversation"
+          title="Delete"
+          className="grid min-h-11 min-w-9 place-items-center rounded-lg p-1 text-muted transition hover:bg-surface-hover hover:text-destructive"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* 6.6 — Destructive delete confirmation as a real dialog. */}
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Delete conversation?"
+        description={`"${conversation.title ?? "Untitled conversation"}" will be moved to deleted conversations. You can restore it from the history page within the retention window.`}
+        confirmLabel="Delete"
+        isPending={deleteMutation.isPending}
+        onConfirm={remove}
+      />
     </div>
   );
 }

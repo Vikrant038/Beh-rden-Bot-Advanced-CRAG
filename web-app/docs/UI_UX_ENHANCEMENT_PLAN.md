@@ -1,5 +1,4 @@
 # Behörden-Bot — 150-Point UI/UX Enhancement Plan
-
 > **Author:** Professional UI/UX Design Review
 > **Date:** March 2026
 > **Scope:** `web-app` — Next.js 15 + React 19 + Tailwind CSS 4

@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
-import { Check, X } from "lucide-react";
+import { Check } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface ChangelogEntry {
   version: string;
@@ -43,52 +49,16 @@ export function ChangelogModal({
   open: boolean;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
-
-  if (!open) {
-    return null;
-  }
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="What's new"
-    >
-      <button
-        type="button"
-        aria-label="Close changelog"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-      />
-      <div className="relative z-10 max-h-[80vh] w-full max-w-md overflow-y-auto rounded-2xl border border-glass-border bg-surface shadow-2xl">
-        <div className="sticky top-0 flex items-center justify-between border-b border-border bg-surface px-6 py-4">
-          <div>
-            <h2 className="text-lg font-semibold">What&apos;s new</h2>
-            <p className="text-xs text-muted">Recent changes to Behörden-Bot</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="space-y-6 px-6 py-5">
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="text-lg font-semibold">What&apos;s new</DialogTitle>
+          <DialogDescription className="text-xs text-muted">
+            Recent changes to Behörden-Bot
+          </DialogDescription>
+        </DialogHeader>
+        <div className="mt-5 space-y-6">
           {CHANGELOG.map((entry) => (
             <section key={entry.version}>
               <div className="flex items-baseline justify-between gap-2">
@@ -100,7 +70,10 @@ export function ChangelogModal({
               <ul className="mt-2 space-y-1.5">
                 {entry.items.map((item) => (
                   <li key={item} className="flex items-start gap-2 text-sm text-muted">
-                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
+                    <Check
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success"
+                      aria-hidden="true"
+                    />
                     {item}
                   </li>
                 ))}
@@ -108,7 +81,7 @@ export function ChangelogModal({
             </section>
           ))}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
