@@ -29,6 +29,9 @@ import {
   enqueuePdfJob,
   enqueueSyncJobs,
   processIngestJobs,
+  getJob,
+  getJobStats,
+  isJobPending,
 } from "@/server/ingest/jobs";
 
 const mockedIngestUrl = vi.mocked(ingestUrl);
@@ -260,5 +263,57 @@ describe("processIngestJobs (cron worker)", () => {
     const result = await processIngestJobs({ maxJobs: 5, timeBudgetMs: 60_000 });
     expect(result.processed).toBe(1);
     expect(result.remaining).toBe(7);
+  });
+});
+
+describe("getJob / getJobStats / isJobPending", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("isJobPending is true for QUEUED and RUNNING only", () => {
+    expect(isJobPending("QUEUED")).toBe(true);
+    expect(isJobPending("RUNNING")).toBe(true);
+    expect(isJobPending("DONE")).toBe(false);
+    expect(isJobPending("FAILED")).toBe(false);
+  });
+
+  it("getJob maps a stored job to the admin JobView", async () => {
+    const stored = {
+      id: "job-1",
+      type: "URL",
+      status: "DONE",
+      error: null,
+      result: { title: "A", status: "created", chunkCount: 4 },
+      createdAt: new Date("2026-08-01T00:00:00.000Z"),
+      finishedAt: new Date("2026-08-01T00:01:00.000Z"),
+    };
+    prismaMock.ingestJob.findUnique.mockResolvedValue(stored);
+    await expect(getJob("job-1")).resolves.toMatchObject({
+      id: "job-1",
+      type: "URL",
+      status: "DONE",
+    });
+    expect(prismaMock.ingestJob.findUnique).toHaveBeenCalledWith({ where: { id: "job-1" } });
+  });
+
+  it("getJob returns null when the job does not exist", async () => {
+    prismaMock.ingestJob.findUnique.mockResolvedValue(null);
+    await expect(getJob("missing")).resolves.toBeNull();
+  });
+
+  it("getJobStats counts the queue by status over the last 24h", async () => {
+    prismaMock.ingestJob.count
+      .mockResolvedValueOnce(3)
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(9)
+      .mockResolvedValueOnce(2);
+    await expect(getJobStats()).resolves.toEqual({
+      queued: 3,
+      running: 1,
+      done24h: 9,
+      failed24h: 2,
+    });
+    expect(prismaMock.ingestJob.count).toHaveBeenCalledTimes(4);
   });
 });

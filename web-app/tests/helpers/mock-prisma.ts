@@ -34,9 +34,11 @@ export interface MockPrisma {
     findMany: MockFn;
     findUnique: MockFn;
     count: MockFn;
+    groupBy: MockFn;
   };
   documentChunk: {
     findMany: MockFn;
+    count: MockFn;
   };
   user: {
     count: MockFn;
