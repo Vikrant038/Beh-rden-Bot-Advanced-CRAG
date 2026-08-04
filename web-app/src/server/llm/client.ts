@@ -189,8 +189,7 @@ async function callGroqWithRetry(
           provider: "groq",
           model,
           promptTokens: response.usage?.prompt_tokens ?? estimateTokensFromText(promptText),
-          completionTokens:
-            response.usage?.completion_tokens ?? estimateTokensFromText(content),
+          completionTokens: response.usage?.completion_tokens ?? estimateTokensFromText(content),
         };
       } finally {
         releaseSemaphore();

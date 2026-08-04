@@ -2,15 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  CheckCircle2,
-  Clock,
-  Eye,
-  ExternalLink,
-  GitFork,
-  Loader2,
-  XCircle,
-} from "lucide-react";
+import { CheckCircle2, Clock, Eye, ExternalLink, GitFork, Loader2, XCircle } from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -121,9 +113,7 @@ function QueryDetailDrawer({ id, onClose }: { id: string; onClose: () => void })
 
             <div className="rounded-lg border border-border p-2.5">
               <p className="text-[10px] text-muted">Retrieval path</p>
-              <p className="mt-0.5 break-words font-mono text-xs">
-                {retrievalPath ?? "—"}
-              </p>
+              <p className="mt-0.5 break-words font-mono text-xs">{retrievalPath ?? "—"}</p>
             </div>
 
             <div className="rounded-xl border border-border bg-background p-3">
@@ -297,9 +287,7 @@ export function RecentQueriesTable({
         </button>
       ) : null}
 
-      {detailId ? (
-        <QueryDetailDrawer id={detailId} onClose={() => setDetailId(null)} />
-      ) : null}
+      {detailId ? <QueryDetailDrawer id={detailId} onClose={() => setDetailId(null)} /> : null}
     </div>
   );
 }

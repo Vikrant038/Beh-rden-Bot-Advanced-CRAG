@@ -2,15 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ArrowDown,
-  BookOpen,
-  Copy,
-  MessageCircle,
-  Plus,
-  Trash2,
-  Zap,
-} from "lucide-react";
+import { ArrowDown, BookOpen, Copy, MessageCircle, Plus, Trash2, Zap } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { useChat, STREAMING_ID } from "@/hooks/use-chat";
 import type { ChatMode, PipelineStage } from "@/lib/chat/types";
@@ -46,7 +38,10 @@ const FOLLOW_UP_BANK: Array<{ keywords: string[]; prompts: string[] }> = [
   },
   {
     keywords: ["insurance", "health"],
-    prompts: ["Which health insurance do I need for a student visa?", "How much does public health insurance cost?"],
+    prompts: [
+      "Which health insurance do I need for a student visa?",
+      "How much does public health insurance cost?",
+    ],
   },
 ];
 
@@ -55,7 +50,13 @@ const DEFAULT_FOLLOW_UPS = [
   "How do I get health insurance for Germany?",
 ];
 
-const PIPELINE_STAGES: PipelineStage[] = ["guardrail", "retrieving", "research", "analyst", "writer"];
+const PIPELINE_STAGES: PipelineStage[] = [
+  "guardrail",
+  "retrieving",
+  "research",
+  "analyst",
+  "writer",
+];
 
 function pipelineProgress(status: PipelineStage): number {
   if (status === "done") {
@@ -212,7 +213,8 @@ export function ChatInterface({
     (message) => message.role === "ASSISTANT" && Boolean(message.content),
   );
   const lastAssistant = lastAssistantIndex >= 0 ? messages[lastAssistantIndex] : undefined;
-  const lastUserContent = [...messages].reverse().find((message) => message.role === "USER")?.content ?? "";
+  const lastUserContent =
+    [...messages].reverse().find((message) => message.role === "USER")?.content ?? "";
   const followUps = lastAssistant && !isStreaming ? followUpsFor(lastUserContent) : [];
   const progress = pipelineProgress(status);
 

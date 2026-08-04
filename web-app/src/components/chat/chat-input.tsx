@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, BookOpen, ClipboardPaste, SendHorizontal, Sparkles, Square, X, Zap } from "lucide-react";
+import {
+  AlertCircle,
+  BookOpen,
+  ClipboardPaste,
+  SendHorizontal,
+  Sparkles,
+  Square,
+  X,
+  Zap,
+} from "lucide-react";
 import type { ChatMode } from "@/lib/chat/types";
 import { MAX_QUERY_LENGTH } from "@/lib/chat/types";
 import { cn } from "@/lib/utils";

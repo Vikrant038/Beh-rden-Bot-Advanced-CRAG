@@ -116,7 +116,10 @@ async function parseWithPdfJs(buffer: Buffer): Promise<ParsedPdf> {
         parts.push(pageText);
       }
 
-      const text = parts.join("\n").replace(/[ \t]+\n/g, "\n").trim();
+      const text = parts
+        .join("\n")
+        .replace(/[ \t]+\n/g, "\n")
+        .trim();
       if (!text) {
         throw new PdfParseError("PDF contains no extractable text (scanned/image-only?)");
       }

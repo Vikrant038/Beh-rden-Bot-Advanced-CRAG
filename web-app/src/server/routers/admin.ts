@@ -128,36 +128,28 @@ export const adminRouter = router({
 
       const [totalUsers, totalConversations, totalMessages, queriesToday, documentCount, stats] =
         await Promise.all([
-          prisma.user
-            .count({ where: EXCLUDE_GUESTS_WHERE })
-            .catch((error) => {
-              logger.warn({ error: String(error) }, "[ADMIN] user.count failed");
-              return 0;
-            }),
-          prisma.conversation
-            .count()
-            .catch((error) => {
-              logger.warn({ error: String(error) }, "[ADMIN] conversation.count failed");
-              return 0;
-            }),
-          prisma.message
-            .count()
-            .catch((error) => {
-              logger.warn({ error: String(error) }, "[ADMIN] message.count failed");
-              return 0;
-            }),
+          prisma.user.count({ where: EXCLUDE_GUESTS_WHERE }).catch((error) => {
+            logger.warn({ error: String(error) }, "[ADMIN] user.count failed");
+            return 0;
+          }),
+          prisma.conversation.count().catch((error) => {
+            logger.warn({ error: String(error) }, "[ADMIN] conversation.count failed");
+            return 0;
+          }),
+          prisma.message.count().catch((error) => {
+            logger.warn({ error: String(error) }, "[ADMIN] message.count failed");
+            return 0;
+          }),
           prisma.message
             .count({ where: { role: "USER", createdAt: { gte: startOfToday } } })
             .catch((error) => {
               logger.warn({ error: String(error) }, "[ADMIN] queriesToday.count failed");
               return 0;
             }),
-          prisma.document
-            .count()
-            .catch((error) => {
-              logger.warn({ error: String(error) }, "[ADMIN] document.count failed");
-              return 0;
-            }),
+          prisma.document.count().catch((error) => {
+            logger.warn({ error: String(error) }, "[ADMIN] document.count failed");
+            return 0;
+          }),
           prisma.$queryRaw<MessageStatsRow[]>`
             SELECT
               COUNT(*) FILTER (WHERE role = 'ASSISTANT')::int AS "assistantCount",
@@ -268,9 +260,7 @@ export const adminRouter = router({
         .object({
           limit: z.number().int().min(1).max(100).default(10),
           days: z.number().int().min(1).max(DAILY_QUERY_MAX_DAYS).optional(),
-          cursor: z
-            .object({ createdAt: z.coerce.date(), id: z.string().min(1) })
-            .optional(),
+          cursor: z.object({ createdAt: z.coerce.date(), id: z.string().min(1) }).optional(),
         })
         .optional(),
     )
@@ -354,9 +344,7 @@ export const adminRouter = router({
         ORDER BY count DESC, MAX("createdAt") DESC
         LIMIT 10
       `
-        .then((rows) =>
-          rows.map((row) => ({ query: row.query, count: Number(row.count ?? 0) })),
-        )
+        .then((rows) => rows.map((row) => ({ query: row.query, count: Number(row.count ?? 0) })))
         .catch((error) => {
           logger.warn({ error: String(error) }, "[ADMIN] topQuestions aggregation failed");
           return [];
@@ -375,7 +363,9 @@ export const adminRouter = router({
     .query(
       async ({
         input,
-      }): Promise<Array<{ id: string; conversationId: string; query: string; createdAt: Date }>> => {
+      }): Promise<
+        Array<{ id: string; conversationId: string; query: string; createdAt: Date }>
+      > => {
         const days = input?.days ?? 14;
         const limit = input?.limit ?? 10;
         return prisma.$queryRaw<
@@ -456,7 +446,12 @@ export const adminRouter = router({
     }),
 
   testPipeline: adminLongProcedure
-    .input(z.object({ prompt: z.string().trim().min(5).max(2000), bypassCache: z.boolean().default(true) }))
+    .input(
+      z.object({
+        prompt: z.string().trim().min(5).max(2000),
+        bypassCache: z.boolean().default(true),
+      }),
+    )
     .mutation(async ({ input }): Promise<AgenticRagResponse> => {
       const startedAt = Date.now();
       try {
@@ -514,9 +509,7 @@ export const adminRouter = router({
       z
         .object({
           limit: z.number().int().min(1).max(50).default(10),
-          cursor: z
-            .object({ createdAt: z.coerce.date(), id: z.string().min(1) })
-            .optional(),
+          cursor: z.object({ createdAt: z.coerce.date(), id: z.string().min(1) }).optional(),
         })
         .optional(),
     )
@@ -567,24 +560,22 @@ export const adminRouter = router({
       },
     ),
 
-  getTestRun: adminProcedure
-    .input(z.object({ id: z.string().min(1) }))
-    .query(async ({ input }) => {
-      const run = await prisma.pipelineRun.findUnique({ where: { id: input.id } });
-      if (!run) {
-        throw new NotFoundError("PipelineRun", input.id);
-      }
-      // Map traceJson to `unknown` so the tRPC client type doesn't carry the
-      // deeply-recursive Prisma JsonValue union (TS2589) — the page casts it to
-      // AgenticRagResponse itself.
-      return {
-        id: run.id,
-        prompt: run.prompt,
-        latencyMs: run.latencyMs,
-        status: run.status,
-        error: run.error,
-        createdAt: run.createdAt,
-        traceJson: run.traceJson as unknown,
-      };
-    }),
+  getTestRun: adminProcedure.input(z.object({ id: z.string().min(1) })).query(async ({ input }) => {
+    const run = await prisma.pipelineRun.findUnique({ where: { id: input.id } });
+    if (!run) {
+      throw new NotFoundError("PipelineRun", input.id);
+    }
+    // Map traceJson to `unknown` so the tRPC client type doesn't carry the
+    // deeply-recursive Prisma JsonValue union (TS2589) — the page casts it to
+    // AgenticRagResponse itself.
+    return {
+      id: run.id,
+      prompt: run.prompt,
+      latencyMs: run.latencyMs,
+      status: run.status,
+      error: run.error,
+      createdAt: run.createdAt,
+      traceJson: run.traceJson as unknown,
+    };
+  }),
 });

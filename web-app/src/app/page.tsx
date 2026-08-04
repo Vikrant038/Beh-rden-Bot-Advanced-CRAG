@@ -197,7 +197,11 @@ export default function LandingPage() {
 
   const reveal = reduceMotion
     ? {}
-    : { initial: { opacity: 0, y: 16 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true } };
+    : {
+        initial: { opacity: 0, y: 16 },
+        whileInView: { opacity: 1, y: 0 },
+        viewport: { once: true },
+      };
 
   return (
     <div id="main" className="relative min-h-screen overflow-hidden bg-background">
@@ -566,8 +570,8 @@ export default function LandingPage() {
               Ready to start your German journey?
             </h2>
             <p className="mx-auto mt-3 max-w-xl text-sm text-muted">
-              Get grounded, sourced answers about visas, APS, blocked accounts, and admissions —
-              in seconds, for free.
+              Get grounded, sourced answers about visas, APS, blocked accounts, and admissions — in
+              seconds, for free.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link

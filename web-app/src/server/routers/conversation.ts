@@ -156,9 +156,7 @@ export const conversationRouter = router({
       ...(input.search
         ? { title: { contains: input.search, mode: Prisma.QueryMode.insensitive } }
         : {}),
-      ...(input.mode
-        ? { mode: input.mode === "standard" ? "STANDARD" : "AGENTIC" }
-        : {}),
+      ...(input.mode ? { mode: input.mode === "standard" ? "STANDARD" : "AGENTIC" } : {}),
       ...(input.cursor
         ? {
             OR: [
@@ -314,9 +312,7 @@ export const conversationRouter = router({
         ...(input?.search
           ? { title: { contains: input.search, mode: Prisma.QueryMode.insensitive } }
           : {}),
-        ...(input?.mode
-          ? { mode: input.mode === "standard" ? "STANDARD" : "AGENTIC" }
-          : {}),
+        ...(input?.mode ? { mode: input.mode === "standard" ? "STANDARD" : "AGENTIC" } : {}),
       };
       const result = await prisma.conversation.updateMany({
         where,
@@ -449,9 +445,7 @@ export const conversationRouter = router({
           ...(input?.search
             ? { title: { contains: input.search, mode: Prisma.QueryMode.insensitive } }
             : {}),
-          ...(input?.mode
-            ? { mode: input.mode === "standard" ? "STANDARD" : "AGENTIC" }
-            : {}),
+          ...(input?.mode ? { mode: input.mode === "standard" ? "STANDARD" : "AGENTIC" } : {}),
         },
       });
       return { count };

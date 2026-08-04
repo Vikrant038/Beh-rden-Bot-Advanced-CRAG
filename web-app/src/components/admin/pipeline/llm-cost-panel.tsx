@@ -21,8 +21,8 @@ export function LlmCostPanel({ calls, totalCostUsd }: LlmCostPanelProps) {
   if (calls.length === 0) {
     return (
       <div className="rounded-xl border border-glass-border bg-surface/60 px-3 py-2 text-xs text-muted">
-        No LLM calls were made — this trace was served without a model call
-        (e.g. cache hit or short-circuit).
+        No LLM calls were made — this trace was served without a model call (e.g. cache hit or
+        short-circuit).
       </div>
     );
   }
@@ -38,14 +38,13 @@ export function LlmCostPanel({ calls, totalCostUsd }: LlmCostPanelProps) {
           {calls.length} call{calls.length === 1 ? "" : "s"}
         </span>
         <span className="ml-auto inline-flex items-center gap-1 font-mono text-xs text-foreground">
-          <BadgeEuro className="h-3.5 w-3.5 text-success" />
-          ≈ {formatUsd(totalCostUsd)} total
+          <BadgeEuro className="h-3.5 w-3.5 text-success" />≈ {formatUsd(totalCostUsd)} total
         </span>
       </div>
 
       <p className="mb-2 text-[10px] text-muted">
-        Latency is wall-clock time per logical call — if a provider retried or
-        the call fell back to Hugging Face, it includes that overhead.
+        Latency is wall-clock time per logical call — if a provider retried or the call fell back to
+        Hugging Face, it includes that overhead.
       </p>
 
       <ul className="space-y-1.5">
@@ -77,9 +76,7 @@ export function LlmCostPanel({ calls, totalCostUsd }: LlmCostPanelProps) {
               <span className="whitespace-nowrap">
                 {call.promptTokens} in · {call.completionTokens} out
               </span>
-              <span className="whitespace-nowrap text-foreground">
-                ≈ {formatUsd(call.costUsd)}
-              </span>
+              <span className="whitespace-nowrap text-foreground">≈ {formatUsd(call.costUsd)}</span>
             </div>
           </li>
         ))}

@@ -34,7 +34,13 @@ const CHART_COLORS = ["#0072B2", "#D55E00", "#009E73", "#E69F00", "#56B4E9", "#C
 /** Diagonal hatch pattern for texture differentiation (11.14). */
 function HatchPattern({ id, color }: { id: string; color: string }) {
   return (
-    <pattern id={id} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+    <pattern
+      id={id}
+      width="6"
+      height="6"
+      patternUnits="userSpaceOnUse"
+      patternTransform="rotate(45)"
+    >
       <rect width="6" height="6" fill="transparent" />
       <line x1="0" y1="0" x2="0" y2="6" stroke={color} strokeWidth="1.4" />
     </pattern>
@@ -122,7 +128,10 @@ function DailyTooltipWithTrend({
   const average =
     series.length > 0 ? Math.round(series.reduce((sum, p) => sum + p.count, 0) / series.length) : 0;
   return (
-    <div className="rounded-xl border border-border bg-surface px-3 py-2 shadow-glass" role="status">
+    <div
+      className="rounded-xl border border-border bg-surface px-3 py-2 shadow-glass"
+      role="status"
+    >
       <p className="text-xs font-semibold">{label}</p>
       <div className="mt-1 space-y-0.5 text-xs">
         <p className="tabular-nums">
@@ -159,7 +168,10 @@ function ModeTooltip({
   }
   const total = payload.reduce((sum, entry) => sum + Number(entry.value ?? 0), 0);
   return (
-    <div className="rounded-xl border border-border bg-surface px-3 py-2 shadow-glass" role="status">
+    <div
+      className="rounded-xl border border-border bg-surface px-3 py-2 shadow-glass"
+      role="status"
+    >
       {payload.map((entry, index) => {
         const value = Number(entry.value ?? 0);
         const share = total > 0 ? Math.round((value / total) * 100) : 0;
@@ -209,7 +221,7 @@ export function DailyQueriesChart({ data, loading = false }: DailyQueriesChartPr
             content={(props) => (
               <DailyTooltipWithTrend
                 active={props.active}
-                payload={(props.payload as unknown) as Array<{ value: number }>}
+                payload={props.payload as unknown as Array<{ value: number }>}
                 label={props.label as string | undefined}
                 series={data}
               />
@@ -249,8 +261,7 @@ export function CacheDonut({ cacheHitRate, loading = false }: CacheDonutProps) {
   const [confirmClear, setConfirmClear] = useState(false);
 
   const percent = Math.round(cacheHitRate * 100);
-  const band =
-    CACHE_GAUGE_BANDS.find((b) => cacheHitRate >= b.min) ?? CACHE_GAUGE_BANDS[2];
+  const band = CACHE_GAUGE_BANDS.find((b) => cacheHitRate >= b.min) ?? CACHE_GAUGE_BANDS[2];
   const data = [
     { name: "Cache hits", value: cacheHitRate },
     { name: "Cache misses", value: Math.max(0, 1 - cacheHitRate) },

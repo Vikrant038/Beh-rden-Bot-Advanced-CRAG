@@ -16,7 +16,8 @@ export default async function ChatPage({ params, searchParams }: ChatPageProps) 
   const initialQuery = typeof q === "string" && q.trim() ? q.trim() : undefined;
   // Mode handoff from the /chat composer (agentic | standard); anything else
   // falls back to the interface default.
-  const initialMode =
-    m === "agentic" || m === "standard" ? (m as ChatMode) : undefined;
-  return <ChatInterface conversationId={id} initialQuery={initialQuery} initialMode={initialMode} />;
+  const initialMode = m === "agentic" || m === "standard" ? (m as ChatMode) : undefined;
+  return (
+    <ChatInterface conversationId={id} initialQuery={initialQuery} initialMode={initialMode} />
+  );
 }

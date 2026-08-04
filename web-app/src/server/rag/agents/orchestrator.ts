@@ -10,11 +10,7 @@ import type { Source } from "@/server/rag/types";
 import { maskPii } from "@/server/pii/masker";
 import { isQueryOutOfDomain } from "@/server/rag/guardrail";
 import { createLogger } from "@/server/lib/logger";
-import {
-  LlmUsageCollector,
-  withLlmUsageCollector,
-  type LlmCallRecord,
-} from "@/server/llm/usage";
+import { LlmUsageCollector, withLlmUsageCollector, type LlmCallRecord } from "@/server/llm/usage";
 
 const logger = createLogger("agentic-rag");
 
@@ -231,10 +227,7 @@ export async function runAgenticRag(
         analysisMatrix: analysis,
         sources: research.sources,
         totalLatencyMs: Date.now() - startTime,
-        stages: buildStages(
-          [stage0Duration, stage1Duration, stage2Duration, stage3Duration],
-          3,
-        ),
+        stages: buildStages([stage0Duration, stage1Duration, stage2Duration, stage3Duration], 3),
         llmCalls: collector.calls,
         totalCostUsd: collector.totalCostUsd,
       },

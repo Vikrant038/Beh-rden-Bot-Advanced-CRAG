@@ -30,7 +30,12 @@
 
 import { readFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
-import { ingestPdf, ingestUrl, syncAllDocuments, type IngestResult } from "@/server/ingest/pipeline";
+import {
+  ingestPdf,
+  ingestUrl,
+  syncAllDocuments,
+  type IngestResult,
+} from "@/server/ingest/pipeline";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("ingest-cli");
@@ -72,8 +77,7 @@ function parseArgs(argv: string[]): CliArgs {
 }
 
 function entryFromObject(obj: Record<string, unknown>): IngestEntry | null {
-  const title =
-    typeof obj.title === "string" && obj.title.trim() ? obj.title.trim() : undefined;
+  const title = typeof obj.title === "string" && obj.title.trim() ? obj.title.trim() : undefined;
   if (typeof obj.url === "string" && obj.url.trim()) {
     return { kind: "url", value: obj.url.trim(), title };
   }
@@ -161,7 +165,11 @@ function printSummary(results: CliIngestResult[]): void {
   }
 }
 
-async function runEntry(entry: IngestEntry, baseDir: string, force: boolean): Promise<CliIngestResult> {
+async function runEntry(
+  entry: IngestEntry,
+  baseDir: string,
+  force: boolean,
+): Promise<CliIngestResult> {
   if (entry.kind === "url") {
     return ingestUrl(entry.value, { force, title: entry.title });
   }
@@ -195,7 +203,7 @@ async function main(): Promise<void> {
 
     if (entries.length === 0) {
       process.stderr.write(
-        "Usage: pnpm ingest <url> [url...] [--title \"Name\"] | --file <path> | --sync [--force]\n",
+        'Usage: pnpm ingest <url> [url...] [--title "Name"] | --file <path> | --sync [--force]\n',
       );
       process.exit(2);
     }

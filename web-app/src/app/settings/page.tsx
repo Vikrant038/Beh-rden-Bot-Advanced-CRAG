@@ -6,16 +6,20 @@ import { Contrast, LogIn, LogOut, MousePointer2, Type } from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
-import {
-  FONT_SCALE_OPTIONS,
-  usePreferences,
-} from "@/components/preferences/preference-provider";
+import { FONT_SCALE_OPTIONS, usePreferences } from "@/components/preferences/preference-provider";
 
 export default function SettingsPage() {
   const { data: session } = useSession();
   const user = session?.user;
-  const { fontScale, setFontScale, forceReducedMotion, setForceReducedMotion, highContrast, setHighContrast, mounted } =
-    usePreferences();
+  const {
+    fontScale,
+    setFontScale,
+    forceReducedMotion,
+    setForceReducedMotion,
+    highContrast,
+    setHighContrast,
+    mounted,
+  } = usePreferences();
 
   return (
     <div id="main" className="mx-auto max-w-2xl space-y-6 px-4 py-8">
@@ -33,9 +37,7 @@ export default function SettingsPage() {
           <Type className="h-4 w-4 text-muted" />
           <h2 className="text-sm font-semibold">Text size</h2>
         </div>
-        <p className="mb-3 text-sm text-muted">
-          Scales the entire interface for easier reading.
-        </p>
+        <p className="mb-3 text-sm text-muted">Scales the entire interface for easier reading.</p>
         <div
           role="radiogroup"
           aria-label="Text size"

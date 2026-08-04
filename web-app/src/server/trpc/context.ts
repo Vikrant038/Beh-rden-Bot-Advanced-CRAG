@@ -1,10 +1,6 @@
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/db";
-import {
-  claimGuestData,
-  clearGuestCookieHeader,
-  readGuestIdFromRequest,
-} from "@/server/guest";
+import { claimGuestData, clearGuestCookieHeader, readGuestIdFromRequest } from "@/server/guest";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("trpc-context");

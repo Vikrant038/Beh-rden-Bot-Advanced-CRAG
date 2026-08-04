@@ -97,7 +97,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
 
   constructor(
     private readonly apiKey: string = env.GEMINI_API_KEY ?? "",
-    private readonly model: string = "text-embedding-004" // using legacy name as default fallback for older tests, but overriding in code if not set
+    private readonly model: string = "text-embedding-004", // using legacy name as default fallback for older tests, but overriding in code if not set
   ) {
     this.ai = new GoogleGenerativeAI(this.apiKey);
   }

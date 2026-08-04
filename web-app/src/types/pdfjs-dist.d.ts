@@ -27,7 +27,9 @@ declare module "pdfjs-dist/legacy/build/pdf.js" {
     promise: Promise<PdfJsDocument>;
   }
 
-  export function getDocument(
-    src: { data: Uint8Array; useWorkerFetch?: boolean; isEvalSupported?: boolean },
-  ): PdfJsLoadingTask;
+  export function getDocument(src: {
+    data: Uint8Array;
+    useWorkerFetch?: boolean;
+    isEvalSupported?: boolean;
+  }): PdfJsLoadingTask;
 }

@@ -71,9 +71,7 @@ export function SourceCitation({ sources }: { sources: ChatSource[] }) {
               <>
                 {host ? <Favicon host={host} /> : null}
                 {!isPdf && <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted" />}
-                <span className="min-w-0 flex-1 truncate text-xs text-accent">
-                  {source.name}
-                </span>
+                <span className="min-w-0 flex-1 truncate text-xs text-accent">{source.name}</span>
                 <span className="flex shrink-0 items-center gap-1.5">
                   <span
                     className="h-1 w-8 overflow-hidden rounded-full bg-border"

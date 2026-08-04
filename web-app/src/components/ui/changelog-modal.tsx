@@ -42,13 +42,7 @@ const CHANGELOG: ChangelogEntry[] = [
   },
 ];
 
-export function ChangelogModal({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
+export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent>

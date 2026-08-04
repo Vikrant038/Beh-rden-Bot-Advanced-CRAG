@@ -128,9 +128,7 @@ export function MetricCard({
       ) : null}
       {!loading && typeof trend === "number" ? (
         <p className="mt-1 flex items-center gap-1 text-xs">
-          <TrendIcon
-            className={`h-3.5 w-3.5 ${trendUp ? "text-success" : "text-destructive"}`}
-          />
+          <TrendIcon className={`h-3.5 w-3.5 ${trendUp ? "text-success" : "text-destructive"}`} />
           <span
             className={`font-medium tabular-nums ${trendUp ? "text-success" : "text-destructive"}`}
           >

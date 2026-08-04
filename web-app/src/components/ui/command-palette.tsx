@@ -136,7 +136,9 @@ export function CommandPalette() {
     if (!q) {
       return commands;
     }
-    return commands.filter((command) => command.keywords.includes(q) || command.label.toLowerCase().includes(q));
+    return commands.filter(
+      (command) => command.keywords.includes(q) || command.label.toLowerCase().includes(q),
+    );
   }, [commands, query]);
 
   useEffect(() => {
@@ -158,13 +160,10 @@ export function CommandPalette() {
     }
   }, [open]);
 
-  const run = useCallback(
-    (command: Command) => {
-      setOpen(false);
-      void command.run();
-    },
-    [],
-  );
+  const run = useCallback((command: Command) => {
+    setOpen(false);
+    void command.run();
+  }, []);
 
   useEffect(() => {
     if (!open) {
@@ -208,7 +207,12 @@ export function CommandPalette() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[15vh]" role="dialog" aria-modal="true" aria-label="Command palette">
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[15vh]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Command palette"
+    >
       <button
         type="button"
         aria-label="Close command palette"
@@ -229,11 +233,15 @@ export function CommandPalette() {
             aria-label="Search commands"
             className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
           />
-          <kbd className="rounded-md border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted">esc</kbd>
+          <kbd className="rounded-md border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted">
+            esc
+          </kbd>
         </div>
         <ul className="max-h-80 overflow-y-auto p-2" role="listbox">
           {filtered.length === 0 && (
-            <li className="px-4 py-8 text-center text-sm text-muted">No commands match “{query}”.</li>
+            <li className="px-4 py-8 text-center text-sm text-muted">
+              No commands match “{query}”.
+            </li>
           )}
           {filtered.map((command, index) => {
             const Icon = command.icon;
@@ -259,7 +267,9 @@ export function CommandPalette() {
                   </span>
                   <span className="flex-1">{command.label}</span>
                   {command.hint && (
-                    <kbd className="hidden font-mono text-[10px] text-muted sm:block">{command.hint}</kbd>
+                    <kbd className="hidden font-mono text-[10px] text-muted sm:block">
+                      {command.hint}
+                    </kbd>
                   )}
                 </button>
               </li>

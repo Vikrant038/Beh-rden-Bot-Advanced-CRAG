@@ -246,7 +246,9 @@ export function SourceBrowser() {
             onClick={() => setView("list")}
             aria-label="List view"
             className={`rounded-lg p-2 transition ${
-              view === "list" ? "bg-primary text-primary-foreground" : "text-muted hover:text-foreground"
+              view === "list"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted hover:text-foreground"
             }`}
           >
             <List className="h-4 w-4" />
@@ -258,7 +260,9 @@ export function SourceBrowser() {
             onClick={() => setView("grid")}
             aria-label="Grid view"
             className={`rounded-lg p-2 transition ${
-              view === "grid" ? "bg-primary text-primary-foreground" : "text-muted hover:text-foreground"
+              view === "grid"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted hover:text-foreground"
             }`}
           >
             <LayoutGrid className="h-4 w-4" />

@@ -5,7 +5,11 @@ import { cn } from "@/lib/utils";
 interface TabsProps {
   value: string;
   onValueChange: (value: string) => void;
-  items: Array<{ value: string; label: string; icon?: React.ComponentType<{ className?: string }> }>;
+  items: Array<{
+    value: string;
+    label: string;
+    icon?: React.ComponentType<{ className?: string }>;
+  }>;
   className?: string;
 }
 
@@ -13,7 +17,10 @@ export function Tabs({ value, onValueChange, items, className }: TabsProps) {
   return (
     <div
       role="tablist"
-      className={cn("inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1", className)}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1",
+        className,
+      )}
     >
       {items.map((item) => {
         const active = value === item.value;

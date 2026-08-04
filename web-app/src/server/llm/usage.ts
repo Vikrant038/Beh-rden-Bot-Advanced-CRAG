@@ -56,10 +56,7 @@ export function estimateLlmCostUsd(
   promptTokens: number,
   completionTokens: number,
 ): number {
-  const price =
-    provider === "groq"
-      ? (GROQ_PRICES[model] ?? DEFAULT_GROQ_PRICE)
-      : HF_PRICE;
+  const price = provider === "groq" ? (GROQ_PRICES[model] ?? DEFAULT_GROQ_PRICE) : HF_PRICE;
   return (
     (promptTokens / 1_000_000) * price.inputPer1M +
     (completionTokens / 1_000_000) * price.outputPer1M

@@ -109,7 +109,6 @@ export function ChatLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-dvh overflow-hidden">
-
       {/* ══════════════════════════════════════════════════════════════════
           SIDEBAR  —  md+ (768px and up)
           Full sidebar (272px) or icon rail (64px), always visible.

@@ -21,7 +21,7 @@ export class PrismaCorpusProvider implements CorpusProvider {
     const chunks: Chunk[] = [];
     let cursor: number | undefined;
     const batchSize = 1000;
-    
+
     while (true) {
       const rows = await prisma.documentChunk.findMany({
         take: batchSize,
@@ -52,7 +52,7 @@ export class PrismaCorpusProvider implements CorpusProvider {
           text: row.text,
         });
       }
-      
+
       cursor = rows[rows.length - 1].id;
     }
 

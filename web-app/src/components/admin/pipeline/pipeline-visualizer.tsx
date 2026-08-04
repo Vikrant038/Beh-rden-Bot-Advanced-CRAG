@@ -179,9 +179,7 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
       <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-glass-border pb-3">
         <p className="text-sm font-semibold text-foreground">Pipeline trace</p>
         <span className="font-mono text-xs text-muted">{trace.totalLatencyMs}ms total</span>
-        <span className="font-mono text-xs text-muted">
-          ≈ {formatUsd(trace.totalCostUsd ?? 0)}
-        </span>
+        <span className="font-mono text-xs text-muted">≈ {formatUsd(trace.totalCostUsd ?? 0)}</span>
         <span className="font-mono text-xs text-muted">{trace.sources.length} sources</span>
         {cacheHit ? (
           <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">
@@ -195,10 +193,7 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
         ) : null}
       </div>
 
-      <LlmCostPanel
-        calls={trace.llmCalls ?? []}
-        totalCostUsd={trace.totalCostUsd ?? 0}
-      />
+      <LlmCostPanel calls={trace.llmCalls ?? []} totalCostUsd={trace.totalCostUsd ?? 0} />
 
       <ol className="divide-y divide-glass-border">
         {stages.map((stage, index) => (

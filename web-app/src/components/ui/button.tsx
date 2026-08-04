@@ -23,12 +23,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   size?: ButtonSize;
 }
 
-export function Button({
-  className,
-  variant = "primary",
-  size = "md",
-  ...props
-}: ButtonProps) {
+export function Button({ className, variant = "primary", size = "md", ...props }: ButtonProps) {
   return (
     <button
       className={cn(

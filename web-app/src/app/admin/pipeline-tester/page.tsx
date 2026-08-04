@@ -112,7 +112,8 @@ export default function AdminPipelineTesterPage() {
         <h1 className="text-2xl font-semibold">Pipeline tester</h1>
         <p className="mt-1 text-sm text-muted">
           Run a single glass-box trace through the 3-agent ReAct pipeline and inspect every stage —
-          including parent-child chunk expansion. Every run is stored so past traces can be revisited.
+          including parent-child chunk expansion. Every run is stored so past traces can be
+          revisited.
         </p>
       </div>
 
@@ -166,9 +167,7 @@ export default function AdminPipelineTesterPage() {
               aria-label="Toggle cache bypass"
               onClick={() => setBypassCache((v) => !v)}
               className={`relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors focus-visible:ring-2 focus-visible:ring-primary ${
-                bypassCache
-                  ? "border-primary/50 bg-primary/15"
-                  : "border-border bg-surface-hover"
+                bypassCache ? "border-primary/50 bg-primary/15" : "border-border bg-surface-hover"
               }`}
             >
               <span
@@ -185,8 +184,8 @@ export default function AdminPipelineTesterPage() {
         </div>
 
         <p className="mt-3 text-xs text-muted">
-          Queries run with PII masking, no conversation memory, and{bypassCache ? " bypass" : " use"} the semantic cache so
-          every stage executes live.
+          Queries run with PII masking, no conversation memory, and
+          {bypassCache ? " bypass" : " use"} the semantic cache so every stage executes live.
         </p>
       </div>
 
@@ -229,7 +228,11 @@ export default function AdminPipelineTesterPage() {
               onClick={() => void copyTrace()}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs transition hover:bg-surface-hover"
             >
-              {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-success" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
               {copied ? "Copied" : "Copy trace"}
             </button>
           </div>

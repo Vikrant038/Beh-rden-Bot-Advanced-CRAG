@@ -18,9 +18,7 @@ export function DisambiguationCards({
         <span className="grid h-6 w-6 place-items-center rounded-md bg-primary/10 text-primary">
           <HelpCircle className="h-3.5 w-3.5" />
         </span>
-        <p className="text-xs text-muted">
-          I found a few interpretations — which did you mean?
-        </p>
+        <p className="text-xs text-muted">I found a few interpretations — which did you mean?</p>
       </div>
       <div className="flex flex-col gap-2">
         {options.map((option, index) => (

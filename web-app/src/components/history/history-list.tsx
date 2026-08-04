@@ -121,10 +121,7 @@ export function HistoryList() {
     void utils.conversation.getById.invalidate();
   };
 
-  const deleteWithUndo = async (conversation: {
-    id: string;
-    title: string | null;
-  }) => {
+  const deleteWithUndo = async (conversation: { id: string; title: string | null }) => {
     try {
       await deleteMutation.mutateAsync({ id: conversation.id });
       refresh();
@@ -230,7 +227,10 @@ export function HistoryList() {
     const link = document.createElement("a");
     link.href = url;
     const base = filename.endsWith(".md") ? filename.slice(0, -3) : filename;
-    const sanitized = base.replace(/[^a-z0-9-]+/gi, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    const sanitized = base
+      .replace(/[^a-z0-9-]+/gi, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
     link.download = `${sanitized || "export"}.md`;
     link.click();
     URL.revokeObjectURL(url);
@@ -258,7 +258,7 @@ export function HistoryList() {
             <MessageSquare className="h-3.5 w-3.5" /> Conversations
           </p>
           <p className="mt-1 text-xl font-semibold tabular-nums">
-            {stats.isLoading ? "…" : stats.data?.totalConversations ?? 0}
+            {stats.isLoading ? "…" : (stats.data?.totalConversations ?? 0)}
           </p>
         </div>
         <div className="rounded-xl border border-border bg-surface p-3">
@@ -266,7 +266,7 @@ export function HistoryList() {
             <MessagesSquare className="h-3.5 w-3.5" /> Messages
           </p>
           <p className="mt-1 text-xl font-semibold tabular-nums">
-            {stats.isLoading ? "…" : stats.data?.totalMessages ?? 0}
+            {stats.isLoading ? "…" : (stats.data?.totalMessages ?? 0)}
           </p>
         </div>
         <div className="rounded-xl border border-border bg-surface p-3">
@@ -274,7 +274,7 @@ export function HistoryList() {
             <Pin className="h-3.5 w-3.5" /> Pinned
           </p>
           <p className="mt-1 text-xl font-semibold tabular-nums">
-            {stats.isLoading ? "…" : stats.data?.pinnedConversations ?? 0}
+            {stats.isLoading ? "…" : (stats.data?.pinnedConversations ?? 0)}
           </p>
         </div>
         <div className="rounded-xl border border-border bg-surface p-3">
@@ -282,7 +282,7 @@ export function HistoryList() {
             <Trash2 className="h-3.5 w-3.5" /> Deleted
           </p>
           <p className="mt-1 text-xl font-semibold tabular-nums">
-            {stats.isLoading ? "…" : stats.data?.deletedConversations ?? 0}
+            {stats.isLoading ? "…" : (stats.data?.deletedConversations ?? 0)}
           </p>
         </div>
       </div>
@@ -611,7 +611,9 @@ export function HistoryList() {
             {preview.isLoading ? (
               <p className="py-8 text-center text-sm text-muted">Loading messages…</p>
             ) : previewConversation && previewConversation.messages.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted">No messages in this conversation.</p>
+              <p className="py-8 text-center text-sm text-muted">
+                No messages in this conversation.
+              </p>
             ) : (
               previewConversation?.messages.map((message) => (
                 <div key={message.id} className="rounded-xl border border-border bg-background p-3">

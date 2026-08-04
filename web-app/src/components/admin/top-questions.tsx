@@ -41,9 +41,7 @@ export function TopQuestions({ queries, loading }: TopQuestionsProps) {
                   style={{ width: `${Math.max(8, (question.count / maxCount) * 100)}%` }}
                 />
               </div>
-              <span className="shrink-0 text-xs tabular-nums text-muted">
-                {question.count}×
-              </span>
+              <span className="shrink-0 text-xs tabular-nums text-muted">{question.count}×</span>
             </li>
           ))}
         </ol>

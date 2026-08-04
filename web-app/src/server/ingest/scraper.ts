@@ -120,7 +120,10 @@ function sleep(ms: number): Promise<void> {
  * immediately — retrying those would just produce the same result.
  */
 async function fetchWithTimeout(url: string, options: ScrapeOptions): Promise<Response> {
-  const maxRetries = Math.min(MAX_RETRIES_CAP, Math.max(0, options.maxRetries ?? SCRAPE_MAX_RETRIES));
+  const maxRetries = Math.min(
+    MAX_RETRIES_CAP,
+    Math.max(0, options.maxRetries ?? SCRAPE_MAX_RETRIES),
+  );
   const backoffMs = Math.max(0, options.backoffMs ?? SCRAPE_RETRY_BACKOFF_MS);
 
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
