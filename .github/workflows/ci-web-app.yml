@@ -36,6 +36,10 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
+        with:
+          # Explicit: `uses:` steps ignore `defaults.run.working-directory`, so
+          # the action cannot discover packageManager from web-app/package.json.
+          version: 11.20.0
 
       - name: Setup Node
         uses: actions/setup-node@v4
