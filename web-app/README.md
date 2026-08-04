@@ -25,11 +25,17 @@ pnpm install
 # 2. Configure environment (copy template, fill in secrets)
 cp .env.example .env
 
-# 3. Generate the Prisma client and apply migrations
-pnpm prisma generate
-pnpm prisma migrate deploy
+# 3. Start local Postgres with pgvector (web-app/docker-compose.yml)
+docker compose up -d postgres
 
-# 4. Run the dev server
+# 4. Generate the Prisma client and apply migrations.
+#    Migrations run as the behoerden_migrator (DDL) role — the app runtime
+#    role (behoerden_app) is DML-only by design (PoLP).
+pnpm prisma generate
+DATABASE_URL="postgresql://behoerden_migrator:behoerden_password@localhost:5432/behoerden_bot" \
+  pnpm prisma migrate deploy
+
+# 5. Run the dev server
 pnpm dev
 ```
 
@@ -37,6 +43,25 @@ Open [http://localhost:3000](http://localhost:3000).
 
 > `.env` is gitignored. Never commit real secrets — the pre-commit hook scans
 > staged files for credential patterns and CI runs Gitleaks.
+
+### Local database (Docker)
+
+`web-app/docker-compose.yml` boots `pgvector/pgvector:pg16` (same image CI
+uses) and, on a fresh volume, runs `docker/postgres-init.sql`, which
+provisions the principle-of-least-privilege roles documented in `.env.example`
+(GUARDRAILS M1.2):
+
+- `behoerden_migrator` — DDL role: owns the database, runs Prisma migrations,
+  and can create the `migrate dev` shadow database (`CREATEDB`).
+- `behoerden_app` — DML-only app runtime role; `ALTER DEFAULT PRIVILEGES`
+  grants make tables/sequences created by the migrator automatically usable.
+
+The `vector` extension is pre-created by the init script, so the migrator never
+needs superuser. **Do not** add `sslmode=require` to `localhost` URLs — local
+Postgres has TLS disabled; `sslmode=require` belongs only on cloud (Neon) URLs
+(see the commented examples in `.env.example`). If you previously used the
+repo-root compose (Python app, `ankane/pgvector`), drop its stale volume
+first: `docker compose down -v && docker compose up -d postgres`.
 
 ## Scripts
 
@@ -101,17 +126,18 @@ scripts/              # Developer tooling (secret scan, …)
 
 See `.env.example` for the full list with comments. Key ones:
 
-| Variable          | Required | Purpose                                 |
-| ----------------- | -------- | --------------------------------------- |
-| `DATABASE_URL`    | Yes      | PostgreSQL (pgvector) connection string |
-| `NEXTAUTH_SECRET` | Yes      | Signs Auth.js session JWTs              |
-| `NEXTAUTH_URL`    | No (dev) | Canonical app URL                       |
-| `GROQ_API_KEY`    | No*      | Primary LLM provider                    |
-| `HF_TOKEN`        | No*      | Fallback LLM provider + embeddings      |
-| `CRON_SECRET`     | No*      | Bearer guard for cron endpoints         |
-| `UPSTASH_REDIS_URL` | **Yes (prod)** | Upstash Redis URL for cross-instance rate limiting; in-memory fallback is per-serverless-instance only |
-| `UPSTASH_REDIS_TOKEN` | **Yes (prod)** | Upstash Redis token |
-| `LANGFUSE_*`      | No       | LLM tracing                             |
+| Variable                 | Required        | Purpose                                                                                                |
+| ------------------------ | --------------- | ------------------------------------------------------------------------------------------------------ |
+| `DATABASE_URL`           | Yes             | App runtime (DML) connection — `behoerden_app` locally, Neon pooled URL in prod                        |
+| `MIGRATION_DATABASE_URL` | Migrations only | DDL role (`behoerden_migrator`) — used to apply Prisma migrations                                      |
+| `NEXTAUTH_SECRET`        | Yes             | Signs Auth.js session JWTs                                                                             |
+| `NEXTAUTH_URL`           | No (dev)        | Canonical app URL                                                                                      |
+| `GROQ_API_KEY`           | No*             | Primary LLM provider                                                                                   |
+| `HF_TOKEN`               | No*             | Fallback LLM provider + embeddings                                                                     |
+| `CRON_SECRET`            | No*             | Bearer guard for cron endpoints                                                                        |
+| `UPSTASH_REDIS_URL`      | **Yes (prod)**  | Upstash Redis URL for cross-instance rate limiting; in-memory fallback is per-serverless-instance only |
+| `UPSTASH_REDIS_TOKEN`    | **Yes (prod)**  | Upstash Redis token                                                                                    |
+| `LANGFUSE_*`             | No              | LLM tracing                                                                                            |
 
 \* Required at runtime for LLM features; CI uses placeholders.
 

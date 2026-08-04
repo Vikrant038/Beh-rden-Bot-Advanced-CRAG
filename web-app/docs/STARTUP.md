@@ -8,10 +8,10 @@
 
 ## Current State Summary
 
-| Phase | What's Built | Files |
-|-------|-------------|-------|
-| **Phase A** (Foundation) | Next.js 15, TypeScript strict, Prisma + pgvector, NextAuth v5, tRPC v11, security (rate limit, SSRF, CSP headers), env validation, error handling, Pino logger | 40 files |
-| **Phase B** (RAG Engine) | LLM client (Groq + HF), embeddings (BGE 768d), PII masker, BM25 + dense + RRF + reranker, CRAG gate, disambiguation, guardrail, query expansion, semantic cache, summary-buffer memory, 3-agent orchestrator, visa calculator, web search | 44 files |
+| Phase                       | What's Built                                                                                                                                                                                                                                 | Files    |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| **Phase A** (Foundation)    | Next.js 15, TypeScript strict, Prisma + pgvector, NextAuth v5, tRPC v11, security (rate limit, SSRF, CSP headers), env validation, error handling, Pino logger                                                                               | 40 files |
+| **Phase B** (RAG Engine)    | LLM client (Groq + HF), embeddings (BGE 768d), PII masker, BM25 + dense + RRF + reranker, CRAG gate, disambiguation, guardrail, query expansion, semantic cache, summary-buffer memory, 3-agent orchestrator, visa calculator, web search    | 44 files |
 | **Phase C** (Chat UI + API) | 5 tRPC routers, SSE streaming endpoint, `useChat` hook, chat components (messages, input, pipeline status, disambiguation cards, source citations, streaming text, markdown), sidebar, history page, settings page, login page, landing page | 59 files |
 
 ---
@@ -38,18 +38,20 @@ cp .env.example .env
 
 **Edit `.env` with your actual values:**
 
-| Variable | Required | Where to Get It |
-|----------|----------|-----------------|
-| `DATABASE_URL` | ✅ Yes (for DB features) | [Neon](https://neon.tech) free tier or local Postgres |
-| `NEXTAUTH_SECRET` | ✅ Yes | Run: `openssl rand -base64 32` |
-| `NEXTAUTH_URL` | ✅ Yes | `http://localhost:3000` |
-| `GROQ_API_KEY` | ✅ Yes (for RAG) | [Groq Console](https://console.groq.com) |
-| `HF_TOKEN` | ✅ Yes (for embeddings) | [Hugging Face](https://huggingface.co/settings/tokens) |
-| `GITHUB_CLIENT_ID/SECRET` | Optional | GitHub OAuth App |
-| `GOOGLE_CLIENT_ID/SECRET` | Optional | Google Cloud Console |
-| `UPSTASH_REDIS_URL/TOKEN` | Optional | [Upstash](https://upstash.com) (falls back to in-memory) |
+| Variable                  | Required                 | Where to Get It                                                                                                          |
+| ------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `DATABASE_URL`            | ✅ Yes (for DB features) | `behoerden_app` (DML role) — local: `docker compose up -d postgres` (see Step 6), or [Neon](https://neon.tech) free tier |
+| `NEXTAUTH_SECRET`         | ✅ Yes                   | Run: `openssl rand -base64 32`                                                                                           |
+| `NEXTAUTH_URL`            | ✅ Yes                   | `http://localhost:3000`                                                                                                  |
+| `GROQ_API_KEY`            | ✅ Yes (for RAG)         | [Groq Console](https://console.groq.com)                                                                                 |
+| `HF_TOKEN`                | ✅ Yes (for embeddings)  | [Hugging Face](https://huggingface.co/settings/tokens)                                                                   |
+| `GITHUB_CLIENT_ID/SECRET` | Optional                 | GitHub OAuth App                                                                                                         |
+| `GOOGLE_CLIENT_ID/SECRET` | Optional                 | Google Cloud Console                                                                                                     |
+| `UPSTASH_REDIS_URL/TOKEN` | Optional                 | [Upstash](https://upstash.com) (falls back to in-memory)                                                                 |
 
 > **Without a database:** The app will still build and typecheck. Tests use mocked Prisma. The dev server will show the UI but chat features require a live Postgres + pgvector.
+>
+> **Roles:** `behoerden_app` (DML-only) is the app runtime user; `behoerden_migrator` (DDL) runs migrations. Migrations must be applied as the migrator role (see Step 6.2). Local URLs must **not** carry `sslmode=require` — local Postgres has no TLS; that flag belongs only on Neon URLs.
 
 ---
 
@@ -67,6 +69,7 @@ pnpm db:generate
 ```
 
 **Expected output for db:generate:**
+
 ```
 ✔ Generated Prisma Client to ./node_modules/@prisma/client in XXms
 ```
@@ -99,14 +102,14 @@ pnpm vitest run --coverage
 
 **Expected results:**
 
-| Gate | Command | Expected |
-|------|---------|----------|
-| Typecheck | `pnpm typecheck` | `0 errors` |
-| Lint | `pnpm lint` | `0 errors, 0 warnings` |
-| Format | `pnpm format:check` | All files formatted |
-| Build | `pnpm build` | `✓ Compiled successfully` |
-| Tests | `pnpm test` | `164 tests passed, 27 test files` |
-| Coverage | `pnpm vitest run --coverage` | `lines ≥80%, functions ≥80%, statements ≥80%` |
+| Gate      | Command                      | Expected                                      |
+| --------- | ---------------------------- | --------------------------------------------- |
+| Typecheck | `pnpm typecheck`             | `0 errors`                                    |
+| Lint      | `pnpm lint`                  | `0 errors, 0 warnings`                        |
+| Format    | `pnpm format:check`          | All files formatted                           |
+| Build     | `pnpm build`                 | `✓ Compiled successfully`                     |
+| Tests     | `pnpm test`                  | `164 tests passed, 27 test files`             |
+| Coverage  | `pnpm vitest run --coverage` | `lines ≥80%, functions ≥80%, statements ≥80%` |
 
 ---
 
@@ -128,6 +131,7 @@ pnpm dev
 Open http://localhost:3000 in your browser and verify:
 
 ### 5.1 Landing Page (`/`)
+
 - [ ] Hero section with hero banner image loads
 - [ ] Pipeline visualization (Research → Analyst → Writer) visible
 - [ ] Feature grid with glassmorphism cards
@@ -135,11 +139,13 @@ Open http://localhost:3000 in your browser and verify:
 - [ ] "Start Chatting" CTA button works → navigates to `/login` or `/chat`
 
 ### 5.2 Login Page (`/login`)
+
 - [ ] Page renders with auth provider buttons
 - [ ] GitHub / Google OAuth buttons visible (if configured)
 - [ ] Email magic link input visible (if Resend configured)
 
 ### 5.3 Chat Page (`/chat`) — requires auth
+
 - [ ] Sidebar loads with conversation list
 - [ ] New conversation can be created
 - [ ] Chat input accepts text and submits on Enter
@@ -150,10 +156,12 @@ Open http://localhost:3000 in your browser and verify:
 - [ ] Streaming text animation works (words appear progressively)
 
 ### 5.4 Chat with ID (`/chat/[id]`)
+
 - [ ] Clicking a conversation in sidebar loads its messages
 - [ ] Conversation title auto-generates after first exchange
 
 ### 5.5 History Page (`/history`)
+
 - [ ] Lists all past conversations
 - [ ] Search functionality works
 - [ ] Infinite scroll loads more conversations
@@ -161,10 +169,12 @@ Open http://localhost:3000 in your browser and verify:
 - [ ] Delete conversation works
 
 ### 5.6 Settings Page (`/settings`)
+
 - [ ] Page loads for authenticated users
 - [ ] User info displayed
 
 ### 5.7 Health Endpoint
+
 - [ ] Open http://localhost:3000/api/health
 - [ ] Returns JSON with `database` and `cache` status
 
@@ -175,23 +185,30 @@ Open http://localhost:3000 in your browser and verify:
 If you want to test the full RAG pipeline with a live database:
 
 ```bash
-# 6.1 — Start local Postgres with pgvector (from Repo-2 root)
-cd /Users/vikranty/Documents/Project/OLD\ Lap\ Work/Repo-2
-docker-compose up -d postgres
-
-# 6.2 — Run Prisma migrations (from web-app directory)
+# 6.1 — Start local Postgres with pgvector (web-app compose: pgvector:pg16)
 cd web-app
-pnpm db:migrate
+docker compose up -d postgres
+
+# On first boot the init script (docker/postgres-init.sql) provisions the PoLP
+# roles (behoerden_migrator DDL + behoerden_app DML) and the vector extension.
+# If you previously used the repo-root compose (ankane image), drop the stale
+# volume first so the roles are (re)provisioned:
+#   docker compose down -v && docker compose up -d postgres
+
+# 6.2 — Apply Prisma migrations as the DDL role (the app role cannot DDL)
+DATABASE_URL="postgresql://behoerden_migrator:behoerden_password@localhost:5432/behoerden_bot" \
+  pnpm db:deploy
 
 # 6.3 — (Optional) Seed data
 pnpm db:seed
 ```
 
 Or use **Neon** (free cloud Postgres with pgvector):
+
 1. Create a free project at [neon.tech](https://neon.tech)
 2. Enable the `vector` extension: `CREATE EXTENSION IF NOT EXISTS vector;`
-3. Copy the connection string to `DATABASE_URL` in `.env`
-4. Run `pnpm db:deploy`
+3. Copy the **pooled** connection string (with `sslmode=require`) to `DATABASE_URL` in `.env`
+4. Run `DATABASE_URL="<neon migrator URL>" pnpm db:deploy`
 
 ---
 
