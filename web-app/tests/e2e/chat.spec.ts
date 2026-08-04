@@ -52,6 +52,8 @@ function mockConversationRouters(
     },
     "conversation.getById": () => fixture,
     "conversation.list": () => ({ items: [], nextCursor: null }),
+    // The app sidebar lists knowledge-base sources on every chat page.
+    "source.list": () => [],
   });
 }
 
@@ -110,6 +112,7 @@ test("sends the first message, creates the conversation, and renders the streame
     }),
     "conversation.getById": () => (streamed ? POST_STREAM_CONVERSATION : PERSISTED_CONVERSATION),
     "conversation.list": () => ({ items: [], nextCursor: null }),
+    "source.list": () => [],
   });
 
   // Inline the stream route so we can flip the persisted-state flag exactly

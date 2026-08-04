@@ -42,6 +42,8 @@ test("lists conversations and filters by search", async ({ page }) => {
       deletedConversations: 0,
       totalMessages: 6,
     }),
+    // The app sidebar lists knowledge-base sources on every page.
+    "source.list": () => [],
   });
 
   await page.goto("/history");
@@ -73,8 +75,10 @@ test("shows the empty state when there are no conversations", async ({ page }) =
       deletedConversations: 0,
       totalMessages: 0,
     }),
+    // The app sidebar lists knowledge-base sources on every page.
+    "source.list": () => [],
   });
 
   await page.goto("/history");
-  await expect(page.getByText("No conversations found")).toBeVisible();
+  await expect(page.getByText("No conversations yet")).toBeVisible();
 });

@@ -23,6 +23,10 @@ test("allows an admin to view the dashboard", async ({ page }) => {
     "admin.dailyQueries": () => [],
     "admin.modeSplit": () => [],
     "admin.recentQueries": () => ({ items: [], nextCursor: null }),
+    "admin.topQuestions": () => [],
+    "admin.failedQueries": () => [],
+    // The app sidebar lists knowledge-base sources on every page.
+    "source.list": () => [],
   });
 
   await page.goto("/admin/dashboard");

@@ -7,9 +7,9 @@ test.describe("Landing page", () => {
     await expect(
       page.getByRole("heading", { name: "Your AI Guide to German Immigration" }),
     ).toBeVisible();
-    await expect(page.getByText("3-Agent ReAct")).toBeVisible();
-    await expect(page.getByText("Hybrid Retrieval")).toBeVisible();
-    await expect(page.getByText("CRAG Gate")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "3-Agent ReAct" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Hybrid Retrieval" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "CRAG Gate" })).toBeVisible();
 
     const signIn = page.getByRole("link", { name: "Get started" });
     await expect(signIn).toBeVisible();
@@ -20,7 +20,11 @@ test.describe("Landing page", () => {
 
   test("Start asking redirects to /login when unauthenticated", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("link", { name: /Start asking/ }).click();
+    // Two identical CTAs (hero + bottom card); either one navigates to /login.
+    await page
+      .getByRole("link", { name: /Start asking/ })
+      .first()
+      .click();
     await expect(page).toHaveURL(/\/login$/, { timeout: 15000 });
   });
 });
