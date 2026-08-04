@@ -160,11 +160,11 @@ export const adminRouter = router({
             }),
           prisma.$queryRaw<MessageStatsRow[]>`
             SELECT
-              COUNT(*) FILTER (WHERE role = 'ASSISTANT') AS "assistantCount",
-              COUNT(*) FILTER (WHERE role = 'ASSISTANT' AND metadata->>'isCached' = 'true') AS "cacheHits",
+              COUNT(*) FILTER (WHERE role = 'ASSISTANT')::int AS "assistantCount",
+              COUNT(*) FILTER (WHERE role = 'ASSISTANT' AND metadata->>'isCached' = 'true')::int AS "cacheHits",
               AVG((metadata->>'latencyMs')::float) AS "avgLatencyMs"
             FROM messages
-            ${days ? Prisma.sql`WHERE "createdAt" >= NOW() - make_interval(days => ${days})` : Prisma.empty}
+            ${days ? Prisma.sql`WHERE "createdAt" >= NOW() - make_interval(days => ${days}::integer)` : Prisma.empty}
           `
             .then((rows) => rows[0])
             .catch((error) => {
@@ -226,7 +226,7 @@ export const adminRouter = router({
       SELECT to_char("createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date, COUNT(*)::int AS count
       FROM messages
       WHERE role = 'USER'
-        AND "createdAt" >= NOW() - make_interval(days => ${input.days})
+        AND "createdAt" >= NOW() - make_interval(days => ${input.days}::integer)
       GROUP BY date
       ORDER BY date ASC
     `
@@ -251,7 +251,7 @@ export const adminRouter = router({
         SELECT COALESCE(metadata->>'mode', 'standard') AS mode, COUNT(*)::int AS count
         FROM messages
         WHERE role = 'ASSISTANT' AND metadata->>'mode' IS NOT NULL
-          ${days ? Prisma.sql`AND "createdAt" >= NOW() - make_interval(days => ${days})` : Prisma.empty}
+          ${days ? Prisma.sql`AND "createdAt" >= NOW() - make_interval(days => ${days}::integer)` : Prisma.empty}
         GROUP BY mode
         ORDER BY count DESC
       `
@@ -305,7 +305,7 @@ export const adminRouter = router({
           LIMIT 1
         ) a
         WHERE m.role = 'USER'
-          ${days ? Prisma.sql`AND m."createdAt" >= NOW() - make_interval(days => ${days})` : Prisma.empty}
+           ${days ? Prisma.sql`AND m."createdAt" >= NOW() - make_interval(days => ${days}::integer)` : Prisma.empty}
           ${
             cursor
               ? Prisma.sql`AND (
@@ -349,7 +349,7 @@ export const adminRouter = router({
         SELECT content AS query, COUNT(*)::int AS count
         FROM messages
         WHERE role = 'USER'
-          AND "createdAt" >= NOW() - make_interval(days => ${input.days})
+           AND "createdAt" >= NOW() - make_interval(days => ${input.days}::integer)
         GROUP BY content
         ORDER BY count DESC, MAX("createdAt") DESC
         LIMIT 10
@@ -384,7 +384,7 @@ export const adminRouter = router({
           SELECT m."id", m."conversationId" AS "conversationId", m.content AS query, m."createdAt" AS "createdAt"
           FROM messages m
           WHERE m.role = 'USER'
-            AND m."createdAt" >= NOW() - make_interval(days => ${days})
+             AND m."createdAt" >= NOW() - make_interval(days => ${days}::integer)
             AND NOT EXISTS (
               SELECT 1 FROM messages a
               WHERE a."conversationId" = m."conversationId"

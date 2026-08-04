@@ -18,6 +18,9 @@ vi.mock("@/server/db", () => ({
       delete: vi.fn(),
       count: vi.fn(),
     },
+    user: {
+      create: vi.fn(),
+    },
   },
 }));
 

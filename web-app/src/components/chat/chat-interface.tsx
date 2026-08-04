@@ -23,7 +23,6 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GuestLimitDialog } from "@/components/chat/guest-limit-dialog";
 import { useToast } from "@/lib/toast";
-import { GUEST_LIMIT_REACHED_CODE } from "@/lib/guest";
 import { api } from "@/lib/trpc/client";
 
 const FOLLOW_UP_BANK: Array<{ keywords: string[]; prompts: string[] }> = [
@@ -127,7 +126,6 @@ export function ChatInterface({
   const router = useRouter();
   const utils = api.useUtils();
   const { toast } = useToast();
-  const createMutation = api.conversation.create.useMutation();
   const clearMutation = api.conversation.clear.useMutation();
   const feedbackMutation = api.chat.feedback.useMutation();
   const [feedbackState, setFeedbackState] = useState<Record<string, "up" | "down" | null>>({});
@@ -222,22 +220,10 @@ export function ChatInterface({
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   };
 
+  // The /chat route is a lazy composer: it creates the conversation only when
+  // the first message is sent, so "New chat" never leaves an empty row behind.
   const newChat = () => {
-    createMutation.mutate(
-      {},
-      {
-        onSuccess: (conversation) => {
-          router.push(`/chat/${conversation.id}`);
-        },
-        onError: (error) => {
-          if (error.data?.code === GUEST_LIMIT_REACHED_CODE) {
-            setGuestLimitOpen(true);
-          } else {
-            toast({ title: "Could not start a new chat", variant: "error" });
-          }
-        },
-      },
-    );
+    router.push("/chat");
   };
 
   const copyConversation = async () => {
@@ -319,8 +305,7 @@ export function ChatInterface({
           <button
             type="button"
             onClick={newChat}
-            disabled={createMutation.isPending}
-            className="ml-1 inline-flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground transition hover:bg-primary-hover disabled:opacity-60"
+            className="ml-1 inline-flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground transition hover:bg-primary-hover"
           >
             <Plus className="h-3.5 w-3.5" />
             New chat

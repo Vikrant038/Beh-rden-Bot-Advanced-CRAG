@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
-import { Contrast, LogOut, MousePointer2, Type } from "lucide-react";
+import { Contrast, LogIn, LogOut, MousePointer2, Type } from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
@@ -101,13 +102,24 @@ export default function SettingsPage() {
       <section className="rounded-2xl border border-border bg-surface p-5">
         <h2 className="mb-3 text-sm font-semibold">Profile</h2>
         <div className="flex items-center gap-3">
-          <div className="grid h-12 w-12 place-items-center rounded-full bg-primary text-lg font-semibold text-white">
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary text-lg font-semibold text-white">
             {user?.name?.charAt(0)?.toUpperCase() ?? user?.email?.charAt(0)?.toUpperCase() ?? "?"}
           </div>
-          <div>
-            <p className="font-medium">{user?.name ?? "User"}</p>
-            <p className="text-sm text-muted">{user?.email}</p>
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">{user ? (user.name ?? "User") : "Guest"}</p>
+            <p className="truncate text-sm text-muted">
+              {user?.email ?? "Browsing without an account"}
+            </p>
           </div>
+          {!user && (
+            <Link
+              href="/login"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition hover:bg-primary-hover"
+            >
+              <LogIn className="h-3.5 w-3.5" />
+              Sign in
+            </Link>
+          )}
         </div>
       </section>
 
@@ -126,10 +138,19 @@ export default function SettingsPage() {
             </button>
           </>
         ) : (
-          <p className="text-sm text-muted">
-            You&apos;re browsing as a guest — your conversations stay on this device. Use the
-            sidebar&apos;s “Leave guest mode” to end this session, or sign in above to keep your data.
-          </p>
+          <>
+            <p className="text-sm text-muted">
+              You&apos;re browsing as a guest — your conversations stay on this device. Sign in to
+              keep them on your account automatically.
+            </p>
+            <Link
+              href="/login"
+              className="mt-3 inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm transition hover:bg-surface-hover"
+            >
+              <LogIn className="h-4 w-4" />
+              Sign in
+            </Link>
+          </>
         )}
       </section>
     </div>

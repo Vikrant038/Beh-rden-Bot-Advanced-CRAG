@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FileStack,
   History,
+  LogIn,
   LogOut,
   MessageSquare,
   PanelLeftClose,
@@ -18,15 +19,13 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/trpc/client";
 import { ConversationItem } from "@/components/sidebar/conversation-item";
-import { GuestLimitDialog } from "@/components/chat/guest-limit-dialog";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { useDebouncedValue } from "@/hooks/use-debounce";
 import { groupConversationsByTime } from "@/lib/conversation-groups";
 import { APP_VERSION } from "@/lib/version";
 import { cn } from "@/lib/utils";
-import { useToast } from "@/lib/toast";
-import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/lib/guest";
+import { GUEST_PROMPT_LIMIT } from "@/lib/guest";
 
 const PINNED_KEY = "behoerden.pinnedConversations";
 
@@ -60,8 +59,6 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
   const router = useRouter();
   const pathname = usePathname();
   const { data: session, status: sessionStatus } = useSession();
-  const { toast } = useToast();
-  const createMutation = api.conversation.create.useMutation();
   // Accurate guest usage for the free-tier chip (list is paginated/filterable).
   // Fired only once auth has resolved to "no session", so signed-in users never
   // see a flash of the guest chip while useSession is still loading.
@@ -72,7 +69,6 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), 300);
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => readPinned());
-  const [guestLimitOpen, setGuestLimitOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   const conversations = api.conversation.list.useInfiniteQuery(
@@ -108,23 +104,12 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
   const groups = useMemo(() => groupConversationsByTime(items, pinnedIds), [items, pinnedIds]);
   const isLoading = conversations.isLoading || !mounted;
 
+  // The /chat route is a lazy composer: it creates the conversation only when
+  // the first message is sent, so clicking "New chat" never leaves an empty
+  // "New conversation" row behind in history.
   const newChat = () => {
-    createMutation.mutate(
-      {},
-      {
-        onSuccess: (conversation) => {
-          onNavigate?.();
-          router.push(`/chat/${conversation.id}`);
-        },
-        onError: (error) => {
-          if (error.data?.code === GUEST_LIMIT_REACHED_CODE) {
-            setGuestLimitOpen(true);
-          } else {
-            toast({ title: "Could not start a new chat", variant: "error" });
-          }
-        },
-      },
-    );
+    onNavigate?.();
+    router.push("/chat");
   };
 
   const togglePin = (id: string) => {
@@ -145,15 +130,11 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
     router.push(path);
   };
 
-  const leaveGuestMode = async () => {
-    try {
-      await fetch("/api/guest", { method: "DELETE" });
-    } catch {
-      // Even if the request fails, navigate back to login — the session
-      // cookie (if any) is unaffected and the guest cookie expires server-side.
-    }
+  // Signing in must NOT clear the guest cookie: the tRPC context claims the
+  // guest's conversations via claimGuestData on the first signed-in request
+  // (src/server/trpc/context.ts), which requires the cookie to still be present.
+  const signIn = () => {
     router.push("/login");
-    router.refresh();
   };
 
   // 11.5 — Min 44px touch targets on the primary navigation row.
@@ -203,10 +184,9 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
         <button
           type="button"
           onClick={newChat}
-          disabled={createMutation.isPending}
           aria-label="New chat"
           title="New chat (⌘N)"
-          className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-primary-foreground transition hover:bg-primary-hover disabled:opacity-60"
+          className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-primary-foreground transition hover:bg-primary-hover"
         >
           <Plus className="h-4 w-4" />
         </button>
@@ -255,7 +235,6 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
           <ThemeToggle compact />
         </div>
         </div>
-        <GuestLimitDialog open={guestLimitOpen} onOpenChange={setGuestLimitOpen} />
       </>
     );
   }
@@ -268,8 +247,7 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
         <button
           type="button"
           onClick={newChat}
-          disabled={createMutation.isPending}
-          className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover disabled:opacity-60"
+          className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover"
         >
           <Plus className="h-4 w-4" />
           New chat
@@ -450,30 +428,30 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
             ) : null}
           </div>
         ) : isDefinitelyGuest ? (
-          <div className="mt-1 flex w-full items-center gap-2.5 rounded-lg px-3 py-2">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-hover text-xs font-semibold text-muted">
-              ?
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-foreground">Guest</span>
-              <span className="block truncate text-[10px] text-muted">
-                {guestCount.data?.count ?? 0}/{GUEST_PROMPT_LIMIT} prompts · no account
+          <div className="mt-1 rounded-lg border border-border p-2">
+            <div className="flex items-center gap-2.5">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-hover text-xs font-semibold text-muted">
+                ?
               </span>
-            </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-foreground">Guest</span>
+                <span className="block truncate text-[10px] text-muted">
+                  {guestCount.data?.count ?? 0}/{GUEST_PROMPT_LIMIT} prompts · no account
+                </span>
+              </span>
+            </div>
             <button
               type="button"
-              onClick={() => void leaveGuestMode()}
-              title="Leave guest mode"
-              aria-label="Leave guest mode"
-              className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
+              onClick={signIn}
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition hover:bg-primary-hover"
             >
-              <LogOut className="h-3.5 w-3.5" />
+              <LogIn className="h-3.5 w-3.5" />
+              Sign in
             </button>
           </div>
         ) : null}
       </div>
       </div>
-      <GuestLimitDialog open={guestLimitOpen} onOpenChange={setGuestLimitOpen} />
     </>
   );
 }
