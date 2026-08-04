@@ -56,6 +56,17 @@ export interface UpsertCacheEntryParams {
  * Exported so callers can log or test the literal shape without re-implementing it.
  */
 export function toVectorLiteral(vector: number[]): string {
+  if (!Array.isArray(vector) || vector.length === 0) {
+    throw new Error("Invalid vector: array is empty or not an array");
+  }
+  if (vector.length !== 768) {
+    throw new Error(`Invalid vector dimension: expected 768, got ${vector.length}`);
+  }
+  for (let i = 0; i < vector.length; i++) {
+    if (typeof vector[i] !== "number" || !Number.isFinite(vector[i])) {
+      throw new Error(`Invalid vector element at index ${i}: not a finite number`);
+    }
+  }
   return `[${vector.join(",")}]`;
 }
 

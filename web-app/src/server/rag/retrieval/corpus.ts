@@ -18,26 +18,45 @@ export class PrismaCorpusProvider implements CorpusProvider {
       return this.cache;
     }
 
-    const rows = await prisma.documentChunk.findMany({
-      select: {
-        id: true,
-        parentId: true,
-        documentId: true,
-        sourceName: true,
-        sourceUrl: true,
-        text: true,
-      },
-      orderBy: { id: "asc" },
-    });
+    const chunks: Chunk[] = [];
+    let cursor: number | undefined;
+    const batchSize = 1000;
+    
+    while (true) {
+      const rows = await prisma.documentChunk.findMany({
+        take: batchSize,
+        skip: cursor !== undefined ? 1 : 0,
+        cursor: cursor !== undefined ? { id: cursor } : undefined,
+        select: {
+          id: true,
+          parentId: true,
+          documentId: true,
+          sourceName: true,
+          sourceUrl: true,
+          text: true,
+        },
+        orderBy: { id: "asc" },
+      });
 
-    this.cache = rows.map((row) => ({
-      id: String(row.id),
-      parentId: row.parentId === null ? undefined : String(row.parentId),
-      documentId: row.documentId,
-      sourceName: row.sourceName,
-      sourceUrl: row.sourceUrl,
-      text: row.text,
-    }));
+      if (rows.length === 0) {
+        break;
+      }
+
+      for (const row of rows) {
+        chunks.push({
+          id: String(row.id),
+          parentId: row.parentId === null ? undefined : String(row.parentId),
+          documentId: row.documentId,
+          sourceName: row.sourceName,
+          sourceUrl: row.sourceUrl,
+          text: row.text,
+        });
+      }
+      
+      cursor = rows[rows.length - 1].id;
+    }
+
+    this.cache = chunks;
     this.cacheTime = now;
     return this.cache;
   }

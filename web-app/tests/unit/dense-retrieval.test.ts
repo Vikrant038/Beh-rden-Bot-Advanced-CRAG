@@ -23,7 +23,7 @@ describe("denseRetrieve (pgvector)", () => {
       { id: 2, sourceName: "doc-b", sourceUrl: "https://b.example", text: "more", sim: 0.75 },
     ] as never);
 
-    const result = await denseRetrieve([0.1, 0.2, 0.3]);
+    const result = await denseRetrieve(Array.from({ length: 768 }, () => 0.1));
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({
       id: "1",
@@ -37,7 +37,7 @@ describe("denseRetrieve (pgvector)", () => {
 
   it("should pass topK and minSimilarity options", async () => {
     mockedQueryRaw.mockResolvedValue([]);
-    await denseRetrieve([0.1], { topK: 7, minSimilarity: 0.4 });
+    await denseRetrieve(Array.from({ length: 768 }, () => 0.1), { topK: 7, minSimilarity: 0.4 });
 
     const args = mockedQueryRaw.mock.calls[0] as unknown as unknown[];
     expect(args).toContain(7);
@@ -46,6 +46,6 @@ describe("denseRetrieve (pgvector)", () => {
 
   it("should throw DomainError when query fails", async () => {
     mockedQueryRaw.mockRejectedValue(new Error("pgvector down"));
-    await expect(denseRetrieve([0.1])).rejects.toThrow(/Dense retrieval query failed/);
+    await expect(denseRetrieve(Array.from({ length: 768 }, () => 0.1))).rejects.toThrow(/Dense retrieval query failed/);
   });
 });

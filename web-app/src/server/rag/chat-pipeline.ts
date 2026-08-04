@@ -41,7 +41,6 @@ const OUT_OF_DOMAIN_MESSAGE =
 const GENERIC_ERROR_MESSAGE =
   "I'm sorry, I encountered an error while processing your request. Please try again in a moment.";
 
-const TOKEN_DELAY_MS = 24;
 const WORDS_PER_CHUNK = 3;
 
 function chunkText(text: string, wordsPerChunk: number = WORDS_PER_CHUNK): string[] {
@@ -58,10 +57,6 @@ function chunkText(text: string, wordsPerChunk: number = WORDS_PER_CHUNK): strin
     chunks.push(tokens.slice(i, i + wordsPerChunk).join(""));
   }
   return chunks;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function findOrCreateUserMessage(
@@ -292,7 +287,6 @@ async function* streamTokens(
       break;
     }
     yield { type: "token", content: chunk };
-    await sleep(TOKEN_DELAY_MS);
   }
 }
 

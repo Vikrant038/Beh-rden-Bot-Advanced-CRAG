@@ -22,8 +22,8 @@ const mockedQueryRaw = vi.mocked(prisma.$queryRaw);
 const mockedFindMany = vi.mocked(prisma.semanticCacheEntry.findMany);
 const mockedDeleteMany = vi.mocked(prisma.semanticCacheEntry.deleteMany);
 
-function makeVector(dim = 3, value = 0.1): number[] {
-  return Array.from({ length: dim }, (_, i) => value + i * 0.01);
+function makeVector(dim = 768, value = 0.1): number[] {
+  return Array.from({ length: dim }, (_, i) => value + i * 0.001);
 }
 
 describe("SemanticCache", () => {
@@ -38,7 +38,7 @@ describe("SemanticCache", () => {
   it("should return null on miss", async () => {
     mockedFindUnique.mockResolvedValue(null);
     mockedQueryRaw.mockResolvedValue([]);
-    const result = await cache.checkCache("visa requirements", makeVector(3));
+    const result = await cache.checkCache("visa requirements", makeVector());
     expect(result).toBeNull();
   });
 
@@ -52,7 +52,7 @@ describe("SemanticCache", () => {
       expiresAt: future,
     } as never);
 
-    const result = await cache.checkCache("visa", makeVector(3));
+    const result = await cache.checkCache("visa", makeVector());
     expect(result?.answer).toBe("Blocked account: 11904 EUR");
     expect(result?.retrievalPath).toContain("TIER_1_EXACT");
   });
@@ -61,7 +61,7 @@ describe("SemanticCache", () => {
     mockedFindUnique.mockResolvedValue(null);
     mockedQueryRaw.mockResolvedValue([{ responseJson: { answer: "ok", sources: [] }, sim: 0.98 }]);
 
-    const result = await cache.checkCache("blocked account", makeVector(3));
+    const result = await cache.checkCache("blocked account", makeVector());
     expect(result?.isCached).toBe(true);
     expect(result?.retrievalPath).toContain("TIER_2_VECTOR");
   });
@@ -70,7 +70,7 @@ describe("SemanticCache", () => {
     mockedFindUnique.mockResolvedValue(null);
     mockedQueryRaw.mockResolvedValue([{ responseJson: { answer: "ok", sources: [] }, sim: 0.5 }]);
 
-    const result = await cache.checkCache("blocked account", makeVector(3));
+    const result = await cache.checkCache("blocked account", makeVector());
     expect(result).toBeNull();
   });
 
@@ -85,7 +85,7 @@ describe("SemanticCache", () => {
       expiresAt: expired,
     } as never);
 
-    const result = await cache.checkCache("visa", makeVector(3));
+    const result = await cache.checkCache("visa", makeVector());
     expect(result).toBeNull();
   });
 
@@ -121,8 +121,11 @@ describe("SemanticCache", () => {
 
     await cache.addToCache(
       "visa requirements",
-      makeVector(3),
-      { answer: "Blocked account total: EUR 11904.", sources: [{ name: "d", url: "u", score: 0.9 }] },
+      makeVector(),
+      {
+        answer: "Blocked account total: EUR 11904.",
+        sources: [{ name: "d", url: "u", score: 0.9 }],
+      },
       ["doc-1"],
     );
 
@@ -135,7 +138,7 @@ describe("SemanticCache", () => {
     const update = vi.mocked(prisma.semanticCacheEntry.update);
     vi.mocked(prisma.$executeRaw).mockResolvedValue(1);
 
-    await cache.addToCache("visa requirements", makeVector(3), {
+    await cache.addToCache("visa requirements", makeVector(), {
       answer: "Blocked account total: EUR 11904.",
       sources: [],
     });
@@ -154,7 +157,7 @@ describe("SemanticCache", () => {
 
   it("checkCache should swallow query errors and return null", async () => {
     mockedFindUnique.mockRejectedValue(new Error("db down"));
-    const result = await cache.checkCache("visa", makeVector(3));
+    const result = await cache.checkCache("visa", makeVector());
     expect(result).toBeNull();
   });
 
