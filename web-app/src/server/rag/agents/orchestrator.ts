@@ -5,7 +5,7 @@ import {
   agentWriterSynthesis,
   type AnalystMatrix,
 } from "@/server/rag/agents/analyst";
-import type { SemanticCache } from "@/server/rag/cache/semantic-cache";
+import type { SemanticCache, CachedResponse } from "@/server/rag/cache/semantic-cache";
 import type { Source } from "@/server/rag/types";
 import { maskPii } from "@/server/pii/masker";
 import { isQueryOutOfDomain } from "@/server/rag/guardrail";
@@ -118,7 +118,10 @@ export async function runAgenticRag(
     // Stage 0 — Query disambiguation & guardrail (includes the guardrail LLM call).
     const stage0Start = Date.now();
     collector.setStage("Stage 0 — Query disambiguation & guardrail");
-    const cached = await cache.checkCache(maskedQuery, queryVector);
+    let cached: CachedResponse | null = null;
+    if (!bypassCache) {
+      cached = await cache.checkCache(maskedQuery, queryVector);
+    }
     if (cached) {
       await memory.addTurn(userQuery, cached.answer);
       return withStageZero(

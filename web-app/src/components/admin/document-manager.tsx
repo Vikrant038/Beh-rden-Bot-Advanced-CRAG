@@ -156,7 +156,7 @@ export function DocumentManager() {
   const clearCacheMutation = api.admin.clearCache.useMutation();
 
   const refresh = () => {
-    void utils.source.list.invalidate();
+    void utils.source.list.refetch();
     void utils.admin.metrics.invalidate();
     void utils.admin.dailyQueries.invalidate();
     void utils.admin.modeSplit.invalidate();

@@ -128,11 +128,36 @@ export const adminRouter = router({
 
       const [totalUsers, totalConversations, totalMessages, queriesToday, documentCount, stats] =
         await Promise.all([
-          prisma.user.count({ where: EXCLUDE_GUESTS_WHERE }),
-          prisma.conversation.count(),
-          prisma.message.count(),
-          prisma.message.count({ where: { role: "USER", createdAt: { gte: startOfToday } } }),
-          prisma.document.count(),
+          prisma.user
+            .count({ where: EXCLUDE_GUESTS_WHERE })
+            .catch((error) => {
+              logger.warn({ error: String(error) }, "[ADMIN] user.count failed");
+              return 0;
+            }),
+          prisma.conversation
+            .count()
+            .catch((error) => {
+              logger.warn({ error: String(error) }, "[ADMIN] conversation.count failed");
+              return 0;
+            }),
+          prisma.message
+            .count()
+            .catch((error) => {
+              logger.warn({ error: String(error) }, "[ADMIN] message.count failed");
+              return 0;
+            }),
+          prisma.message
+            .count({ where: { role: "USER", createdAt: { gte: startOfToday } } })
+            .catch((error) => {
+              logger.warn({ error: String(error) }, "[ADMIN] queriesToday.count failed");
+              return 0;
+            }),
+          prisma.document
+            .count()
+            .catch((error) => {
+              logger.warn({ error: String(error) }, "[ADMIN] document.count failed");
+              return 0;
+            }),
           prisma.$queryRaw<MessageStatsRow[]>`
             SELECT
               COUNT(*) FILTER (WHERE role = 'ASSISTANT') AS "assistantCount",

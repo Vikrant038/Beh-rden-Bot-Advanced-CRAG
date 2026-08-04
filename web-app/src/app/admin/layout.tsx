@@ -43,11 +43,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div id="main" className="relative mx-auto max-w-6xl px-4 py-8">
       <div className="gradient-mesh pointer-events-none absolute inset-x-0 top-0 -z-10 h-64 opacity-60" />
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ShieldAlert className="h-5 w-5 text-warning" />
-          <h1 className="text-lg font-semibold">Admin</h1>
-        </div>
+      <div className="mb-6 flex items-center gap-3">
         <Link
           href="/chat"
           className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs text-muted transition hover:bg-surface-hover hover:text-foreground"
@@ -55,6 +51,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <MessageSquare className="h-3.5 w-3.5" />
           Back to chats
         </Link>
+        <div className="flex items-center gap-2">
+          <ShieldAlert className="h-5 w-5 text-warning" />
+          <h1 className="text-lg font-semibold">Admin</h1>
+        </div>
       </div>
       <nav className="mb-6 flex gap-2 border-b border-border pb-3">
         {NAV_ITEMS.map((item) => {
