@@ -108,7 +108,7 @@ Notes: `admin.testPipeline` is registered with `adminLongProcedure` (not the def
 
 | ID | Item | Backend | UI |
 |---|---|---|---|
-| 3.10 | Guest mode | Signed `behoerden_guest` cookie, middleware admission, tRPC `isAuthenticated` guest provisioning, stream-route guest identity, `claimGuestData` on sign-in, `GUEST_CONVERSATION_LIMIT` cap in `conversation.create` | Login "Continue as guest", sidebar guest row + `n/5` chip, limit-reached card + toasts |
+| 3.10 | Guest mode | Signed `behoerden_guest` cookie, middleware admission, tRPC `isAuthenticated` guest provisioning, stream-route guest identity, `claimGuestData` on sign-in, `GUEST_PROMPT_LIMIT` cap in `conversation.create` + chat stream | Login "Continue as guest", sidebar guest row + `n/5` prompts chip, limit-finished dialog + toasts |
 | 9.13 | Recent-queries pagination | `admin.recentQueries` keyset `cursor` + `nextCursor` | `useInfiniteQuery` + "Load more" |
 | 10.14 | Pipeline-tester history | `PipelineRun` model + migration, `testPipeline` persistence, `admin.listTestRuns`/`getTestRun` | "Recent traces" list on the pipeline-tester page |
 | 10.4 | Bulk delete documents | Already existed (`document.deleteMany`) | Checkboxes + confirm dialog |

@@ -21,8 +21,9 @@ import { ChatEmptyState, QUICK_PROMPTS } from "@/components/chat/chat-empty-stat
 import { DisambiguationCards } from "@/components/chat/disambiguation-cards";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { GuestLimitDialog } from "@/components/chat/guest-limit-dialog";
 import { useToast } from "@/lib/toast";
-import { GUEST_CONVERSATION_LIMIT, GUEST_LIMIT_REACHED_CODE } from "@/lib/guest";
+import { GUEST_LIMIT_REACHED_CODE } from "@/lib/guest";
 import { api } from "@/lib/trpc/client";
 
 const FOLLOW_UP_BANK: Array<{ keywords: string[]; prompts: string[] }> = [
@@ -138,6 +139,7 @@ export function ChatInterface({
     status,
     error,
     notice,
+    guestLimitReached,
     disambiguationOptions,
     sendMessage,
     regenerate,
@@ -164,7 +166,16 @@ export function ChatInterface({
     router.replace(`/chat/${conversationId}`, { scroll: false });
   }, [initialQuery, isLoading, notFound, sendMessage, mode, router, conversationId]);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+  const [guestLimitOpen, setGuestLimitOpen] = useState(false);
   const reduceMotion = useReducedMotion();
+
+  // The stream route rejects a guest prompt past the cap with a 403 + code; the
+  // hook surfaces that as `guestLimitReached` and we surface the sign-in dialog.
+  useEffect(() => {
+    if (guestLimitReached) {
+      setGuestLimitOpen(true);
+    }
+  }, [guestLimitReached]);
 
   // Only follow the stream while the user is already at the bottom, so scrolling
   // up to re-read an earlier answer doesn't yank them back down.
@@ -220,12 +231,7 @@ export function ChatInterface({
         },
         onError: (error) => {
           if (error.data?.code === GUEST_LIMIT_REACHED_CODE) {
-            toast({
-              title: "Guest limit reached",
-              description: `Free browsing includes ${GUEST_CONVERSATION_LIMIT} conversations. Sign in to keep chatting.`,
-              variant: "warning",
-              action: { label: "Sign in", onClick: () => router.push("/login") },
-            });
+            setGuestLimitOpen(true);
           } else {
             toast({ title: "Could not start a new chat", variant: "error" });
           }
@@ -500,6 +506,8 @@ export function ChatInterface({
         isPending={clearMutation.isPending}
         onConfirm={clearConversation}
       />
+
+      <GuestLimitDialog open={guestLimitOpen} onOpenChange={setGuestLimitOpen} />
     </div>
   );
 }

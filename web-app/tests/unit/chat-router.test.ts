@@ -6,18 +6,25 @@ vi.mock("@/server/db", () => ({
   prisma: {
     conversation: {
       findUnique: vi.fn(),
+      findMany: vi.fn(),
       update: vi.fn(),
+      create: vi.fn(),
+      count: vi.fn(),
     },
     message: {
       create: vi.fn(),
       findFirst: vi.fn(),
+      findUnique: vi.fn(),
       delete: vi.fn(),
+      count: vi.fn(),
     },
   },
 }));
 
 import { prisma } from "@/server/db";
 import type { MockPrisma } from "../helpers/mock-prisma";
+import { GuestLimitReachedError } from "@/server/lib/errors";
+import { GUEST_PROMPT_LIMIT } from "@/lib/guest";
 
 const prismaMock = prisma as unknown as MockPrisma;
 
@@ -28,6 +35,17 @@ function makeCaller() {
       user: { id: "user-1", role: "USER", name: "Test", email: "test@example.com" },
       expires: "2099-01-01T00:00:00.000Z",
     },
+    headers: new Headers(),
+    resHeaders: new Headers(),
+  } as unknown as Context);
+}
+
+/** A caller that goes through the guest admission path (no session, guest id). */
+function makeGuestCaller(guestId = "guest-1") {
+  return appRouter.createCaller({
+    db: prismaMock as never,
+    session: null,
+    guestId,
     headers: new Headers(),
     resHeaders: new Headers(),
   } as unknown as Context);
@@ -112,6 +130,22 @@ describe("chat router", () => {
     await expect(
       caller.chat.sendMessage({ conversationId: "conv-x", query: "hi", mode: "agentic" }),
     ).rejects.toThrow();
+  });
+
+  it("sendMessage: blocks a guest at the free-tier prompt cap", async () => {
+    prismaMock.user.create.mockResolvedValue({ id: "guest-1" } as never);
+    prismaMock.conversation.findUnique.mockResolvedValue({
+      id: "conv-1",
+      userId: "guest-1",
+      title: "My chat",
+    } as never);
+    prismaMock.message.count.mockResolvedValue(GUEST_PROMPT_LIMIT);
+
+    const caller = makeGuestCaller();
+    await expect(
+      caller.chat.sendMessage({ conversationId: "conv-1", query: "hi", mode: "agentic" }),
+    ).rejects.toMatchObject({ cause: expect.any(GuestLimitReachedError) });
+    expect(prismaMock.message.create).not.toHaveBeenCalled();
   });
 
   it("regenerate: removes the last assistant message and returns the prior user query", async () => {

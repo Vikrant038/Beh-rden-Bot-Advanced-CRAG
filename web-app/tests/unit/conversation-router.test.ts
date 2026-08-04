@@ -12,11 +12,14 @@ vi.mock("@/server/db", () => ({
       updateMany: vi.fn(),
       delete: vi.fn(),
       count: vi.fn(),
+      findFirst: vi.fn(),
     },
     message: {
       findMany: vi.fn(),
+      count: vi.fn(),
     },
     user: {
+      count: vi.fn(),
       create: vi.fn(),
     },
   },
@@ -25,7 +28,7 @@ vi.mock("@/server/db", () => ({
 import { prisma } from "@/server/db";
 import type { MockPrisma } from "../helpers/mock-prisma";
 import { GuestLimitReachedError } from "@/server/lib/errors";
-import { GUEST_CONVERSATION_LIMIT } from "@/lib/guest";
+import { GUEST_PROMPT_LIMIT } from "@/lib/guest";
 
 const prismaMock = prisma as unknown as MockPrisma;
 
@@ -90,16 +93,16 @@ describe("conversation router", () => {
     );
   });
 
-  it("create: allows a guest below the free-tier conversation cap", async () => {
+  it("create: allows a guest below the free-tier prompt cap", async () => {
     prismaMock.user.create.mockResolvedValue({ id: "guest-1" } as never);
-    prismaMock.conversation.count.mockResolvedValue(2);
+    prismaMock.message.count.mockResolvedValue(2);
     prismaMock.conversation.create.mockResolvedValue(ownerConversation as never);
 
     const caller = makeGuestCaller();
     const result = await caller.conversation.create({});
 
-    expect(prismaMock.conversation.count).toHaveBeenCalledWith({
-      where: { userId: "guest-1", deletedAt: null },
+    expect(prismaMock.message.count).toHaveBeenCalledWith({
+      where: { conversation: { userId: "guest-1", deletedAt: null }, role: "USER" },
     });
     expect(prismaMock.conversation.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ userId: "guest-1" }) }),
@@ -107,9 +110,9 @@ describe("conversation router", () => {
     expect(result.id).toBe("conv-1");
   });
 
-  it("create: blocks a guest at the free-tier conversation cap with GUEST_CONVERSATION_LIMIT", async () => {
+  it("create: blocks a guest at the free-tier prompt cap with GUEST_PROMPT_LIMIT", async () => {
     prismaMock.user.create.mockResolvedValue({ id: "guest-1" } as never);
-    prismaMock.conversation.count.mockResolvedValue(GUEST_CONVERSATION_LIMIT);
+    prismaMock.message.count.mockResolvedValue(GUEST_PROMPT_LIMIT);
 
     const caller = makeGuestCaller();
     // tRPC wraps thrown DomainErrors in a TRPCError whose cause preserves the
@@ -122,10 +125,25 @@ describe("conversation router", () => {
     expect(prismaMock.conversation.create).not.toHaveBeenCalled();
   });
 
-  it("create: does not count conversations against signed-in (non-guest) users", async () => {
+  it("count: reports prompt usage for guests so the sidebar chip reads n/GUEST_PROMPT_LIMIT", async () => {
+    prismaMock.user.create.mockResolvedValue({ id: "guest-1" } as never);
+    prismaMock.message.count.mockResolvedValue(4);
+
+    const caller = makeGuestCaller();
+    const result = await caller.conversation.count(undefined);
+
+    expect(prismaMock.message.count).toHaveBeenCalledWith({
+      where: { conversation: { userId: "guest-1", deletedAt: null }, role: "USER" },
+    });
+    expect(result.count).toBe(4);
+    expect(prismaMock.conversation.count).not.toHaveBeenCalled();
+  });
+
+  it("create: does not count prompts against signed-in (non-guest) users", async () => {
     prismaMock.conversation.create.mockResolvedValue(ownerConversation as never);
     const caller = makeCaller();
     await caller.conversation.create({});
+    expect(prismaMock.message.count).not.toHaveBeenCalled();
     expect(prismaMock.conversation.count).not.toHaveBeenCalled();
   });
 

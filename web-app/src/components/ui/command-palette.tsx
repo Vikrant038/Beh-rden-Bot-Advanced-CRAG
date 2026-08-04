@@ -19,7 +19,7 @@ import {
 import { api } from "@/lib/trpc/client";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/lib/toast";
-import { GUEST_CONVERSATION_LIMIT, GUEST_LIMIT_REACHED_CODE } from "@/lib/guest";
+import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/lib/guest";
 
 interface Command {
   id: string;
@@ -65,7 +65,7 @@ export function CommandPalette() {
             if (code === GUEST_LIMIT_REACHED_CODE) {
               toast({
                 title: "Guest limit reached",
-                description: `Free browsing includes ${GUEST_CONVERSATION_LIMIT} conversations. Sign in to keep chatting.`,
+                description: `Free browsing includes ${GUEST_PROMPT_LIMIT} prompts. Sign in to keep chatting.`,
                 variant: "warning",
                 action: { label: "Sign in", onClick: () => router.push("/login") },
               });

@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { router, protectedProcedure } from "@/server/trpc/t";
 import { prisma } from "@/server/db";
-import { NotFoundError, ValidationError } from "@/server/lib/errors";
+import { GuestLimitReachedError, NotFoundError, ValidationError } from "@/server/lib/errors";
 import { createLogger } from "@/server/lib/logger";
 import type { AuthedUser } from "@/server/trpc/t";
 import type { ChatMode } from "@/lib/chat/types";
 import { MAX_QUERY_LENGTH } from "@/lib/chat/types";
 import { chatModeSchema } from "@/server/routers/conversation";
+import { GUEST_PROMPT_LIMIT } from "@/lib/guest";
 
 const logger = createLogger("chat-router");
 
@@ -47,6 +48,17 @@ export const chatRouter = router({
     .mutation(async ({ ctx, input }): Promise<SendMessageResult> => {
       const user = ctx.user as AuthedUser;
       const conversation = await ensureOwnership(user, input.conversationId);
+
+      // Same free-tier invariant as conversation.create and the chat stream
+      // route: guests may persist at most GUEST_PROMPT_LIMIT prompts.
+      if (user.isGuest) {
+        const promptCount = await prisma.message.count({
+          where: { conversation: { userId: user.id, deletedAt: null }, role: "USER" },
+        });
+        if (promptCount >= GUEST_PROMPT_LIMIT) {
+          throw new GuestLimitReachedError(GUEST_PROMPT_LIMIT);
+        }
+      }
 
       const mode: ChatMode = input.mode;
       const message = await prisma.message.create({

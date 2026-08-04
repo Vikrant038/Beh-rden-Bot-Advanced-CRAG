@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/trpc/client";
 import { ConversationItem } from "@/components/sidebar/conversation-item";
+import { GuestLimitDialog } from "@/components/chat/guest-limit-dialog";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { useDebouncedValue } from "@/hooks/use-debounce";
@@ -25,7 +26,7 @@ import { groupConversationsByTime } from "@/lib/conversation-groups";
 import { APP_VERSION } from "@/lib/version";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/lib/toast";
-import { GUEST_CONVERSATION_LIMIT, GUEST_LIMIT_REACHED_CODE } from "@/lib/guest";
+import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/lib/guest";
 
 const PINNED_KEY = "behoerden.pinnedConversations";
 
@@ -71,6 +72,7 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), 300);
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => readPinned());
+  const [guestLimitOpen, setGuestLimitOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   const conversations = api.conversation.list.useInfiniteQuery(
@@ -116,12 +118,7 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
         },
         onError: (error) => {
           if (error.data?.code === GUEST_LIMIT_REACHED_CODE) {
-            toast({
-              title: "Guest limit reached",
-              description: `Free browsing includes ${GUEST_CONVERSATION_LIMIT} conversations. Sign in to keep chatting.`,
-              variant: "warning",
-              action: { label: "Sign in", onClick: () => router.push("/login") },
-            });
+            setGuestLimitOpen(true);
           } else {
             toast({ title: "Could not start a new chat", variant: "error" });
           }
@@ -201,7 +198,8 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
   // ─── Collapsed icon rail ─────────────────────────────────────
   if (collapsed) {
     return (
-      <div className="flex h-full flex-col items-center gap-1 py-3">
+      <>
+        <div className="flex h-full flex-col items-center gap-1 py-3">
         <button
           type="button"
           onClick={newChat}
@@ -256,13 +254,16 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
         <div className="flex flex-col items-center gap-2">
           <ThemeToggle compact />
         </div>
-      </div>
+        </div>
+        <GuestLimitDialog open={guestLimitOpen} onOpenChange={setGuestLimitOpen} />
+      </>
     );
   }
 
   // ─── Expanded sidebar ────────────────────────────────────────
   return (
-    <div className="flex h-full flex-col">
+    <>
+      <div className="flex h-full flex-col">
       <div className="flex items-center gap-1 p-3 pb-2">
         <button
           type="button"
@@ -456,7 +457,7 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium text-foreground">Guest</span>
               <span className="block truncate text-[10px] text-muted">
-                {guestCount.data?.count ?? 0}/{GUEST_CONVERSATION_LIMIT} conversations · no account
+                {guestCount.data?.count ?? 0}/{GUEST_PROMPT_LIMIT} prompts · no account
               </span>
             </span>
             <button
@@ -471,6 +472,8 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
           </div>
         ) : null}
       </div>
-    </div>
+      </div>
+      <GuestLimitDialog open={guestLimitOpen} onOpenChange={setGuestLimitOpen} />
+    </>
   );
 }

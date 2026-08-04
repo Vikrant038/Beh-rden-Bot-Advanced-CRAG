@@ -6,7 +6,7 @@ import { GuestLimitReachedError, NotFoundError } from "@/server/lib/errors";
 import { createLogger } from "@/server/lib/logger";
 import type { AuthedUser } from "@/server/trpc/t";
 import type { ChatMessage, ChatSource } from "@/lib/chat/types";
-import { GUEST_CONVERSATION_LIMIT } from "@/lib/guest";
+import { GUEST_PROMPT_LIMIT } from "@/lib/guest";
 
 const logger = createLogger("conversation-router");
 
@@ -120,17 +120,17 @@ export const conversationRouter = router({
     .mutation(async ({ ctx, input }) => {
       const user = ctx.user as AuthedUser;
 
-      // Free-tier cap: guests may hold at most GUEST_CONVERSATION_LIMIT
-      // (non-deleted) conversations. Soft-deleting a conversation frees its
-      // slot, so a guest always has up to N active threads at a time. Signing in
-      // lifts the cap entirely and the guest's data is transferred to the
-      // account (see server/guest.ts + trpc/context.ts).
+      // Free-tier cap: guests may ask at most GUEST_PROMPT_LIMIT prompts (USER
+      // messages across all non-deleted conversations). Soft-deleting a
+      // conversation frees its prompts, so a guest always has up to N prompts at
+      // a time. Signing in lifts the cap entirely and the guest's data is
+      // transferred to the account (see server/guest.ts + trpc/context.ts).
       if (user.isGuest) {
-        const count = await prisma.conversation.count({
-          where: { userId: user.id, deletedAt: null },
+        const promptCount = await prisma.message.count({
+          where: { conversation: { userId: user.id, deletedAt: null }, role: "USER" },
         });
-        if (count >= GUEST_CONVERSATION_LIMIT) {
-          throw new GuestLimitReachedError(GUEST_CONVERSATION_LIMIT);
+        if (promptCount >= GUEST_PROMPT_LIMIT) {
+          throw new GuestLimitReachedError(GUEST_PROMPT_LIMIT);
         }
       }
 
@@ -430,6 +430,17 @@ export const conversationRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const user = ctx.user as AuthedUser;
+
+      // For guests, `count` reports the number of prompts (USER messages) used
+      // so the sidebar chip reads `n/GUEST_PROMPT_LIMIT prompts` — the resource
+      // that is actually capped. Signed-in users get the conversation count.
+      if (user.isGuest) {
+        const prompts = await prisma.message.count({
+          where: { conversation: { userId: user.id, deletedAt: null }, role: "USER" },
+        });
+        return { count: prompts };
+      }
+
       const count = await prisma.conversation.count({
         where: {
           userId: user.id,

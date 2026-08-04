@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/trpc/client";
 import type { ChatMessage, ChatMode, ChatStreamEvent, PipelineStage } from "@/lib/chat/types";
 import { mapChatStageToPipeline } from "@/lib/chat/types";
+import { GUEST_LIMIT_REACHED_CODE } from "@/lib/guest";
 
 export const STREAMING_ID = "__streaming__";
 
@@ -27,6 +28,8 @@ export interface UseChatReturn {
   error: string | null;
   /** Transient, non-fatal progress text (e.g. an automatic retry in flight). */
   notice: string | null;
+  /** True when the server rejected the prompt because the guest cap was hit. */
+  guestLimitReached: boolean;
   disambiguationOptions: string[];
   sendMessage: (query: string, mode?: ChatMode) => Promise<void>;
   regenerate: (mode?: ChatMode) => Promise<void>;
@@ -45,6 +48,10 @@ function nowIso(): string {
  */
 function isRetryableError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
+  // The guest prompt cap is a hard limit — retrying can never succeed.
+  if ("code" in err && err.code === GUEST_LIMIT_REACHED_CODE) {
+    return false;
+  }
   // "Request failed (5xx)" shape set by consumeStream
   const match = err.message.match(/Request failed \((\d+)\)/);
   if (match) {
@@ -74,6 +81,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
   const [status, setStatus] = useState<PipelineStage>("idle");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [guestLimitReached, setGuestLimitReached] = useState(false);
   const [disambiguationOptions, setDisambiguationOptions] = useState<string[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -104,6 +112,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
         currentConvIdRef.current = conversation.id;
       }
       setNotFound(false);
+      setGuestLimitReached(false);
       setStatus("idle");
     }
   }, [conversation]);
@@ -198,15 +207,24 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
 
         if (!response.ok) {
           let message = `Request failed (${response.status})`;
+          let code: string | undefined;
           try {
-            const data = (await response.json()) as { error?: string };
+            const data = (await response.json()) as { error?: string; code?: string };
             if (data?.error) {
               message = data.error;
             }
+            code = data?.code;
           } catch {
             // Ignore malformed error bodies.
           }
-          throw new Error(message);
+          if (code === GUEST_LIMIT_REACHED_CODE) {
+            setGuestLimitReached(true);
+          }
+          const error = new Error(message) as Error & { code?: string };
+          if (code) {
+            error.code = code;
+          }
+          throw error;
         }
 
         if (!response.body) {
@@ -265,6 +283,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
       setError(null);
       setNotice(null);
       setDisambiguationOptions([]);
+      setGuestLimitReached(false);
       listRefreshedRef.current = false;
 
       const userMessage: ChatMessage = {
@@ -317,10 +336,16 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
       setNotice(null);
       if (lastErr) {
         const message = lastErr instanceof Error ? lastErr.message : "Streaming request failed";
+        const limitHit =
+          lastErr instanceof Error &&
+          "code" in lastErr &&
+          lastErr.code === GUEST_LIMIT_REACHED_CODE;
         setError(message);
         setMessages((prev) =>
           prev.map((msg) =>
-            msg.id === STREAMING_ID ? { ...msg, content: "Streaming request failed." } : msg,
+            msg.id === STREAMING_ID
+              ? { ...msg, content: limitHit ? message : "Streaming request failed." }
+              : msg,
           ),
         );
       } else {
@@ -340,6 +365,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
 
       setError(null);
       setNotice(null);
+      setGuestLimitReached(false);
       listRefreshedRef.current = false;
       let result: { userMessageId: string; query: string; conversationId: string };
       try {
@@ -412,6 +438,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     setMessages([]);
     setError(null);
     setDisambiguationOptions([]);
+    setGuestLimitReached(false);
     setStatus("idle");
   }, []);
 
@@ -423,6 +450,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     status,
     error,
     notice,
+    guestLimitReached,
     disambiguationOptions,
     sendMessage,
     regenerate,

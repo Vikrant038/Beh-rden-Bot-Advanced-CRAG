@@ -8,7 +8,7 @@ import { api } from "@/lib/trpc/client";
 import { ChatEmptyState, QUICK_PROMPTS } from "@/components/chat/chat-empty-state";
 import { ChatInput } from "@/components/chat/chat-input";
 import type { ChatMode } from "@/lib/chat/types";
-import { GUEST_CONVERSATION_LIMIT, GUEST_LIMIT_REACHED_CODE } from "@/lib/guest";
+import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/lib/guest";
 
 /**
  * New-chat landing. Unlike the old eager auto-create (which spawned an empty
@@ -49,8 +49,8 @@ export default function NewChatPage() {
           </span>
           <h1 className="mt-5 text-lg font-semibold">Guest limit reached</h1>
           <p className="mt-2 text-sm leading-relaxed text-muted">
-            Free guest browsing includes up to {GUEST_CONVERSATION_LIMIT} conversations. Sign in to
-            keep chatting — your existing conversations will be saved to your account automatically.
+            Free guest browsing includes up to {GUEST_PROMPT_LIMIT} prompts. Sign in to keep
+            chatting — your existing conversations will be saved to your account automatically.
           </p>
           <Link
             href="/login"

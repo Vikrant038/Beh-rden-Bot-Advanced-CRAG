@@ -15,7 +15,20 @@ vi.mock("@/server/rag/chat-pipeline", () => ({
   runChatStream: (...args: unknown[]) => mockRunChatStream(...args),
 }));
 
+const mockReadGuestId = vi.fn();
+vi.mock("@/server/guest", () => ({
+  readGuestIdFromRequest: (...args: unknown[]) => mockReadGuestId(...args),
+}));
+
+const mockMessageCount = vi.fn();
+vi.mock("@/server/db", () => ({
+  prisma: {
+    message: { count: (...args: unknown[]) => mockMessageCount(...args) },
+  },
+}));
+
 import { POST } from "@/app/api/chat/stream/route";
+import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/lib/guest";
 
 const session = {
   user: { id: "user-1", role: "USER" },
@@ -42,7 +55,9 @@ describe("POST /api/chat/stream", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockAuth.mockResolvedValue(session);
+    mockReadGuestId.mockReturnValue(null);
     mockRateCheck.mockResolvedValue({ success: true, reset: 0 });
+    mockMessageCount.mockResolvedValue(0);
     mockRunChatStream.mockImplementation(() => streamEvents(
       { type: "status", stage: "guardrail" },
       { type: "token", content: "Hello world" },
@@ -52,9 +67,43 @@ describe("POST /api/chat/stream", () => {
 
   it("returns 401 when the request is unauthenticated", async () => {
     mockAuth.mockResolvedValue(null);
+    mockReadGuestId.mockReturnValue(null);
     const response = await POST(buildRequest());
     expect(response.status).toBe(401);
     expect(mockRunChatStream).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 with the guest limit code when a guest is at the prompt cap", async () => {
+    mockAuth.mockResolvedValue(null);
+    mockReadGuestId.mockReturnValue("guest-1");
+    mockMessageCount.mockResolvedValue(GUEST_PROMPT_LIMIT);
+
+    const response = await POST(buildRequest());
+    expect(response.status).toBe(403);
+    const body = await response.json();
+    expect(body.code).toBe(GUEST_LIMIT_REACHED_CODE);
+    expect(mockMessageCount).toHaveBeenCalledWith({
+      where: { conversation: { userId: "guest-1", deletedAt: null }, role: "USER" },
+    });
+    expect(mockRunChatStream).not.toHaveBeenCalled();
+  });
+
+  it("streams normally for a guest below the prompt cap", async () => {
+    mockAuth.mockResolvedValue(null);
+    mockReadGuestId.mockReturnValue("guest-1");
+    mockMessageCount.mockResolvedValue(GUEST_PROMPT_LIMIT - 1);
+
+    const response = await POST(buildRequest());
+    expect(response.status).toBe(200);
+    expect(mockRunChatStream).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "guest-1" }),
+    );
+  });
+
+  it("does not enforce the guest cap for signed-in users", async () => {
+    const response = await POST(buildRequest());
+    expect(response.status).toBe(200);
+    expect(mockMessageCount).not.toHaveBeenCalled();
   });
 
   it("returns 429 with resetInSeconds when rate limited", async () => {

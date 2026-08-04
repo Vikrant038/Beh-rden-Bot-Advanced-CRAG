@@ -14,7 +14,7 @@ import {
   Download,
 } from "lucide-react";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
-import { GUEST_CONVERSATION_LIMIT } from "@/lib/guest";
+import { GUEST_PROMPT_LIMIT } from "@/lib/guest";
 
 const BENEFITS = [
   { icon: Bookmark, text: "Save conversations" },
@@ -176,8 +176,8 @@ export function LoginContent() {
             {guestOpen && (
               <div className="mt-3 rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-[11px] leading-relaxed text-muted">
                 Browse and ask questions without an account — free guest browsing includes up to{" "}
-                {GUEST_CONVERSATION_LIMIT} conversations. Your chats stay on this device, and when
-                you sign in they&apos;re saved to your account automatically.
+                {GUEST_PROMPT_LIMIT} prompts. Your chats stay on this device, and when you sign in
+                they&apos;re saved to your account automatically.
                 {guestError ? (
                   <span className="mt-1.5 block text-destructive" role="alert">
                     {guestError}

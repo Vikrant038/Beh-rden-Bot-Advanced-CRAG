@@ -22,7 +22,9 @@ export default function AdminDashboardPage() {
   const [manualRefreshing, setManualRefreshing] = useState(false);
 
   const metrics = api.admin.metrics.useQuery(undefined, { refetchInterval: REFRESH_INTERVAL_MS });
-  const dailyQueries = api.admin.dailyQueries.useQuery({ days });
+  const dailyQueries = api.admin.dailyQueries.useQuery({ days }, {
+    refetchInterval: REFRESH_INTERVAL_MS,
+  });
   const modeSplit = api.admin.modeSplit.useQuery(undefined, {
     refetchInterval: REFRESH_INTERVAL_MS,
   });
@@ -33,7 +35,9 @@ export default function AdminDashboardPage() {
       refetchInterval: REFRESH_INTERVAL_MS,
     },
   );
-  const topQuestions = api.admin.topQuestions.useQuery({ days });
+  const topQuestions = api.admin.topQuestions.useQuery({ days }, {
+    refetchInterval: REFRESH_INTERVAL_MS,
+  });
   const failedQueries = api.admin.failedQueries.useQuery(undefined, {
     refetchInterval: REFRESH_INTERVAL_MS,
   });

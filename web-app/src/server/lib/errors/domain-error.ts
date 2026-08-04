@@ -44,8 +44,8 @@ export class RateLimitedError extends DomainError {
 export class GuestLimitReachedError extends DomainError {
   constructor(limit: number) {
     super(
-      `Guest limit reached: free guest browsing allows ${limit} conversations. Please sign in to continue.`,
-      ErrorCode.GUEST_CONVERSATION_LIMIT,
+      `Guest limit reached: free guest browsing allows ${limit} prompts. Please sign in to continue.`,
+      ErrorCode.GUEST_PROMPT_LIMIT,
     );
   }
 }

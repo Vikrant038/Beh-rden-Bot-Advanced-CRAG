@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/server/auth";
 import { readGuestIdFromRequest } from "@/server/guest";
+import { prisma } from "@/server/db";
 import { chatRateLimiter } from "@/server/lib/security/rate-limiter";
 import { runChatStream } from "@/server/rag/chat-pipeline";
 import { chatModeSchema } from "@/server/routers/conversation";
+import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/lib/guest";
 import { MAX_QUERY_LENGTH } from "@/lib/chat/types";
 import { createLogger } from "@/server/lib/logger";
 
@@ -30,9 +32,27 @@ export async function POST(request: Request) {
   const session = await auth();
   // Guest admission (3.10): no real session, but a valid signed guest cookie
   // still names the user (the guest id is the User id).
-  const userId = session?.user?.id ?? readGuestIdFromRequest(request);
+  const sessionUserId = session?.user?.id ?? null;
+  const guestId = sessionUserId ? null : readGuestIdFromRequest(request);
+  const userId = sessionUserId ?? guestId;
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Free-tier cap: guests may ask at most GUEST_PROMPT_LIMIT prompts total. This
+  // is the enforcement point for sending a message inside an existing
+  // conversation (conversation.create guards starting new threads); it must run
+  // before the user message is persisted by the pipeline.
+  if (guestId) {
+    const promptCount = await prisma.message.count({
+      where: { conversation: { userId, deletedAt: null }, role: "USER" },
+    });
+    if (promptCount >= GUEST_PROMPT_LIMIT) {
+      return NextResponse.json(
+        { error: "Guest limit reached", code: GUEST_LIMIT_REACHED_CODE },
+        { status: 403 },
+      );
+    }
   }
 
   const rateLimit = await chatRateLimiter.check(`chat:${userId}`);
