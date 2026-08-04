@@ -135,8 +135,10 @@ export function DocumentManager() {
   const utils = api.useUtils();
   const { toast } = useToast();
   const [url, setUrl] = useState("");
+  const [urlTitle, setUrlTitle] = useState("");
   const [ingestFeedback, setIngestFeedback] = useState<string | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfTitle, setPdfTitle] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [pdfFeedback, setPdfFeedback] = useState<string | null>(null);
@@ -204,10 +206,11 @@ export function DocumentManager() {
     }
     setIngestFeedback(null);
     ingestMutation.mutate(
-      { url: trimmed },
+      { url: trimmed, title: urlTitle.trim() || undefined },
       {
         onSuccess: (result) => {
           setUrl("");
+          setUrlTitle("");
           const isContentType = result.error?.toLowerCase().includes("content type");
           setIngestFeedback(
             result.status === "failed"
@@ -322,6 +325,9 @@ export function DocumentManager() {
     setPdfFeedback(null);
     const body = new FormData();
     body.append("file", pdfFile);
+    if (pdfTitle.trim()) {
+      body.append("title", pdfTitle.trim().slice(0, 200));
+    }
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/admin/documents/upload");
@@ -350,6 +356,7 @@ export function DocumentManager() {
           : `Ingested ${pdfFile.name} → ${json.status} (${json.chunkCount ?? "?"} child chunks)`,
       );
       setPdfFile(null);
+      setPdfTitle("");
       setUploading(false);
       window.setTimeout(() => setUploadProgress(0), 1200);
       refresh();
@@ -409,6 +416,14 @@ export function DocumentManager() {
             {syncPending ? "Syncing…" : "Sync all"}
           </button>
         </div>
+        <input
+          type="text"
+          value={urlTitle}
+          onChange={(event) => setUrlTitle(event.target.value)}
+          placeholder="Display name (optional) — defaults to the page title"
+          aria-label="Optional display name"
+          className="mt-2 w-full rounded-xl border border-border bg-background px-4 py-2 text-sm outline-none transition placeholder:text-muted focus:border-primary focus-visible:ring-2 focus-visible:ring-primary"
+        />
         {syncPending ? <IndeterminateBar label="Syncing all documents…" /> : null}
         {/* 10.2 — URL ingest now shows an indeterminate progress bar too. */}
         {ingestMutation.isPending ? <IndeterminateBar label="Ingesting URL…" /> : null}
@@ -465,14 +480,24 @@ export function DocumentManager() {
             Up to 4 MB — text-based PDFs only (scanned pages cannot be read)
           </p>
           {pdfFile && !uploading && (
-            <button
-              type="button"
-              onClick={uploadPdf}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition hover:bg-primary-hover active:scale-[0.98]"
-            >
-              <UploadCloud className="h-3.5 w-3.5" />
-              Upload {pdfFile.name}
-            </button>
+            <div className="flex w-full max-w-md flex-col gap-2 sm:flex-row">
+              <input
+                type="text"
+                value={pdfTitle}
+                onChange={(event) => setPdfTitle(event.target.value)}
+                placeholder="Display name (optional)"
+                aria-label="Optional display name"
+                className="w-full flex-1 rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none transition placeholder:text-muted focus:border-primary"
+              />
+              <button
+                type="button"
+                onClick={uploadPdf}
+                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition hover:bg-primary-hover active:scale-[0.98]"
+              >
+                <UploadCloud className="h-3.5 w-3.5" />
+                Upload {pdfFile.name}
+              </button>
+            </div>
           )}
           {uploading ? (
             <div className="w-full max-w-xs">

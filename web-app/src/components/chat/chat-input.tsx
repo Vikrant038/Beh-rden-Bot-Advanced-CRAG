@@ -161,7 +161,7 @@ export function ChatInput({
         )}
         <div
           className={cn(
-            "flex items-end gap-2 rounded-xl border border-border bg-surface px-2 transition",
+            "flex items-end gap-2 rounded-xl border border-border bg-surface px-2 transition focus-within:border-primary/50 focus-within:shadow-[0_0_0_3px_var(--color-primary)/10]",
             atLimit && "border-warning",
           )}
         >

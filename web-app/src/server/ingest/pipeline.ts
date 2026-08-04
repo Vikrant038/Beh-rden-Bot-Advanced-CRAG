@@ -55,6 +55,12 @@ export interface IngestOptions {
   embeddingClient?: EmbeddingClient;
   /** Re-ingest even when the content hash is unchanged. */
   force?: boolean;
+  /**
+   * Optional display-name override. Defaults to the scraped `<title>` for URLs
+   * and the filename for PDFs. When provided on a content-unchanged re-ingest,
+   * only the stored title is updated (no re-embedding).
+   */
+  title?: string;
 }
 
 function hashContent(text: string): string {
@@ -109,7 +115,13 @@ async function ingestUrlInner(rawUrl: string, options: IngestOptions = {}): Prom
     };
   }
 
-  return persistIngested(url, scraped.title, cleanText(scraped.text), options);
+  const titleOverride = options.title?.trim();
+  return persistIngested(
+    url,
+    titleOverride || scraped.title,
+    cleanText(scraped.text),
+    options,
+  );
 }
 
 /**
@@ -131,10 +143,24 @@ async function persistIngested(
   const existing = await prisma.document.findUnique({ where: { url: sourceKey } });
 
   if (existing && existing.hash === hash && !options.force) {
+    // Allow re-titling a document even when its content is unchanged: update
+    // the stored title without re-scraping chunks or re-embedding.
+    const titleOverride = options.title?.trim();
+    if (titleOverride && existing.title !== titleOverride) {
+      await prisma.document.update({
+        where: { url: sourceKey },
+        data: { title: titleOverride },
+      });
+      // Keep chunk sourceName in sync so chat source citations render the new title.
+      await prisma.documentChunk.updateMany({
+        where: { documentId: existing.id },
+        data: { sourceName: titleOverride },
+      });
+    }
     logger.info({ url: sourceKey }, "[INGEST] content unchanged; skipping");
     return {
       url: sourceKey,
-      title,
+      title: titleOverride || title,
       status: "skipped",
       chunkCount: existing.chunkCount,
       hash,
@@ -209,7 +235,7 @@ export async function ingestPdf(
     const cleaned = cleanText(parsed.text);
     const result = await persistIngested(
       pdfSourceKey(buffer, filename),
-      filename,
+      options.title?.trim() || filename,
       cleaned,
       options,
     );

@@ -96,17 +96,11 @@ body {
 }
 
 /* ─── Global focus-visible treatment ───
-   Keyboard-focusable elements get a high-contrast ring using shadow so it
-   sits inside the border-radius without a jarring box around it.
-   The textarea inside ChatInput already has outline-none; the container's
-   focus-within shadow provides its own focus indicator. */
-:focus-visible {
-  outline: none;
-  box-shadow:
-    0 0 0 2px var(--color-background),
-    0 0 0 4px var(--color-primary);
-  border-radius: 0.375rem;
-}
+   Removed the blanket :focus-visible rule that was painting a blue box around
+   every focusable element (including the chat input container). Instead, each
+   component now owns its own focus indicator via :focus-within or explicit
+   focus-visible classes. This keeps the UI clean while preserving keyboard
+   accessibility where it matters. */
 
 /* ─── Glassmorphism system ─── */
 

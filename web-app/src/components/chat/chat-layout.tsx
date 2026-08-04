@@ -1,18 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Menu, X } from "lucide-react";
+import { ArrowLeft, Menu, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
 import { cn } from "@/lib/utils";
 
 export function ChatLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+
   // ── Sidebar collapse state (md+) ─────────────────────────────────────────
-  // One explicit toggle drives both tablet (md) and desktop (lg+): the sidebar
-  // is either the full panel (w-72) or the icon rail (w-16). There is NO
-  // hover-to-open behavior — hovering the rail never expands the sidebar. The
-  // only way to open/close it is the collapse / expand buttons, so it never
-  // gets "stuck open" from a stray hover.
+  // lg+ (1024px+): always expanded (w-72), no hover behavior.
+  // md (768–1023px): collapsed to icon rail (w-16), expands on hover.
+  // < md: hidden, mobile slide-in panel instead.
   const [collapsed, setCollapsed] = useState(false);
+  const [hoverExpanded, setHoverExpanded] = useState(false);
 
   // md (768–1023px) starts collapsed to the icon rail so the content area keeps
   // room; lg+ starts expanded. Adjusted once on mount (post-hydration) so the
@@ -24,7 +26,25 @@ export function ChatLayout({ children }: { children: React.ReactNode }) {
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => !prev);
+    setHoverExpanded(false);
   }, []);
+
+  // On md screens, hovering the collapsed rail expands it; leaving collapses it.
+  // On lg+ screens, hover does nothing — the sidebar is always full width.
+  const handleSidebarHoverEnter = useCallback(() => {
+    // Only expand on hover if we're on md (not lg+) and currently collapsed
+    const isLg = window.matchMedia("(min-width: 1024px)").matches;
+    if (!isLg && collapsed) {
+      setHoverExpanded(true);
+    }
+  }, [collapsed]);
+
+  const handleSidebarHoverLeave = useCallback(() => {
+    setHoverExpanded(false);
+  }, []);
+
+  // The sidebar is expanded if: it's not collapsed, OR we're hovering on md
+  const isExpanded = !collapsed || hoverExpanded;
 
   // ── Mobile slide-in panel state (< md) ────────────────────────────────────
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -99,10 +119,12 @@ export function ChatLayout({ children }: { children: React.ReactNode }) {
       <aside
         className={cn(
           "hidden shrink-0 border-r border-border bg-surface/60 transition-[width] duration-200 md:block",
-          collapsed ? "w-16" : "w-72",
+          isExpanded ? "w-72" : "w-16",
         )}
+        onMouseEnter={handleSidebarHoverEnter}
+        onMouseLeave={handleSidebarHoverLeave}
       >
-        <AppSidebar collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
+        <AppSidebar collapsed={!isExpanded} onToggleCollapsed={toggleCollapsed} />
       </aside>
 
       {/* ══════════════════════════════════════════════════════════════════
@@ -159,6 +181,14 @@ export function ChatLayout({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Mobile top bar — only visible below md */}
         <header className="flex items-center gap-3 border-b border-border bg-background/80 px-4 py-3 backdrop-blur md:hidden">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            aria-label="Go back"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
           <button
             type="button"
             onClick={() => setMobileOpen(true)}

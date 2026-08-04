@@ -104,6 +104,23 @@ describe("document router", () => {
     expect(mockedAssertSafeUrl).toHaveBeenCalledWith("https://example.com/visa");
     expect(result.status).toBe("created");
     expect(result.chunkCount).toBe(12);
+    expect(mockedIngest).toHaveBeenCalledWith("https://example.com/visa", { title: undefined });
+  });
+
+  it("ingestUrl: forwards an optional title override to the pipeline", async () => {
+    mockedIngest.mockResolvedValue({
+      url: "https://example.com/visa",
+      title: "Visa Guide Custom",
+      status: "created",
+      chunkCount: 12,
+      hash: "h",
+      cacheInvalidated: 0,
+    });
+    const caller = makeCaller();
+    await caller.document.ingestUrl({ url: "https://example.com/visa", title: "Visa Guide Custom" });
+    expect(mockedIngest).toHaveBeenCalledWith("https://example.com/visa", {
+      title: "Visa Guide Custom",
+    });
   });
 
   it("ingestUrl: propagates SSRF blocks", async () => {

@@ -11,6 +11,7 @@ vi.mock("@/server/db", () => {
     prisma: {
       document: { findUnique: vi.fn(), findMany: vi.fn(), upsert: vi.fn(), update: vi.fn() },
       documentParentChunk: { deleteMany: vi.fn(), create: vi.fn() },
+      documentChunk: { deleteMany: vi.fn(), updateMany: vi.fn() },
       semanticCacheEntry: { findMany: vi.fn(), deleteMany: vi.fn() },
       $transaction: vi.fn(async (callback: (tx: unknown) => unknown) => callback(tx)),
       $executeRaw: vi.fn(),
@@ -44,8 +45,8 @@ const prismaMock = prisma as unknown as {
     upsert: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
   };
-  documentChunk: { deleteMany: ReturnType<typeof vi.fn> };
   documentParentChunk: { deleteMany: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
+  documentChunk: { deleteMany: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn> };
   semanticCacheEntry: { findMany: ReturnType<typeof vi.fn>; deleteMany: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
   $executeRaw: ReturnType<typeof vi.fn>;
@@ -105,6 +106,48 @@ describe("ingestUrl", () => {
     expect(txMock.__tx.document.update).toHaveBeenCalled();
     expect(mockedCache).toHaveBeenCalledWith("doc-1");
     expect(result.cacheInvalidated).toBe(2);
+  });
+
+  it("uses the provided title override instead of the scraped title", async () => {
+    const result = await ingestUrl("https://www.example.com/visa-guide", {
+      embeddingClient: fakeEmbeddingClient(),
+      title: "My Custom Name",
+    });
+
+    expect(result.title).toBe("My Custom Name");
+    expect(txMock.__tx.document.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ title: "My Custom Name" }),
+      }),
+    );
+  });
+
+  it("updates the stored title even when content is unchanged", async () => {
+    const expectedHash = createHash("sha256").update(cleanText(MOCK_TEXT)).digest("hex");
+    prismaMock.document.findUnique.mockResolvedValue({
+      id: "doc-1",
+      url: "https://www.example.com/visa-guide",
+      title: "Old Messy Title",
+      hash: expectedHash,
+      chunkCount: 7,
+    });
+
+    const result = await ingestUrl("https://www.example.com/visa-guide", {
+      embeddingClient: fakeEmbeddingClient(),
+      title: "Clean Title",
+    });
+
+    expect(result.status).toBe("skipped");
+    expect(result.title).toBe("Clean Title");
+    expect(prismaMock.document.update).toHaveBeenCalledWith({
+      where: { url: "https://www.example.com/visa-guide" },
+      data: { title: "Clean Title" },
+    });
+    expect(prismaMock.documentChunk.updateMany).toHaveBeenCalledWith({
+      where: { documentId: "doc-1" },
+      data: { sourceName: "Clean Title" },
+    });
+    expect(txMock.__tx.$executeRaw).not.toHaveBeenCalled();
   });
 
   it("skips unchanged documents (idempotent)", async () => {

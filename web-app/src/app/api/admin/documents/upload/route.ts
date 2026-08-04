@@ -29,6 +29,10 @@ export async function POST(request: Request) {
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Missing 'file' field" }, { status: 400 });
   }
+  // Optional display-name override (defaults to the filename).
+  const titleField = formData.get("title");
+  const title =
+    typeof titleField === "string" && titleField.trim() ? titleField.trim().slice(0, 200) : undefined;
   if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== ACCEPTED_MIME) {
     return NextResponse.json({ error: "Only .pdf files are accepted" }, { status: 415 });
   }
@@ -45,7 +49,7 @@ export async function POST(request: Request) {
   const buffer = Buffer.from(await file.arrayBuffer());
 
   try {
-    const result = await ingestPdf(buffer, file.name);
+    const result = await ingestPdf(buffer, file.name, title ? { title } : {});
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

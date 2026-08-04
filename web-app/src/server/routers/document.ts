@@ -42,10 +42,16 @@ export const documentRouter = router({
     }),
 
   ingestUrl: adminProcedure
-    .input(z.object({ url: z.string().url() }))
+    .input(
+      z.object({
+        url: z.string().url(),
+        /** Optional display-name override; defaults to the scraped page title. */
+        title: z.string().trim().max(200).optional(),
+      }),
+    )
     .mutation(async ({ input }): Promise<IngestResult> => {
       await assertSafeUrl(input.url);
-      const result = await ingestUrl(input.url);
+      const result = await ingestUrl(input.url, { title: input.title });
       logger.info({ url: input.url, status: result.status }, "[DOCUMENT] ingest complete");
       return result;
     }),
