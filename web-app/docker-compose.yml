@@ -1,0 +1,41 @@
+# Local development Postgres for the web-app (Next.js + Prisma + pgvector).
+#
+# ⚠️  Do NOT run this together with the repo-root docker-compose.yml (the
+# Python/Streamlit app) — both map host port 5432. Use one or the other.
+#
+#   docker compose up -d postgres
+#
+# On first boot the image runs `docker/postgres-init.sql`, which provisions
+# the principle-of-least-privilege roles the web-app documents in
+# `.env.example` (GUARDRAILS M1.2).
+#
+# ⚠️  Init scripts only run on a FRESH volume — if you previously used the
+# root repo compose (or an older pgdata), drop it first:
+#   docker compose down -v && docker compose up -d postgres
+#   - behoerden_migrator  → DDL (owns the DB, runs Prisma migrations, CREATEDB
+#                           for the `migrate dev` shadow database)
+#   - behoerden_app       → DML only (the app runtime user)
+# and pre-creates the pgvector extension so the migrator never needs superuser.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: behoerden_user
+      POSTGRES_PASSWORD: behoerden_password
+      POSTGRES_DB: behoerden_bot
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Mounted read-only; runs once on first init (empty volume).
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/01-poLP-roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U behoerden_user -d behoerden_bot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:
