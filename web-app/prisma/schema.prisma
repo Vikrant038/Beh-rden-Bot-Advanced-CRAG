@@ -46,6 +46,21 @@ enum DocumentSourceType {
   PDF
 }
 
+/// Background ingest jobs drained by the Vercel Cron worker (see
+/// src/server/ingest/jobs.ts). Jobs are transient: they are pruned after
+/// completion, so the PDF payload column never accumulates long-term.
+enum IngestJobType {
+  URL
+  PDF
+}
+
+enum IngestJobStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
 // ─── Authentication ────────────────────────────────────────────
 
 model User {
@@ -246,6 +261,33 @@ model PipelineRun {
 
   @@index([createdAt(sort: Desc)])
   @@map("pipeline_runs")
+}
+
+// ─── Background Ingest Jobs ─────────────────────────────────────
+
+/// One unit of background ingestion work (a single URL or PDF). Created by the
+/// admin UI (enqueue) and processed serially by the cron worker at
+/// /api/cron/process-ingest-jobs. `payload` holds the PDF buffer for PDF jobs
+/// (bytea, ≤4 MiB); URL jobs carry only `url`. Pruned after completion.
+model IngestJob {
+  id         String          @id @default(cuid())
+  type       IngestJobType
+  url        String? // URL job target; PDF jobs set the pdf:// source key after ingest
+  title      String? // Optional display-name override
+  payload    Bytes? // PDF buffer (bytea) for PDF jobs only
+  filename   String? // Original PDF filename (display/UX)
+  force      Boolean         @default(false)
+  status     IngestJobStatus @default(QUEUED)
+  attempts   Int             @default(0)
+  error      String?
+  result     Json? // IngestResult when DONE
+  createdAt  DateTime        @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  @@index([status, createdAt])
+  @@index([createdAt(sort: Desc)])
+  @@map("ingest_jobs")
 }
 
 // ─── Semantic Cache ─────────────────────────────────────────────

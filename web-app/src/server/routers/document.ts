@@ -3,7 +3,7 @@ import { router, adminProcedure } from "@/server/trpc/t";
 import { prisma } from "@/server/db";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { getCorpusProvider } from "@/server/rag/instance";
-import { ingestUrl, syncAllDocuments, type IngestResult } from "@/server/ingest/pipeline";
+import { enqueueUrlJob, enqueueSyncJobs, getJob, getJobStats } from "@/server/ingest/jobs";
 import { assertSafeUrl } from "@/server/lib/security/url-validator";
 import { NotFoundError } from "@/server/lib/errors";
 import { createLogger } from "@/server/lib/logger";
@@ -32,15 +32,23 @@ export const documentRouter = router({
     return { success: true, deletedChunks: document.chunkCount, cacheInvalidated: invalidated };
   }),
 
+  /**
+   * Re-ingest every document in the knowledge base. Enqueues one URL job per
+   * document (deduped against already-pending jobs); the cron worker drains
+   * the queue, so this mutation returns in milliseconds.
+   */
   sync: adminProcedure
     .input(z.object({ force: z.boolean().default(false) }))
-    .mutation(async ({ input }): Promise<{ results: IngestResult[]; failed: number }> => {
-      const results = await syncAllDocuments({ force: input.force });
-      const failed = results.filter((result) => result.status === "failed").length;
-      logger.info({ total: results.length, failed }, "[DOCUMENT] sync complete");
-      return { results, failed };
+    .mutation(async ({ input }) => {
+      const { enqueued, alreadyPending } = await enqueueSyncJobs({ force: input.force });
+      logger.info({ enqueued, alreadyPending }, "[DOCUMENT] sync jobs enqueued");
+      return { enqueued, alreadyPending };
     }),
 
+  /**
+   * Enqueue a URL for background ingestion. SSRF validation still happens at
+   * enqueue time; the actual scrape/embed runs in the cron worker.
+   */
   ingestUrl: adminProcedure
     .input(
       z.object({
@@ -49,12 +57,24 @@ export const documentRouter = router({
         title: z.string().trim().max(200).optional(),
       }),
     )
-    .mutation(async ({ input }): Promise<IngestResult> => {
+    .mutation(async ({ input }): Promise<{ jobId: string; queued: boolean }> => {
       await assertSafeUrl(input.url);
-      const result = await ingestUrl(input.url, { title: input.title });
-      logger.info({ url: input.url, status: result.status }, "[DOCUMENT] ingest complete");
+      const result = await enqueueUrlJob(input.url, { title: input.title });
+      logger.info({ url: input.url, jobId: result.jobId }, "[DOCUMENT] URL ingest job enqueued");
       return result;
     }),
+
+  /** Poll a single ingest job (admin UI progress). */
+  jobGet: adminProcedure.input(z.object({ id: z.string().min(1) })).query(async ({ input }) => {
+    const job = await getJob(input.id);
+    if (!job) {
+      throw new NotFoundError("IngestJob", input.id);
+    }
+    return job;
+  }),
+
+  /** Queue depth for the admin UI (sync-all progress). */
+  jobStats: adminProcedure.query(async () => getJobStats()),
 
   deleteMany: adminProcedure
     .input(z.object({ ids: z.array(z.string().min(1)).min(1).max(100) }))

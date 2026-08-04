@@ -5,20 +5,18 @@
  *
  * ⚠️  BACKPRESSURE LIMITATION:
  * URL ingestion (scrape + embed) runs synchronously inside the calling
- * process. On Vercel serverless, `syncAllDocuments` or multiple rapid
- * `ingestUrl` calls will block the function for the full embedding time
- * (Gemini embeddings, ~2–5 s per document). For large corpora this will hit
- * the 60 s serverless timeout.
+ * process. On Vercel serverless a single ingest blocks the function for the
+ * full scrape + embedding time (Gemini, ~2–5 s per document) and a full
+ * corpus sync would blow the 60 s timeout.
  *
- * Mitigation implemented here: `syncAllDocuments` uses `IngestQueue` — a
- * serial async queue (concurrency = 1 by default) that processes one document
- * at a time, respects the embedding API rate limits, and reports per-job progress.
- * This prevents burst-embedding N documents simultaneously and exhausting the
- * embedding API quota.
+ * Production path: the admin surface does NOT call these functions directly
+ * anymore — it enqueues into the background job queue (src/server/ingest/jobs.ts),
+ * which the Vercel Cron worker at /api/cron/process-ingest-jobs drains serially
+ * (concurrency 1, rate-limit friendly) with retries and lease recovery.
  *
- * Production upgrade path: replace `IngestQueue` with a Vercel Cron + a
- * `ingest_jobs` DB table (poll → process → mark done) or a BullMQ queue
- * backed by Upstash Redis for true background processing and retry semantics.
+ * The functions below remain the synchronous core used by that worker
+ * (`ingestUrl`/`ingestPdf` per job). `syncAllDocuments` + `IngestQueue` are
+ * kept as a tested, dependency-free helper for one-off/CLI re-ingests only.
  */
 
 import { createHash } from "node:crypto";
@@ -116,12 +114,7 @@ async function ingestUrlInner(rawUrl: string, options: IngestOptions = {}): Prom
   }
 
   const titleOverride = options.title?.trim();
-  return persistIngested(
-    url,
-    titleOverride || scraped.title,
-    cleanText(scraped.text),
-    options,
-  );
+  return persistIngested(url, titleOverride || scraped.title, cleanText(scraped.text), options);
 }
 
 /**
@@ -253,11 +246,11 @@ export function pdfSourceKey(buffer: Buffer, filename: string): string {
 /**
  * Re-ingests every document currently in the knowledge base using a serial
  * queue (concurrency = 1). Documents whose content hash is unchanged are
- * skipped (idempotent). Processes one document at a time to avoid bursting
- * the embedding API and to stay within serverless timeout limits.
+ * skipped (idempotent).
  *
- * ⚠️  For corpora > ~10 documents consider migrating to a background job
- * queue (Vercel Cron + DB table or Upstash BullMQ) — see module-level JSDoc.
+ * ⚠️  One-off/CLI helper only — production syncs go through the background
+ * job queue (src/server/ingest/jobs.ts → enqueueSyncJobs) drained by the
+ * cron worker. See module-level JSDoc.
  */
 export async function syncAllDocuments(options: IngestOptions = {}): Promise<IngestResult[]> {
   const documents = await prisma.document.findMany({ select: { url: true } });

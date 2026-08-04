@@ -13,6 +13,8 @@ export interface SourceListItem {
   title: string;
   url: string;
   chunkCount: number;
+  /** Real ingest state (SYNCED/INGESTING/FAILED) maintained by the job worker. */
+  status: "PENDING" | "INGESTING" | "SYNCED" | "FAILED";
   updatedAt: Date;
   createdAt: Date;
 }
@@ -33,6 +35,7 @@ export const sourceRouter = router({
         title: true,
         url: true,
         chunkCount: true,
+        status: true,
         updatedAt: true,
         createdAt: true,
       },
@@ -77,7 +80,9 @@ export const sourceRouter = router({
     ]);
     const synced = statusGroups.find((g) => g.status === "SYNCED")?._count._all ?? 0;
     const failed = statusGroups.find((g) => g.status === "FAILED")?._count._all ?? 0;
-    const pending = statusGroups.find((g) => g.status === "PENDING" || g.status === "INGESTING")?._count._all ?? 0;
+    const pending =
+      statusGroups.find((g) => g.status === "PENDING" || g.status === "INGESTING")?._count._all ??
+      0;
     return {
       totalSources,
       totalChunks,

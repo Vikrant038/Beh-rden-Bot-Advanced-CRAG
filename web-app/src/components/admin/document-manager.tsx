@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   ChevronDown,
@@ -28,6 +28,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/lib/toast";
 
+type DocumentStatus = "PENDING" | "INGESTING" | "SYNCED" | "FAILED";
+
 interface DocumentItem {
   id: string;
   title: string;
@@ -35,16 +37,13 @@ interface DocumentItem {
   createdAt: string;
   updatedAt: string;
   chunkCount: number;
+  status: DocumentStatus;
 }
 
 type SortKey = "updated" | "title" | "chunks";
 
 const MAX_UI_PDF_MB = 4;
-const STALE_AFTER_MS = 30 * 86_400_000;
-
-function documentStatus(updatedAt: string): "synced" | "stale" {
-  return Date.now() - new Date(updatedAt).getTime() > STALE_AFTER_MS ? "stale" : "synced";
-}
+const POLL_INTERVAL_MS = 2500;
 
 function IndeterminateBar({ label }: { label: string }) {
   return (
@@ -149,6 +148,10 @@ export function DocumentManager() {
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
   const [confirmClearCache, setConfirmClearCache] = useState(false);
+  /** Job id being polled after a URL/PDF enqueue (null = not polling). */
+  const [pollJobId, setPollJobId] = useState<string | null>(null);
+  /** True while a sync-all is draining in the background queue. */
+  const [syncPolling, setSyncPolling] = useState(false);
 
   const documents = api.source.list.useQuery();
   const ingestMutation = api.document.ingestUrl.useMutation();
@@ -156,14 +159,80 @@ export function DocumentManager() {
   const deleteMutation = api.document.delete.useMutation();
   const deleteManyMutation = api.document.deleteMany.useMutation();
   const clearCacheMutation = api.admin.clearCache.useMutation();
+  const jobGetQuery = api.document.jobGet.useQuery(
+    { id: pollJobId ?? "" },
+    { enabled: pollJobId !== null, refetchInterval: POLL_INTERVAL_MS },
+  );
+  const jobStatsQuery = api.document.jobStats.useQuery(undefined, {
+    enabled: syncPolling,
+    refetchInterval: POLL_INTERVAL_MS,
+  });
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     void utils.source.list.refetch();
     void utils.admin.metrics.invalidate();
     void utils.admin.dailyQueries.invalidate();
     void utils.admin.modeSplit.invalidate();
     void utils.admin.recentQueries.invalidate();
-  };
+  }, [utils]);
+
+  // Poll a single enqueued URL/PDF job until it settles, then refresh + report.
+  useEffect(() => {
+    const job = jobGetQuery.data;
+    if (!job) {
+      return;
+    }
+    if (job.status === "DONE") {
+      setPollJobId(null);
+      refresh();
+      const result = job.result as
+        { title?: string; status?: string; chunkCount?: number; error?: string } | undefined;
+      const feedback =
+        result?.status === "failed"
+          ? `Ingest failed: ${result.error ?? "unknown error"}`
+          : `Ingested ${result?.title ?? "document"} → ${result?.status ?? "done"} (${result?.chunkCount ?? "?"} child chunks)`;
+      if (job.type === "PDF") {
+        setPdfFeedback(feedback);
+      } else {
+        setIngestFeedback(feedback);
+      }
+    } else if (job.status === "FAILED") {
+      setPollJobId(null);
+      refresh();
+      const feedback = `Ingest failed: ${job.error ?? "unknown error"}`;
+      if (job.type === "PDF") {
+        setPdfFeedback(feedback);
+      } else {
+        setIngestFeedback(feedback);
+      }
+    }
+  }, [jobGetQuery.data, refresh]);
+
+  // A pruned job (completed >24 h ago) reads as NOT_FOUND — treat as done.
+  // Transient errors (network blips) keep polling instead of abandoning.
+  useEffect(() => {
+    if (pollJobId === null || !jobGetQuery.isError) {
+      return;
+    }
+    const code = (jobGetQuery.error as { data?: { code?: string } } | null)?.data?.code;
+    if (code === "NOT_FOUND") {
+      setPollJobId(null);
+      refresh();
+    }
+  }, [pollJobId, jobGetQuery.isError, jobGetQuery.error, refresh]);
+
+  // While a sync-all drains, poll queue depth and refresh once it is empty.
+  useEffect(() => {
+    if (!syncPolling) {
+      return;
+    }
+    const stats = jobStatsQuery.data;
+    if (stats && stats.queued === 0 && stats.running === 0) {
+      setSyncPolling(false);
+      refresh();
+      setIngestFeedback("Sync finished — all queued documents processed.");
+    }
+  }, [syncPolling, jobStatsQuery.data, refresh]);
 
   const filtered = useMemo(() => {
     const base = documents.data ?? [];
@@ -211,15 +280,12 @@ export function DocumentManager() {
         onSuccess: (result) => {
           setUrl("");
           setUrlTitle("");
-          const isContentType = result.error?.toLowerCase().includes("content type");
+          setPollJobId(result.jobId);
           setIngestFeedback(
-            result.status === "failed"
-              ? isContentType
-                ? "Unsupported file type — only HTML or plain-text URLs can be ingested."
-                : `Failed: ${result.error ?? "unknown error"}`
-              : `${result.title} → ${result.status} (${result.chunkCount} child chunks${result.parentCount ? `, ${result.parentCount} parents` : ""})`,
+            result.queued
+              ? "Enqueued — scraping & embedding in the background…"
+              : "Already pending — watching the existing job…",
           );
-          refresh();
         },
         onError: (error) => {
           setIngestFeedback(`Error: ${error.message}`);
@@ -233,9 +299,14 @@ export function DocumentManager() {
       { force: false },
       {
         onSuccess: (result) => {
-          const skipped = result.results.filter((r) => r.status === "skipped").length;
-          setIngestFeedback(`Sync complete: ${result.failed} failed, ${skipped} unchanged.`);
-          refresh();
+          setIngestFeedback(
+            result.enqueued > 0
+              ? `Sync started: ${result.enqueued} jobs enqueued` +
+                  (result.alreadyPending > 0 ? ` (${result.alreadyPending} already pending)` : "") +
+                  "."
+              : "Nothing to do: every document already has a pending job.",
+          );
+          setSyncPolling(true);
         },
       },
     );
@@ -337,7 +408,7 @@ export function DocumentManager() {
       }
     });
     xhr.addEventListener("load", () => {
-      let json: { status?: string; error?: string; chunkCount?: number } = {};
+      let json: { jobId?: string; status?: string; error?: string } = {};
       try {
         json = JSON.parse(xhr.responseText) as typeof json;
       } catch {
@@ -349,17 +420,19 @@ export function DocumentManager() {
         setUploadProgress(0);
         return;
       }
-      setUploadProgress(100);
-      setPdfFeedback(
-        json.status === "failed"
-          ? `Ingest failed: ${json.error ?? "unknown error"}`
-          : `Ingested ${pdfFile.name} → ${json.status} (${json.chunkCount ?? "?"} child chunks)`,
-      );
-      setPdfFile(null);
-      setPdfTitle("");
-      setUploading(false);
-      window.setTimeout(() => setUploadProgress(0), 1200);
-      refresh();
+      if (json.jobId) {
+        setUploadProgress(100);
+        setPdfFeedback("Uploaded — parsing & embedding in the background…");
+        setPdfFile(null);
+        setPdfTitle("");
+        setUploading(false);
+        window.setTimeout(() => setUploadProgress(0), 1200);
+        setPollJobId(json.jobId);
+      } else {
+        setPdfFeedback(`Unexpected response from server (${xhr.status}).`);
+        setUploading(false);
+        setUploadProgress(0);
+      }
     });
     xhr.addEventListener("error", () => {
       setPdfFeedback("Network error during upload. Please retry.");
@@ -370,7 +443,7 @@ export function DocumentManager() {
   };
 
   const busy = ingestMutation.isPending || syncMutation.isPending || deleteMutation.isPending;
-  const syncPending = syncMutation.isPending;
+  const syncPending = syncMutation.isPending || syncPolling;
   const uploadPercentLabel =
     uploadProgress >= 100 ? "100%" : uploadProgress > 0 ? `${uploadProgress}%` : null;
 
@@ -425,8 +498,10 @@ export function DocumentManager() {
           className="mt-2 w-full rounded-xl border border-border bg-background px-4 py-2 text-sm outline-none transition placeholder:text-muted focus:border-primary focus-visible:ring-2 focus-visible:ring-primary"
         />
         {syncPending ? <IndeterminateBar label="Syncing all documents…" /> : null}
-        {/* 10.2 — URL ingest now shows an indeterminate progress bar too. */}
-        {ingestMutation.isPending ? <IndeterminateBar label="Ingesting URL…" /> : null}
+        {/* 10.2 — URL ingest now shows a progress bar while its job is polled. */}
+        {ingestMutation.isPending || pollJobId !== null ? (
+          <IndeterminateBar label="Ingesting URL…" />
+        ) : null}
         {ingestFeedback && (
           <p
             className={cn(
@@ -461,7 +536,9 @@ export function DocumentManager() {
           onDrop={onDrop}
           className={cn(
             "relative flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed p-8 text-center transition",
-            dragging ? "border-primary/70 bg-primary/5" : "border-glass-border hover:border-primary/60",
+            dragging
+              ? "border-primary/70 bg-primary/5"
+              : "border-glass-border hover:border-primary/60",
           )}
         >
           <UploadCloud className="h-8 w-8 text-muted" />
@@ -502,7 +579,7 @@ export function DocumentManager() {
           {uploading ? (
             <div className="w-full max-w-xs">
               <div className="flex items-center justify-between text-[10px] text-muted">
-                <span>Uploading & embedding…</span>
+                <span>Uploading…</span>
                 <span className="tabular-nums">{uploadPercentLabel ?? "…"}</span>
               </div>
               <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-hover">
@@ -612,7 +689,6 @@ export function DocumentManager() {
       ) : (
         <ul className="space-y-2">
           {filtered.map((document) => {
-            const status = documentStatus(document.updatedAt);
             const checked = selected.has(document.id);
             return (
               <li
@@ -644,17 +720,24 @@ export function DocumentManager() {
                     <span
                       className={cn(
                         "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
-                        status === "synced"
-                          ? "bg-success/10 text-success"
-                          : "bg-warning/10 text-warning",
+                        document.status === "SYNCED" && "bg-success/10 text-success",
+                        document.status === "FAILED" && "bg-destructive/10 text-destructive",
+                        (document.status === "INGESTING" || document.status === "PENDING") &&
+                          "bg-warning/10 text-warning",
                       )}
                     >
-                      {status === "synced" ? (
+                      {document.status === "SYNCED" ? (
                         <CheckCircle2 className="h-2.5 w-2.5" />
-                      ) : (
+                      ) : document.status === "FAILED" ? (
                         <TriangleAlert className="h-2.5 w-2.5" />
+                      ) : (
+                        <RefreshCw className="h-2.5 w-2.5 animate-spin" />
                       )}
-                      {status === "synced" ? "synced" : "stale"}
+                      {document.status === "SYNCED"
+                        ? "synced"
+                        : document.status === "FAILED"
+                          ? "failed"
+                          : "ingesting"}
                     </span>
                   </div>
                   <p className="truncate text-xs text-muted">

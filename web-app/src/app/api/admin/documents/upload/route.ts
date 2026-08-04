@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/server/auth";
-import { ingestPdf } from "@/server/ingest/pipeline";
+import { enqueuePdfJob } from "@/server/ingest/jobs";
 import { ACCEPTED_MIME, MAX_PDF_BYTES } from "@/server/ingest/pdf-parser";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Enqueue-only: parse/chunk/embed now runs in the background cron worker, so
+// this route returns in milliseconds instead of risking the serverless cap.
+export const maxDuration = 30;
 
 /**
  * ADMIN-only PDF upload endpoint (§2.2.4). Validates auth, file size and MIME
- * server-side, then routes the buffer through the parent-child ingest pipeline.
+ * server-side, then **enqueues** the buffer for background ingestion (see
+ * src/server/ingest/jobs.ts). Returns 202 with a jobId the client polls.
  * The 4 MiB cap is Vercel-safe (4.5 MB platform request-body limit) and is
  * enforced before any buffering happens.
  */
@@ -32,7 +35,9 @@ export async function POST(request: Request) {
   // Optional display-name override (defaults to the filename).
   const titleField = formData.get("title");
   const title =
-    typeof titleField === "string" && titleField.trim() ? titleField.trim().slice(0, 200) : undefined;
+    typeof titleField === "string" && titleField.trim()
+      ? titleField.trim().slice(0, 200)
+      : undefined;
   if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== ACCEPTED_MIME) {
     return NextResponse.json({ error: "Only .pdf files are accepted" }, { status: 415 });
   }
@@ -49,8 +54,8 @@ export async function POST(request: Request) {
   const buffer = Buffer.from(await file.arrayBuffer());
 
   try {
-    const result = await ingestPdf(buffer, file.name, title ? { title } : {});
-    return NextResponse.json(result);
+    const { jobId } = await enqueuePdfJob(buffer, file.name, title);
+    return NextResponse.json({ jobId, status: "QUEUED" }, { status: 202 });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status: 422 });
