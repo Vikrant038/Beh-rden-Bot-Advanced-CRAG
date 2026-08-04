@@ -24,7 +24,10 @@ if (isProduction) {
 }
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["pdf-parse"],
+  // pdf-parse + pdfjs-dist are server-only ingest dependencies; externalizing
+  // them stops webpack from trying to bundle pdfjs-dist's optional `canvas`
+  // native module during `next build`.
+  serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
   async headers() {
     return [
       {

@@ -12,9 +12,9 @@ import { cn } from "@/lib/utils";
 function sourceHost(url: string): string | null {
   try {
     if (url.startsWith("pdf://")) {
-      const rest = url.slice("pdf://".length);
-      const first = rest.split("/")[0];
-      return first || null;
+      // Local pdf:// pseudo-URLs have no host — skip the favicon lookup.
+      // The displayed name (source.name) is the document title/filename.
+      return null;
     }
     const parsed = new URL(url);
     return parsed.hostname || null;
@@ -66,32 +66,47 @@ export function SourceCitation({ sources }: { sources: ChatSource[] }) {
           {sources.map((source, index) => {
             const score = Math.round(source.score * 100);
             const host = sourceHost(source.url);
+            const isPdf = source.url.startsWith("pdf://");
+            const body = (
+              <>
+                {host ? <Favicon host={host} /> : null}
+                {!isPdf && <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted" />}
+                <span className="min-w-0 flex-1 truncate text-xs text-accent">
+                  {source.name}
+                </span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <span
+                    className="h-1 w-8 overflow-hidden rounded-full bg-border"
+                    aria-hidden="true"
+                  >
+                    <span
+                      className="block h-full rounded-full bg-accent"
+                      style={{ width: `${score}%` }}
+                    />
+                  </span>
+                  <span className="font-mono text-[10px] text-muted">{score}%</span>
+                </span>
+              </>
+            );
+            const classes =
+              "flex items-center gap-2 rounded-lg border border-glass-border bg-surface/60 px-2.5 py-1.5 transition hover:border-primary hover:bg-surface";
             return (
               <li key={`${source.url}-${index}`}>
-                <a
-                  href={source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-lg border border-glass-border bg-surface/60 px-2.5 py-1.5 transition hover:border-primary hover:bg-surface"
-                >
-                  {host ? <Favicon host={host} /> : null}
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted" />
-                  <span className="min-w-0 flex-1 truncate text-xs text-accent">
-                    {source.name}
-                  </span>
-                  <span className="flex shrink-0 items-center gap-1.5">
-                    <span
-                      className="h-1 w-8 overflow-hidden rounded-full bg-border"
-                      aria-hidden="true"
-                    >
-                      <span
-                        className="block h-full rounded-full bg-accent"
-                        style={{ width: `${score}%` }}
-                      />
-                    </span>
-                    <span className="font-mono text-[10px] text-muted">{score}%</span>
-                  </span>
-                </a>
+                {isPdf ? (
+                  // pdf:// is not a clickable URL — render as a plain chip.
+                  <div className={classes} title={source.url}>
+                    {body}
+                  </div>
+                ) : (
+                  <a
+                    href={source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={classes}
+                  >
+                    {body}
+                  </a>
+                )}
               </li>
             );
           })}

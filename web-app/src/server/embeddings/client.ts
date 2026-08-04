@@ -83,6 +83,9 @@ export class HfEmbeddingClient implements EmbeddingClient {
   }
 }
 
+/** Gemini batchEmbedContents accepts at most this many inputs per request. */
+export const GEMINI_BATCH_LIMIT = 100;
+
 /**
  * Embedding client backed by the Google Gemini API (text-embedding-004).
  * Returns 768-dimensional vectors by default.
@@ -116,25 +119,30 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
 
     try {
       const model = this.ai.getGenerativeModel({ model: actualModel });
-      // batchEmbedContents requires an array of requests; outputDimensionality is
-      // not part of the SDK's current public request type, so define it locally.
-      const requests: Array<{
-        content: { role: string; parts: Array<{ text: string }> };
-        outputDimensionality: number;
-      }> = texts.map((text) => ({
-        content: { role: "user", parts: [{ text }] },
-        outputDimensionality: 768,
-      }));
+      const vectors: number[][] = [];
 
-      const response = await model.batchEmbedContents({
-        requests,
-      });
+      // Gemini caps batchEmbedContents at GEMINI_BATCH_LIMIT inputs per request.
+      // Large documents (e.g. the Residence Act → ~4,000 child chunks) must be
+      // split or the API rejects the whole call.
+      for (let offset = 0; offset < texts.length; offset += GEMINI_BATCH_LIMIT) {
+        const batch = texts.slice(offset, offset + GEMINI_BATCH_LIMIT);
+        // outputDimensionality is not part of the SDK's current public request
+        // type, so define the request shape locally.
+        const requests: Array<{
+          content: { role: string; parts: Array<{ text: string }> };
+          outputDimensionality: number;
+        }> = batch.map((text) => ({
+          content: { role: "user", parts: [{ text }] },
+          outputDimensionality: 768,
+        }));
 
-      if (!response || !response.embeddings) {
-        throw new Error("Invalid response from Gemini API");
+        const response = await model.batchEmbedContents({ requests });
+        if (!response || !response.embeddings) {
+          throw new Error("Invalid response from Gemini API");
+        }
+        vectors.push(...response.embeddings.map((e) => e.values));
       }
 
-      const vectors = response.embeddings.map((e) => e.values);
       const normalized = vectors.map((vector) => normalize(vector));
 
       generation.end({ count: normalized.length, dim: normalized[0]?.length ?? 0 });

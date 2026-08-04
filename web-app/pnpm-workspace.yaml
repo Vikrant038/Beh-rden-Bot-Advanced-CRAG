@@ -8,6 +8,7 @@ allowBuilds:
   '@prisma/engines': true
   prisma: true
   '@prisma/client': true
+  canvas: false # not needed for pdf.js text extraction; skip native build
 
 onlyBuiltDependencies:
   - sharp

@@ -1,5 +1,11 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { scrapeWebPage, extractMainContent, SCRAPE_TIMEOUT_MS } from "@/server/ingest/scraper";
+import {
+  scrapeWebPage,
+  extractMainContent,
+  SCRAPE_TIMEOUT_MS,
+  SCRAPE_MAX_RETRIES,
+  BROWSER_USER_AGENT,
+} from "@/server/ingest/scraper";
 
 vi.mock("@/server/lib/security/url-validator", () => ({
   assertSafeUrl: vi.fn(),
@@ -31,13 +37,17 @@ const SAMPLE_HTML = `
 </html>
 `;
 
-function mockFetchResponse(body: string, status = 200, contentType = "text/html"): void {
-  globalThis.fetch = vi.fn().mockResolvedValue({
+function mockResponse(body: string, status = 200, contentType = "text/html"): Response {
+  return {
     ok: status >= 200 && status < 300,
     status,
     headers: new Headers({ "content-type": contentType }),
     text: () => Promise.resolve(body),
-  } as Response);
+  } as Response;
+}
+
+function mockFetchResponse(body: string, status = 200, contentType = "text/html"): void {
+  globalThis.fetch = vi.fn().mockResolvedValue(mockResponse(body, status, contentType));
 }
 
 describe("scrapeWebPage", () => {
@@ -72,12 +82,105 @@ describe("scrapeWebPage", () => {
 
   it("rejects on non-2xx HTTP status", async () => {
     mockFetchResponse("Server Error", 500);
-    await expect(scrapeWebPage("https://example.com/500")).rejects.toThrow(ExternalApiError);
+    await expect(
+      scrapeWebPage("https://example.com/500", { backoffMs: 1 }),
+    ).rejects.toThrow(ExternalApiError);
   });
 
   it("rejects when fetch itself fails", async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("ECONNRESET"));
-    await expect(scrapeWebPage("https://example.com")).rejects.toThrow(ExternalApiError);
+    await expect(scrapeWebPage("https://example.com", { backoffMs: 1 })).rejects.toThrow(
+      ExternalApiError,
+    );
+  });
+
+  it("retries a transient 500 and succeeds on the second attempt", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        headers: new Headers(),
+        text: () => Promise.resolve(""),
+      } as Response)
+      .mockResolvedValueOnce(mockResponse(SAMPLE_HTML));
+
+    const result = await scrapeWebPage("https://example.com/flaky", { backoffMs: 1 });
+    expect(result.title).toBe("DAAD — Study in Germany");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a 429 rate limit and succeeds", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: new Headers(),
+        text: () => Promise.resolve(""),
+      } as Response)
+      .mockResolvedValueOnce(mockResponse(SAMPLE_HTML));
+
+    const result = await scrapeWebPage("https://example.com/limited", { backoffMs: 1 });
+    expect(result.title).toBe("DAAD — Study in Germany");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("recovers from a network error on retry", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("ECONNRESET"))
+      .mockResolvedValueOnce(mockResponse(SAMPLE_HTML));
+
+    const result = await scrapeWebPage("https://example.com/reset", { backoffMs: 1 });
+    expect(result.title).toBe("DAAD — Study in Germany");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails after exhausting retries on a persistent 500", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      headers: new Headers(),
+      text: () => Promise.resolve(""),
+    } as Response);
+
+    await expect(scrapeWebPage("https://example.com/down", { backoffMs: 1 })).rejects.toThrow(
+      ExternalApiError,
+    );
+    expect(globalThis.fetch).toHaveBeenCalledTimes(SCRAPE_MAX_RETRIES + 1);
+  });
+
+  it("does not retry a non-retryable 404", async () => {
+    mockFetchResponse("Not Found", 404);
+    await expect(
+      scrapeWebPage("https://example.com/missing", { backoffMs: 1 }),
+    ).rejects.toThrow(ExternalApiError);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a 403 at most once before failing", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      headers: new Headers(),
+      text: () => Promise.resolve(""),
+    } as Response);
+
+    await expect(scrapeWebPage("https://example.com/gated", { backoffMs: 1 })).rejects.toThrow(
+      /HTTP 403/,
+    );
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("sends a browser-like User-Agent instead of a bot agent", async () => {
+    mockFetchResponse(SAMPLE_HTML);
+    await scrapeWebPage("https://example.com/ua");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
+    expect(headers["User-Agent"]).toBe(BROWSER_USER_AGENT);
+    expect(headers["User-Agent"]).toContain("Mozilla/5.0");
+    expect(headers["User-Agent"]).not.toContain("Bot");
   });
 
   it("rejects a JSON content type with InvalidContentTypeError", async () => {
@@ -160,5 +263,15 @@ describe("constants", () => {
   it("defines a sane fetch timeout", () => {
     expect(SCRAPE_TIMEOUT_MS).toBeGreaterThan(0);
     expect(SCRAPE_TIMEOUT_MS).toBeLessThanOrEqual(60_000);
+  });
+
+  it("defines a bounded retry budget", () => {
+    expect(SCRAPE_MAX_RETRIES).toBeGreaterThanOrEqual(1);
+    expect(SCRAPE_MAX_RETRIES).toBeLessThanOrEqual(5);
+  });
+
+  it("defines a browser-like User-Agent", () => {
+    expect(BROWSER_USER_AGENT).toContain("Mozilla/5.0");
+    expect(BROWSER_USER_AGENT).toContain("Chrome/");
   });
 });
