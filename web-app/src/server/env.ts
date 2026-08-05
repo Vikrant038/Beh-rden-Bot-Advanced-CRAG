@@ -30,6 +30,12 @@ const serverEnvSchema = z.object({
   GROQ_MODEL: z.string().default("llama-3.1-8b-instant"),
   HF_TOKEN: z.string().optional(),
   HF_LLM_MODEL: z.string().default("meta-llama/Llama-3.1-8B-Instruct"),
+  /** HF Inference API base for the LLM fallback — separate from
+   * HF_INFERENCE_URL, which now points at the Cloudflare embeddings worker. */
+  HF_LLM_URL: z.preprocess(
+    normalizeUrl,
+    z.string().url().default("https://api-inference.huggingface.co"),
+  ),
   RERANKER_MODEL: z.string().default("BAAI/bge-reranker-base"),
   /**
    * Cross-encoder endpoint — deliberately SEPARATE from HF_INFERENCE_URL.
@@ -45,8 +51,11 @@ const serverEnvSchema = z.object({
   RERANKER_TOKEN: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   EMBEDDING_MODEL: z.string().default("BAAI/bge-base-en-v1.5"),
-  /** Which embed client the app constructs by default: "gemini" or "hf". */
-  EMBEDDING_PROVIDER: z.enum(["gemini", "hf"]).default("gemini"),
+  /** Which embed client the app constructs by default: "gemini" or "hf".
+   * The corpus is embedded with BAAI/bge-base-en-v1.5 (same-space rule), so
+   * "hf" is the safe default — queries must use the same model as the corpus.
+   * "gemini" is ONLY correct if the corpus was embedded with a Gemini model. */
+  EMBEDDING_PROVIDER: z.enum(["gemini", "hf"]).default("hf"),
   HF_INFERENCE_URL: z.preprocess(
     normalizeUrl,
     z.string().url().default("https://api-inference.huggingface.co"),

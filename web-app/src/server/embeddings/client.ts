@@ -85,16 +85,18 @@ export class HfEmbeddingClient implements EmbeddingClient {
 
 /**
  * Default embed client selected by `EMBEDDING_PROVIDER`:
- *   - "gemini" → GeminiEmbeddingClient (production default; corpus + query
- *     vectors live in Gemini's space)
- *   - "hf"     → HfEmbeddingClient pointed at HF_INFERENCE_URL. Used for
- *     corpus ingestion against a local sentence-transformers server
- *     (scripts/embed-server.py) or the HF Inference API. The client must be
- *     the SAME on both the ingest side and the query side, or cosine
- *     retrieval compares vectors from different spaces.
+ *   - "gemini" → GeminiEmbeddingClient. ONLY correct if the corpus was
+ *     embedded with a Gemini model (vectors live in Gemini's space).
+ *   - "hf"     → HfEmbeddingClient pointed at HF_INFERENCE_URL (the
+ *     Cloudflare embeddings worker). Default — the corpus is embedded with
+ *     BAAI/bge-base-en-v1.5, and queries MUST land in the same space.
+ * The client must be the SAME on both the ingest side and the query side, or
+ * cosine retrieval compares vectors from different spaces.
  */
 export function createDefaultEmbeddingClient(): EmbeddingClient {
-  return env.EMBEDDING_PROVIDER === "hf" ? new HfEmbeddingClient() : new GeminiEmbeddingClient();
+  return env.EMBEDDING_PROVIDER === "gemini"
+    ? new GeminiEmbeddingClient()
+    : new HfEmbeddingClient();
 }
 
 /** Gemini batchEmbedContents accepts at most this many inputs per request. */

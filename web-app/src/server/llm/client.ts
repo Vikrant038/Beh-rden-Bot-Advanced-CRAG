@@ -101,7 +101,7 @@ async function callHfRaw(
     parameters: { max_new_tokens: maxTokens, temperature },
   };
 
-  const response = await fetch(`${env.HF_INFERENCE_URL}/models/${encodeURIComponent(model)}`, {
+  const response = await fetch(`${env.HF_LLM_URL}/models/${encodeURIComponent(model)}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${env.HF_TOKEN}`,
