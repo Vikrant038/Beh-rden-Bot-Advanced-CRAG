@@ -216,6 +216,7 @@ describe("processIngestJobs (cron worker)", () => {
       filename: "antrag.pdf",
       payload: buffer,
       force: false,
+      progress: 0,
     });
     mockedIngestPdf.mockResolvedValue({
       url: "pdf://abc/antrag.pdf",
@@ -234,7 +235,58 @@ describe("processIngestJobs (cron worker)", () => {
     const result = await processIngestJobs({ maxJobs: 5, timeBudgetMs: 60_000 });
 
     expect(result.processed).toBe(1);
-    expect(mockedIngestPdf).toHaveBeenCalledWith(buffer, "antrag.pdf", { title: "Antrag" });
+    expect(mockedIngestPdf).toHaveBeenCalledWith(buffer, "antrag.pdf", {
+      title: "Antrag",
+      resumeFrom: 0,
+      isBudgetExhausted: expect.any(Function),
+    });
+  });
+
+  it("yields gracefully back to QUEUED when ingest returns progress status", async () => {
+    const buffer = Buffer.from("%PDF-1.7 large");
+    stubClaim({
+      id: "job-progress",
+      type: "PDF",
+      url: null,
+      title: null,
+      filename: "large.pdf",
+      payload: buffer,
+      force: false,
+      progress: 5,
+    });
+    mockedIngestPdf.mockResolvedValue({
+      url: "pdf://abc/large.pdf",
+      title: "Large",
+      status: "progress",
+      chunkCount: 50,
+      hash: "h",
+      cacheInvalidated: 0,
+      filename: "large.pdf",
+      nextBlock: 8,
+    });
+    prismaMock.ingestJob.update.mockResolvedValue({ id: "job-progress" });
+    prismaMock.ingestJob.deleteMany.mockResolvedValue({ count: 0 });
+    prismaMock.ingestJob.count.mockResolvedValue(1);
+
+    const result = await processIngestJobs({ maxJobs: 5, timeBudgetMs: 60_000 });
+
+    expect(result.processed).toBe(1);
+    expect(mockedIngestPdf).toHaveBeenCalledWith(buffer, "large.pdf", {
+      resumeFrom: 5,
+      isBudgetExhausted: expect.any(Function),
+    });
+    
+    expect(prismaMock.ingestJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "job-progress" },
+        data: {
+          status: "QUEUED",
+          progress: 8,
+          startedAt: null,
+          attempts: 0,
+        },
+      }),
+    );
   });
 
   it("returns remaining queue depth when work is left", async () => {

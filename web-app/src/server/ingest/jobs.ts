@@ -163,7 +163,7 @@ export async function processIngestJobs(
       break;
     }
     try {
-      await runJob(job);
+      await runJob(job, () => Date.now() - startedAt >= timeBudgetMs);
       processed += 1;
     } catch (error) {
       // runJob catches its own failures; this is a safety net (e.g. DB outage).
@@ -226,21 +226,27 @@ async function claimNextJob() {
 }
 
 /** Runs one claimed job and finalizes its row + the target document status. */
-async function runJob(job: {
-  id: string;
-  type: IngestJobType;
-  url: string | null;
-  title: string | null;
-  filename: string | null;
-  payload: Uint8Array<ArrayBuffer> | null;
-  force: boolean;
-}): Promise<void> {
+async function runJob(
+  job: {
+    id: string;
+    type: IngestJobType;
+    url: string | null;
+    title: string | null;
+    filename: string | null;
+    payload: Uint8Array<ArrayBuffer> | null;
+    force: boolean;
+    progress: number;
+  },
+  isBudgetExhausted: () => boolean,
+): Promise<void> {
   if (job.type === "PDF") {
     if (!job.payload || !job.filename) {
       throw new Error("PDF job missing payload or filename");
     }
     const result = await ingestPdf(Buffer.from(job.payload), job.filename, {
       ...(job.title ? { title: job.title } : {}),
+      resumeFrom: job.progress,
+      isBudgetExhausted,
     });
     await finalizeJob(job.id, result);
     return;
@@ -263,8 +269,21 @@ async function runJob(job: {
  */
 async function finalizeJob(
   jobId: string,
-  result: { url: string; status: string; error?: string },
+  result: { url: string; status: string; error?: string; nextBlock?: number },
 ): Promise<void> {
+  if (result.status === "progress") {
+    await prisma.ingestJob.update({
+      where: { id: jobId },
+      data: {
+        status: "QUEUED",
+        progress: result.nextBlock ?? 0,
+        startedAt: null,
+        attempts: 0,
+      },
+    });
+    return;
+  }
+
   if (result.status === "failed") {
     await markJobFailed(jobId, result.error ?? "Ingest failed");
     // The document row may exist from a previous successful ingest; mark it

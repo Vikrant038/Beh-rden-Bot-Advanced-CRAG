@@ -1,3 +1,7 @@
+vi.mock("@/server/ingest/pdf-parser", () => ({
+  parsePdf: vi.fn(),
+}));
+
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { createHash } from "node:crypto";
 
@@ -34,8 +38,9 @@ vi.mock("@/server/rag/cache/semantic-cache", () => ({
 
 import { prisma } from "@/server/db";
 import { cleanText } from "@/server/ingest/cleaner";
-import { ingestUrl, syncAllDocuments, pdfSourceKey } from "@/server/ingest/pipeline";
+import { ingestUrl, syncAllDocuments, pdfSourceKey, ingestPdf } from "@/server/ingest/pipeline";
 import { scrapeWebPage } from "@/server/ingest/scraper";
+import { parsePdf } from "@/server/ingest/pdf-parser";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 
 const prismaMock = prisma as unknown as {
@@ -59,6 +64,8 @@ const txMock = (await import("@/server/db")) as unknown as {
     $executeRaw: ReturnType<typeof vi.fn>;
   };
 };
+
+const mockedParsePdf = vi.mocked(parsePdf);
 
 const mockedScrape = vi.mocked(scrapeWebPage);
 const mockedCache = vi.mocked(semanticCache.invalidateForDocument);
@@ -210,7 +217,6 @@ describe("ingestUrl", () => {
     expect(result.status).toBe("failed");
     expect(result.error).toContain("Could not fetch URL");
   });
-
   it("returns failed status when embedding throws", async () => {
     const badClient = {
       embedTexts: vi.fn(async () => {
@@ -223,6 +229,59 @@ describe("ingestUrl", () => {
     });
     expect(result.status).toBe("failed");
     expect(result.error).toContain("embedding service down");
+  });
+});
+
+describe("ingestPdf (resumable)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockedParsePdf.mockResolvedValue({
+      text: MOCK_TEXT, // 40 lines, creates multiple chunks
+      pages: 1,
+      metadata: {},
+    });
+    txMock.__tx.document.upsert.mockResolvedValue({ id: "doc-pdf" });
+    txMock.__tx.document.update.mockResolvedValue({ id: "doc-pdf", chunkCount: 5 });
+    txMock.__tx.documentParentChunk.create.mockResolvedValue({ id: "parent-pdf" });
+    prismaMock.document.findUnique.mockResolvedValue(null);
+    mockedCache.mockResolvedValue(2);
+  });
+
+  it("yields mid-job when budget is exhausted", async () => {
+    let calls = 0;
+    const isBudgetExhausted = vi.fn(() => {
+      calls++;
+      return calls === 1; // Exhaust after first block
+    });
+
+    const result = await ingestPdf(Buffer.from("dummy"), "test.pdf", {
+      embeddingClient: fakeEmbeddingClient(),
+      isBudgetExhausted,
+    });
+
+    expect(result.status).toBe("progress");
+    expect(result.nextBlock).toBe(1);
+    expect(txMock.__tx.document.upsert).toHaveBeenCalledTimes(1);
+    expect(txMock.__tx.$executeRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it("resumes from the given block cursor", async () => {
+    const expectedHash = createHash("sha256").update(cleanText(MOCK_TEXT)).digest("hex");
+    prismaMock.document.findUnique.mockResolvedValue({
+      id: "doc-pdf",
+      url: pdfSourceKey(Buffer.from("dummy"), "test.pdf"),
+      hash: expectedHash,
+      chunkCount: 10,
+    });
+
+    const result = await ingestPdf(Buffer.from("dummy"), "test.pdf", {
+      embeddingClient: fakeEmbeddingClient(),
+      resumeFrom: 1,
+    });
+
+    expect(result.status).toBe("updated");
+    expect(txMock.__tx.document.upsert).not.toHaveBeenCalled();
+    expect(txMock.__tx.$executeRaw).toHaveBeenCalled();
   });
 });
 

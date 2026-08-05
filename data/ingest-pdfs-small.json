@@ -1,0 +1,86 @@
+[
+ {
+  "pdf": "pdfs/laws/englisch_stag.pdf",
+  "title": "Nationality Act (Staatsangeh\u00f6rigkeitsgesetz) - Official English Translation"
+ },
+ {
+  "pdf": "pdfs/laws/englisch_freiz_gg_eu.pdf",
+  "title": "Act on Freedom of Movement of EU Citizens - Official English Translation"
+ },
+ {
+  "pdf": "pdfs/laws/englisch_sgb_5.pdf",
+  "title": "Social Code Book V - Health Insurance (SGB V) - Official English Translation"
+ },
+ {
+  "pdf": "pdfs/bamf/ehegattennachzug.pdf",
+  "title": "BAMF Brochure - Ehegatten- und Familiennachzug"
+ },
+ {
+  "pdf": "pdfs/berlin/anmeldung-meldebehoerde.pdf",
+  "title": "Berlin Form - Anmeldung bei der Meldebeh\u00f6rde"
+ },
+ {
+  "pdf": "pdfs/berlin/wohnungsgeberbestaetigung.pdf",
+  "title": "Berlin Form - Wohnungsgeberbest\u00e4tigung"
+ },
+ {
+  "pdf": "pdfs/forms/schengen-visa-form.pdf",
+  "title": "Schengen Visa Application Form (Official)"
+ },
+ {
+  "pdf": "pdfs/language/goethe-pruefungsordnung.pdf",
+  "title": "Goethe-Institut Pr\u00fcfungsordnung (A1-C2)"
+ },
+ {
+  "pdf": "pdfs/language/goethe-b1-durchfuehrungsbestimmungen.pdf",
+  "title": "Goethe-Zertifikat B1 Durchf\u00fchrungsbestimmungen"
+ },
+ {
+  "pdf": "pdfs/language/goethe-b2-durchfuehrungsbestimmungen.pdf",
+  "title": "Goethe-Zertifikat B2 Durchf\u00fchrungsbestimmungen"
+ },
+ {
+  "pdf": "pdfs/language/goethe-c2-pruefungsziele.pdf",
+  "title": "Goethe-Zertifikat C2 Pr\u00fcfungsziele & Testbeschreibung"
+ },
+ {
+  "pdf": "pdfs/language/testdaf-pruefungsregeln.pdf",
+  "title": "TestDaF Regeln f\u00fcr den Pr\u00fcfungstag 2026"
+ },
+ {
+  "pdf": "pdfs/university/hsk-hrk-statistics-flyer-en.pdf",
+  "title": "HRK Statistics Leaflet - Higher Education in Germany"
+ },
+ {
+  "pdf": "pdfs/university/uni-assist-application-help-en.pdf",
+  "title": "uni-assist Application Completion Help (General)"
+ },
+ {
+  "pdf": "pdfs/university/uni-assist-application-help-iran-en.pdf",
+  "title": "uni-assist Application Completion Help (Iran)"
+ },
+ {
+  "pdf": "pdfs/university/uni-assist-checklist-dosv.pdf",
+  "title": "uni-assist Application Checklist - DoSV Procedure"
+ },
+ {
+  "pdf": "pdfs/university/uni-assist-checklist-standard.pdf",
+  "title": "uni-assist Application Checklist - Standard Procedure"
+ },
+ {
+  "pdf": "pdfs/university/uni-assist-checklist-vpd.pdf",
+  "title": "uni-assist Application Checklist - VPD Procedure"
+ },
+ {
+  "pdf": "pdfs/university/uni-assist-payment-form.pdf",
+  "title": "uni-assist Credit Card Payment Form"
+ },
+ {
+  "pdf": "pdfs/university/uni-assist-self-disclosure-form.pdf",
+  "title": "uni-assist Self-Disclosure Form"
+ },
+ {
+  "pdf": "pdfs/university/uni-assist-vollmacht-en.pdf",
+  "title": "uni-assist Authorization Form (Vollmacht)"
+ }
+]

@@ -26,7 +26,7 @@ import { cleanText } from "@/server/ingest/cleaner";
 import { RecursiveChunker, chunkParentChild, type ParentChildChunk } from "@/server/ingest/chunker";
 import { scrapeWebPage, type ScrapedDocument } from "@/server/ingest/scraper";
 import { parsePdf } from "@/server/ingest/pdf-parser";
-import { GeminiEmbeddingClient, type EmbeddingClient } from "@/server/embeddings/client";
+import { createDefaultEmbeddingClient, type EmbeddingClient } from "@/server/embeddings/client";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { getCorpusProvider } from "@/server/rag/instance";
 import { ExternalApiError } from "@/server/lib/errors";
@@ -35,7 +35,7 @@ import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("ingest");
 
-export type IngestStatus = "created" | "updated" | "skipped" | "failed";
+export type IngestStatus = "created" | "updated" | "skipped" | "failed" | "progress";
 
 export interface IngestResult {
   url: string;
@@ -46,6 +46,8 @@ export interface IngestResult {
   hash: string;
   error?: string;
   cacheInvalidated: number;
+  /** Next parent-block cursor when `status === "progress"` (resumable ingest). */
+  nextBlock?: number;
 }
 
 export interface IngestOptions {
@@ -59,6 +61,19 @@ export interface IngestOptions {
    * only the stored title is updated (no re-embedding).
    */
   title?: string;
+  /**
+   * Resumable-ingest cursor (PDF jobs): number of parent blocks already embedded
+   * + stored by earlier ticks. Blocks 0..resumeFrom-1 are kept as-is; only the
+   * tail is embedded and stored. 0/undefined = start from scratch.
+   */
+  resumeFrom?: number;
+  /**
+   * Mid-job budget check (PDF jobs): called after each parent block. When it
+   * returns true and blocks remain, ingest yields with `status: "progress"`
+   * and `nextBlock` set, so the worker can park the job back on the queue
+   * instead of letting the serverless runtime kill it mid-embed.
+   */
+  isBudgetExhausted?: () => boolean;
 }
 
 function hashContent(text: string): string {
@@ -130,12 +145,14 @@ async function persistIngested(
   cleaned: string,
   options: IngestOptions = {},
 ): Promise<IngestResult> {
-  const embeddingClient = options.embeddingClient ?? new GeminiEmbeddingClient();
+  const embeddingClient = options.embeddingClient ?? createDefaultEmbeddingClient();
 
   const hash = hashContent(cleaned);
   const existing = await prisma.document.findUnique({ where: { url: sourceKey } });
 
-  if (existing && existing.hash === hash && !options.force) {
+  const resumeFrom = options.resumeFrom ?? 0;
+
+  if (existing && existing.hash === hash && !options.force && resumeFrom === 0) {
     // Allow re-titling a document even when its content is unchanged: update
     // the stored title without re-scraping chunks or re-embedding.
     const titleOverride = options.title?.trim();
@@ -162,8 +179,7 @@ async function persistIngested(
   }
 
   const structure = chunkParentChild(cleaned);
-  const childTexts = structure.flatMap((block) => block.children.map((child) => child.text));
-  if (childTexts.length === 0) {
+  if (structure.length === 0) {
     const message = "No usable chunks extracted from document";
     logger.warn({ url: sourceKey }, `[INGEST] ${message}`);
     return {
@@ -177,38 +193,135 @@ async function persistIngested(
     };
   }
 
-  let vectors: number[][];
-  try {
-    vectors = await embedChunks(embeddingClient, childTexts);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.warn({ url: sourceKey }, `[INGEST] embedding failed: ${message}`);
-    return {
-      url: sourceKey,
-      title,
-      status: "failed",
-      chunkCount: 0,
-      hash,
-      error: message,
-      cacheInvalidated: 0,
-    };
+  let documentId: string;
+  let childCount = 0;
+
+  if (resumeFrom === 0) {
+    const result = await prisma.$transaction(async (tx) => {
+      const doc = await tx.document.upsert({
+        where: { url: sourceKey },
+        create: { url: sourceKey, title, hash, chunkCount: 0, status: "INGESTING" },
+        update: { title, hash, chunkCount: 0, status: "INGESTING" },
+        select: { id: true },
+      });
+      if (existing && existing.id !== doc.id) {
+        await tx.documentParentChunk.deleteMany({ where: { documentId: existing.id } });
+      }
+      await tx.documentParentChunk.deleteMany({ where: { documentId: doc.id } });
+      return doc;
+    });
+    documentId = result.id;
+  } else {
+    if (!existing) {
+      throw new Error("Cannot resume: document not found");
+    }
+    documentId = existing.id;
+    childCount = existing.chunkCount;
   }
 
-  const stored = await storeDocument(sourceKey, title, hash, structure, vectors, existing?.id);
+  for (let i = resumeFrom; i < structure.length; i++) {
+    const block = structure[i];
+    const childTexts = block.children.map((child) => child.text);
 
-  const invalidated = await semanticCache.invalidateForDocument(stored.id);
+    if (childTexts.length > 0) {
+      let vectors: number[][];
+      try {
+        vectors = await embedChunks(embeddingClient, childTexts);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn({ url: sourceKey, block: i }, `[INGEST] embedding failed: ${message}`);
+        // Roll back the fresh document row so a later run RETRIES instead of
+        // skipping it: the upsert above already stored the new hash with
+        // chunkCount 0, so without cleanup the next run would treat it as
+        // "content unchanged" and never embed it. Resume attempts (resumeFrom
+        // > 0) keep prior committed blocks, so only fresh attempts roll back.
+        if (resumeFrom === 0) {
+          try {
+            await prisma.documentChunk.deleteMany({ where: { documentId } });
+            await prisma.documentParentChunk.deleteMany({ where: { documentId } });
+            await prisma.document.delete({ where: { id: documentId } });
+          } catch (cleanupError) {
+            logger.warn(
+              { url: sourceKey, error: String(cleanupError) },
+              "[INGEST] failed to clean up partially-created document",
+            );
+          }
+        }
+        return {
+          url: sourceKey,
+          title,
+          status: "failed",
+          chunkCount: childCount,
+          hash,
+          error: message,
+          cacheInvalidated: 0,
+        };
+      }
+
+      await prisma.$transaction(async (tx) => {
+        const parent = await tx.documentParentChunk.create({
+          data: { documentId, text: block.parent.text },
+          select: { id: true },
+        });
+
+        const rows = block.children.map((child, index) => {
+          const vector = vectors[index];
+          if (!vector) return null;
+          return Prisma.sql`(
+            ${documentId},
+            ${parent.id},
+            ${title},
+            ${sourceKey},
+            ${child.text},
+            ${`[${vector.join(",")}]`}::vector,
+            NOW()
+          )`;
+        });
+
+        const nonNull = rows.filter((row): row is Prisma.Sql => row !== null);
+        if (nonNull.length > 0) {
+          await tx.$executeRaw(Prisma.sql`
+            INSERT INTO document_chunks
+              ("documentId", "parentId", "sourceName", "sourceUrl", "text", "embedding", "createdAt")
+            VALUES ${Prisma.join(nonNull, ", ")}
+          `);
+          childCount += nonNull.length;
+        }
+
+        await tx.document.update({
+          where: { id: documentId },
+          data: { chunkCount: childCount },
+        });
+      });
+    }
+
+    if (options.isBudgetExhausted?.() && i < structure.length - 1) {
+      logger.info({ url: sourceKey, progress: i + 1 }, "[INGEST] budget exhausted, yielding");
+      return {
+        url: sourceKey,
+        title,
+        status: "progress",
+        chunkCount: childCount,
+        hash,
+        cacheInvalidated: 0,
+        nextBlock: i + 1,
+      };
+    }
+  }
+
+  const invalidated = await semanticCache.invalidateForDocument(documentId);
   await getCorpusProvider().invalidate();
 
   logger.info(
-    { url: sourceKey, status: stored.status, chunks: childTexts.length, invalidated },
+    { url: sourceKey, status: "updated", chunks: childCount, invalidated },
     "[INGEST] completed",
   );
   return {
     url: sourceKey,
     title,
-    status: stored.status,
-    chunkCount: childTexts.length,
-    parentCount: stored.parentCount,
+    status: !existing ? "created" : "updated",
+    chunkCount: childCount,
+    parentCount: structure.length,
     hash,
     cacheInvalidated: invalidated,
   };
@@ -333,76 +446,6 @@ export class IngestQueue {
       void this.tick();
     }
   }
-}
-
-async function storeDocument(
-  url: string,
-  title: string,
-  hash: string,
-  structure: ParentChildChunk[],
-  vectors: number[][],
-  existingId?: string,
-): Promise<{ id: string; status: "created" | "updated"; parentCount: number; childCount: number }> {
-  return prisma.$transaction(async (tx) => {
-    const document = await tx.document.upsert({
-      where: { url },
-      create: { url, title, hash, chunkCount: 0 },
-      update: { title, hash },
-      select: { id: true },
-    });
-
-    if (existingId && existingId !== document.id) {
-      // Cascades to children via document_chunks_documentId_fkey.
-      await tx.documentParentChunk.deleteMany({ where: { documentId: existingId } });
-    }
-    await tx.documentParentChunk.deleteMany({ where: { documentId: document.id } });
-
-    let childCount = 0;
-    for (const block of structure) {
-      const parent = await tx.documentParentChunk.create({
-        data: { documentId: document.id, text: block.parent.text },
-        select: { id: true },
-      });
-
-      const rows = block.children.map((child, index) => {
-        const vector = vectors[childCount + index];
-        if (!vector) {
-          return null;
-        }
-        return Prisma.sql`(
-          ${document.id},
-          ${parent.id},
-          ${title},
-          ${url},
-          ${child.text},
-          ${`[${vector.join(",")}]`}::vector,
-          NOW()
-        )`;
-      });
-
-      const nonNull = rows.filter((row): row is Prisma.Sql => row !== null);
-      if (nonNull.length > 0) {
-        await tx.$executeRaw(Prisma.sql`
-          INSERT INTO document_chunks
-            ("documentId", "parentId", "sourceName", "sourceUrl", "text", "embedding", "createdAt")
-          VALUES ${Prisma.join(nonNull, ", ")}
-        `);
-      }
-      childCount += nonNull.length;
-    }
-
-    await tx.document.update({
-      where: { id: document.id },
-      data: { chunkCount: childCount },
-    });
-
-    return {
-      id: document.id,
-      status: existingId ? "updated" : "created",
-      parentCount: structure.length,
-      childCount,
-    };
-  });
 }
 
 export { ExternalApiError };

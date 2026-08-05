@@ -279,6 +279,10 @@ model IngestJob {
   force      Boolean         @default(false)
   status     IngestJobStatus @default(QUEUED)
   attempts   Int             @default(0)
+  // Resumable-ingest cursor (PDF jobs): number of parent blocks already
+  // embedded + stored. A budget-yielded job is returned to QUEUED with this
+  // cursor so the next tick resumes instead of re-embedding from scratch.
+  progress   Int             @default(0)
   error      String?
   result     Json? // IngestResult when DONE
   createdAt  DateTime        @default(now())
