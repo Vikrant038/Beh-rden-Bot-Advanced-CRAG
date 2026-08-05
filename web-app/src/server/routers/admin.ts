@@ -8,6 +8,8 @@ import { NotFoundError } from "@/server/lib/errors";
 import { z } from "zod";
 import { runAgenticRag, type AgenticRagResponse } from "@/server/rag/agents/orchestrator";
 import { getHybridRetriever } from "@/server/rag/instance";
+import { disambiguateQuery } from "@/server/rag/disambiguation";
+import { maskPii } from "@/server/pii/masker";
 
 const logger = createLogger("admin-router");
 
@@ -483,11 +485,23 @@ export const adminRouter = router({
     .mutation(async ({ input }): Promise<AgenticRagResponse> => {
       const startedAt = Date.now();
       try {
+        // Stage 0A — run the disambiguation check up front (same as the chat
+        // pipeline) so the stored trace renders the disambiguation node in the
+        // visualizer. The pipeline still runs to completion; ambiguity is
+        // recorded, not short-circuited, so the glass-box trace is complete.
+        const { text: maskedQuery } = maskPii(input.prompt);
+        const t0_dis = Date.now();
+        const disambiguation = await disambiguateQuery(maskedQuery);
         const result = await runAgenticRag(input.prompt, {
           hybridRetriever: getHybridRetriever(),
           cache: semanticCache,
           memory: new NoopMemory(),
           bypassCache: input.bypassCache,
+          disambiguation: {
+            durationMs: Date.now() - t0_dis,
+            isAmbiguous: disambiguation.isAmbiguous,
+            options: disambiguation.options,
+          },
         });
         await prisma.pipelineRun
           .create({

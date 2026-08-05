@@ -24,6 +24,22 @@ import { useToast } from "@/lib/toast";
 import { formatRelativeTime, formatUsd } from "@/lib/utils";
 import type { AgenticRagResponse } from "@/server/rag/agents/orchestrator";
 
+/**
+ * True when the tRPC error came from a broken HTTP transport rather than the
+ * pipeline itself — e.g. `Unexpected token 'A', "An error o"... is not valid
+ * JSON` (serverless function killed mid-response → non-JSON body) or a plain
+ * network drop. These need a different debugging path than a real pipeline
+ * failure.
+ */
+function isTransportError(message: string): boolean {
+  return (
+    message.includes("is not valid JSON") ||
+    message.includes("Unexpected token") ||
+    message.includes("Failed to fetch") ||
+    message.includes("Network request failed")
+  );
+}
+
 const EXAMPLES: Array<{ label: string; prompt: string; icon: LucideIcon }> = [
   {
     label: "Compare study costs",
@@ -238,6 +254,14 @@ export default function AdminPipelineTesterPage() {
             <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-xl border border-border bg-background p-4 font-mono text-xs leading-relaxed text-foreground">
               {testPipeline.error.message}
             </pre>
+            {isTransportError(testPipeline.error.message) ? (
+              <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+                This looks like a transport failure: the serverless function was likely cut off
+                mid-response (60s limit) or the network dropped. The run may still have completed
+                server-side — check Recent traces below, then retry. If it recurs, the pipeline
+                itself is running too long for the platform limit.
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-muted">
                 Full error detail (name, message, cause, stack) — admin only. Copy it into the

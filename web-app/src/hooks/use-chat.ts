@@ -129,12 +129,19 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
 
   const handleEvent = useCallback(
     (event: ChatStreamEvent) => {
+      // Refresh the sidebar once per turn on the FIRST streamed event (the
+      // server has already persisted the user message + bumped updatedAt), so
+      // the conversation moves to the top without waiting for the first
+      // legacy `status` event.
+      const refreshListOnce = () => {
+        if (!listRefreshedRef.current) {
+          listRefreshedRef.current = true;
+          void utils.conversation.list.invalidate();
+        }
+      };
       switch (event.type) {
         case "status":
-          if (!listRefreshedRef.current) {
-            listRefreshedRef.current = true;
-            void utils.conversation.list.invalidate();
-          }
+          refreshListOnce();
           setStatus(mapChatStageToPipeline(event.stage));
           break;
         case "token":
@@ -150,6 +157,22 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
           setMessages((prev) => prev.filter((message) => message.id !== STREAMING_ID));
           setDisambiguationOptions(event.options);
           setStatus("idle");
+          break;
+        case "stage_start":
+          refreshListOnce();
+          // Granular sub-stage (query expansion, dense/BM25, …) — drive the
+          // status bar live. Later stages override earlier coarse ones.
+          setStatus(mapChatStageToPipeline(event.stage));
+          break;
+        case "agent_start":
+          setStatus(mapChatStageToPipeline(`agent_${event.agent}`));
+          break;
+        // stage_end / agent_end / retrieval_telemetry / tool_call carry metrics
+        // for the trace visualizer; the chat status bar needs no state change.
+        case "stage_end":
+        case "agent_end":
+        case "retrieval_telemetry":
+        case "tool_call":
           break;
         case "done":
           setMessages((prev) =>

@@ -14,9 +14,9 @@ describe("PipelineStatus", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("renders all five stage labels with a polite live region", () => {
-    const { container } = render(<PipelineStatus status="retrieving" />);
-    for (const label of ["Guardrail", "Retrieving", "Research", "Analysis", "Writing"]) {
+  it("renders all seven stage labels with a polite live region", () => {
+    const { container } = render(<PipelineStatus status="dense_retrieval" />);
+    for (const label of ["Disambiguation", "Guardrail", "Query Expansion", "Dense/BM25 Search", "Research Tools", "Analyst", "Writer"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
     expect(container.querySelector('[aria-live="polite"]')).not.toBeNull();
@@ -24,11 +24,11 @@ describe("PipelineStatus", () => {
 
   it("marks the active stage and completed stages", () => {
     render(<PipelineStatus status="analyst" />);
-    const active = screen.getByText("Analysis");
+    const active = screen.getByText("Analyst");
     expect(active).toHaveClass("font-medium");
-    const completed = screen.getByText("Retrieving");
+    const completed = screen.getByText("Dense/BM25 Search");
     expect(completed).toHaveClass("text-muted");
-    const upcoming = screen.getByText("Writing");
+    const upcoming = screen.getByText("Writer");
     expect(upcoming).not.toHaveClass("font-medium");
   });
 });

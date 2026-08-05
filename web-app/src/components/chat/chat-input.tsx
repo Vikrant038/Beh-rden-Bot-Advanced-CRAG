@@ -221,19 +221,10 @@ export function ChatInput({
               type="button"
               onClick={onStop}
               aria-label="Stop generating"
-              title={`${Math.round(progress)}% complete`}
-              className="relative grid h-10 w-10 shrink-0 place-items-center rounded-lg"
+              title="Stop generating"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-glass-border bg-surface text-muted transition hover:bg-surface-hover hover:text-foreground"
             >
-              <span
-                className="absolute inset-0 rounded-lg transition-colors"
-                style={{
-                  background: `conic-gradient(var(--color-primary) ${progress}%, var(--color-border) ${progress}%)`,
-                }}
-                aria-hidden="true"
-              />
-              <span className="relative grid h-8 w-8 place-items-center rounded-md bg-surface">
-                <Square className="h-4 w-4 fill-current text-destructive" />
-              </span>
+              <Square className="h-3.5 w-3.5 fill-muted-foreground text-muted-foreground" />
             </button>
           ) : (
             <button

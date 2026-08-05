@@ -2,8 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  LayoutGrid,
+  List,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Eye,
   FileText,
@@ -27,7 +31,6 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/lib/toast";
-
 type DocumentStatus = "PENDING" | "INGESTING" | "SYNCED" | "FAILED";
 
 interface DocumentItem {
@@ -58,6 +61,16 @@ function IndeterminateBar({ label }: { label: string }) {
   );
 }
 
+function useChunkNavigator(count: number) {
+  const [index, setIndex] = useState(0);
+  return {
+    index,
+    // Clamp into [0, max(0, count - 1)] so an empty list never yields -1.
+    clamp: (next: number) => setIndex(Math.min(Math.max(0, next), Math.max(0, count - 1))),
+    select: setIndex,
+  };
+}
+
 /**
  * 10.3 — Detail modal for a document: title/url/status plus its first chunks.
  */
@@ -73,7 +86,15 @@ function DocumentPreviewModal({
     { getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined },
   );
   const items = chunks.data?.pages.flatMap((page) => page.items) ?? [];
+  const [chunkViewMode, setChunkViewMode] = useState<"list" | "paginated">("list");
+  const chunkNavigator = useChunkNavigator(items.length);
 
+  useEffect(() => {
+    if (chunkNavigator.index > Math.max(0, items.length - 1)) {
+      chunkNavigator.select(Math.max(0, items.length - 1));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.length]);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-2xl">
@@ -93,6 +114,41 @@ function DocumentPreviewModal({
           </DialogDescription>
         </DialogHeader>
 
+        <div className="flex items-center justify-end gap-2">
+          <div
+            role="radiogroup"
+            aria-label="Chunk view mode"
+            className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-border bg-surface p-1"
+          >
+            <button
+              type="button"
+              role="radio"
+              aria-checked={chunkViewMode === "list"}
+              onClick={() => setChunkViewMode("list")}
+              className={`rounded-lg px-2.5 py-1.5 text-xs transition ${
+                chunkViewMode === "list"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted hover:bg-surface-hover hover:text-foreground"
+              }`}
+            >
+              List
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={chunkViewMode === "paginated"}
+              onClick={() => setChunkViewMode("paginated")}
+              className={`rounded-lg px-2.5 py-1.5 text-xs transition ${
+                chunkViewMode === "paginated"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted hover:bg-surface-hover hover:text-foreground"
+              }`}
+            >
+              Paginated
+            </button>
+          </div>
+        </div>
+
         <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
           {chunks.isLoading ? (
             <div className="space-y-2">
@@ -105,8 +161,11 @@ function DocumentPreviewModal({
               This document has no indexed chunks yet.
             </p>
           ) : (
-            items.map((chunk) => (
-              <div key={chunk.id} className="rounded-xl border border-border bg-background p-3">
+            (chunkViewMode === "paginated" && items[chunkNavigator.index]
+              ? [items[chunkNavigator.index]]
+              : items
+            ).map((chunk) => (
+              <div key={chunk.id} id={`modal-chunk-${chunk.id}`} className="rounded-xl border border-border bg-background p-3">
                 <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed">
                   {chunk.text}
                 </p>
@@ -115,6 +174,47 @@ function DocumentPreviewModal({
             ))
           )}
         </div>
+        {items.length > 1 ? (
+          <div className="flex items-center justify-between gap-2 mt-2">
+            <p className="text-xs text-muted" aria-live="polite">
+              Chunk {chunkNavigator.index + 1} of {items.length}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const nextIndex = chunkNavigator.index - 1;
+                  chunkNavigator.clamp(nextIndex);
+                  if (chunkViewMode === "list" && items[Math.max(0, nextIndex)]) {
+                    const el = window.document.getElementById(`modal-chunk-${items[Math.max(0, nextIndex)].id}`);
+                    el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                  }
+                }}
+                disabled={chunkNavigator.index <= 0}
+                aria-label="Previous chunk"
+                className="grid min-h-9 min-w-9 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextIndex = chunkNavigator.index + 1;
+                  chunkNavigator.clamp(nextIndex);
+                  if (chunkViewMode === "list" && items[Math.min(items.length - 1, nextIndex)]) {
+                    const el = window.document.getElementById(`modal-chunk-${items[Math.min(items.length - 1, nextIndex)].id}`);
+                    el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                  }
+                }}
+                disabled={chunkNavigator.index >= items.length - 1}
+                aria-label="Next chunk"
+                className="grid min-h-9 min-w-9 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        ) : null}
         {chunks.hasNextPage && (
           <button
             type="button"

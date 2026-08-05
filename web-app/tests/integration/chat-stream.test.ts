@@ -41,7 +41,11 @@ vi.mock("@/server/rag/instance", () => ({
   getHybridRetriever: vi.fn(() => ({ embedQuery: vi.fn(), retrieve: vi.fn() })),
 }));
 vi.mock("@/server/pii/masker", () => ({
-  maskPii: vi.fn((query: string) => ({ text: query, originalChars: query.length, maskedChars: query.length })),
+  maskPii: vi.fn((query: string) => ({
+    text: query,
+    originalChars: query.length,
+    maskedChars: query.length,
+  })),
 }));
 
 import { prisma } from "@/server/db";
@@ -77,6 +81,7 @@ const agenticResult: AgenticRagResponse = {
   analysisMatrix: { summary: "s", structured_table: "", key_insights: [], verified_facts: [] },
   sources: [{ name: "doc", url: "https://example.com", score: 0.8, documentId: "d1" }],
   totalLatencyMs: 500,
+  toolCalls: [],
   stages: [
     { index: 0, name: "Query disambiguation & guardrail", durationMs: 80, status: "executed" },
     { index: 1, name: "Research agent (ReAct)", durationMs: 120, status: "executed" },
@@ -207,9 +212,11 @@ describe("runChatStream (SSE event generation)", () => {
     });
 
     const stages = events.filter((event) => event.type === "status");
+    // The legacy coarse "guardrail"/"agent_research" statuses were replaced by
+    // granular stage_start/agent_start telemetry events (the orchestrator's
+    // `agent_start: research` covers the research stage), so only the analyst
+    // and writer coarse statuses remain.
     expect(stages.map((event) => (event as { stage: string }).stage)).toEqual([
-      "guardrail",
-      "agent_research",
       "agent_analyst",
       "agent_writer",
     ]);

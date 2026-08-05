@@ -75,7 +75,7 @@ function fullTrace(): AgenticRagResponse {
         parentText: "Expanded parent context.",
       },
     ],
-    totalLatencyMs: 2400,
+    totalLatencyMs: 2400, toolCalls: [],
     stages: [
       { index: 0, name: "Query disambiguation & guardrail", durationMs: 400, status: "executed" },
       { index: 1, name: "Research agent (ReAct)", durationMs: 1200, status: "executed" },

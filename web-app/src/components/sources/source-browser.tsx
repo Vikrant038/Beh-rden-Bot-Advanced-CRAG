@@ -111,7 +111,7 @@ export function SourceBrowser() {
   const [typeFilter, setTypeFilter] = useState<DocType>("all");
   const [view, setView] = useState<ViewMode>("list");
   const [chunkSearch, setChunkSearch] = useState("");
-
+  const [chunkViewMode, setChunkViewMode] = useState<"list" | "paginated">("list");
   const documents = api.source.list.useQuery();
   const chunks = api.source.getChunks.useInfiniteQuery(
     { documentId: selected?.id ?? "", limit: 20 },
@@ -438,16 +438,50 @@ export function SourceBrowser() {
                 </div>
               </div>
 
-              <div className="relative mb-3">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-                <input
-                  type="search"
-                  value={chunkSearch}
-                  onChange={(event) => setChunkSearch(event.target.value)}
-                  placeholder="Search within this document…"
-                  aria-label="Search within this document"
-                  className="w-full rounded-xl border border-border bg-background py-2 pl-8 pr-3 text-sm outline-none transition placeholder:text-muted focus:border-primary"
-                />
+              <div className="mb-3 flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+                  <input
+                    type="search"
+                    value={chunkSearch}
+                    onChange={(event) => setChunkSearch(event.target.value)}
+                    placeholder="Search within this document…"
+                    aria-label="Search within this document"
+                    className="w-full rounded-xl border border-border bg-background py-2 pl-8 pr-3 text-sm outline-none transition placeholder:text-muted focus:border-primary"
+                  />
+                </div>
+                <div
+                  role="radiogroup"
+                  aria-label="Chunk view mode"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-border bg-surface p-1"
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={chunkViewMode === "list"}
+                    onClick={() => setChunkViewMode("list")}
+                    className={`rounded-lg px-2.5 py-1.5 text-xs transition ${
+                      chunkViewMode === "list"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted hover:bg-surface-hover hover:text-foreground"
+                    }`}
+                  >
+                    List
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={chunkViewMode === "paginated"}
+                    onClick={() => setChunkViewMode("paginated")}
+                    className={`rounded-lg px-2.5 py-1.5 text-xs transition ${
+                      chunkViewMode === "paginated"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted hover:bg-surface-hover hover:text-foreground"
+                    }`}
+                  >
+                    Paginated
+                  </button>
+                </div>
               </div>
 
               {chunks.isLoading ? (
@@ -470,50 +504,57 @@ export function SourceBrowser() {
               ) : (
                 <>
                   <ul className="space-y-3">
-                    {scoredChunks.map(({ chunk, score }, listIndex) => (
-                      <li
-                        key={chunk.id}
-                        className={`group rounded-xl border p-4 transition ${
-                          listIndex === chunkNavigator.index
-                            ? "border-primary/60 bg-primary/5"
-                            : "border-border bg-background"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <p className="text-sm leading-relaxed">
-                            {highlightMatches(chunk.text, chunkSearch)}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => void handleCopyChunk(chunk.text)}
-                            aria-label={`Copy chunk #${chunk.id}`}
-                            className="shrink-0 rounded-lg p-2 text-muted opacity-0 transition group-hover:opacity-100 hover:bg-surface-hover hover:text-foreground"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                        <div className="mt-2 flex items-center gap-2">
-                          <p className="text-[10px] text-muted">#{chunk.id}</p>
-                          {score !== null ? (
-                            <div className="flex flex-1 items-center gap-1.5">
-                              <span
-                                className="h-1 flex-1 overflow-hidden rounded-full bg-border"
-                                role="img"
-                                aria-label={`Relevance ${Math.round(score * 100)}%`}
-                              >
+                    {(chunkViewMode === "paginated" && scoredChunks[chunkNavigator.index]
+                      ? [scoredChunks[chunkNavigator.index]]
+                      : scoredChunks
+                    ).map(({ chunk, score }, mappedIndex) => {
+                      const listIndex = chunkViewMode === "paginated" ? chunkNavigator.index : mappedIndex;
+                      return (
+                        <li
+                          key={chunk.id}
+                          id={`chunk-item-${chunk.id}`}
+                          className={`group rounded-xl border p-4 transition ${
+                            listIndex === chunkNavigator.index
+                              ? "border-primary/60 bg-primary/5"
+                              : "border-border bg-background"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <p className="text-sm leading-relaxed">
+                              {highlightMatches(chunk.text, chunkSearch)}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => void handleCopyChunk(chunk.text)}
+                              aria-label={`Copy chunk #${chunk.id}`}
+                              className="shrink-0 rounded-lg p-2 text-muted opacity-0 transition group-hover:opacity-100 hover:bg-surface-hover hover:text-foreground"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                          <div className="mt-2 flex items-center gap-2">
+                            <p className="text-[10px] text-muted">#{chunk.id}</p>
+                            {score !== null ? (
+                              <div className="flex flex-1 items-center gap-1.5">
                                 <span
-                                  className="block h-full rounded-full bg-accent"
-                                  style={{ width: `${Math.round(score * 100)}%` }}
-                                />
-                              </span>
-                              <span className="font-mono text-[10px] text-muted tabular-nums">
-                                {Math.round(score * 100)}%
-                              </span>
-                            </div>
-                          ) : null}
-                        </div>
-                      </li>
-                    ))}
+                                  className="h-1 flex-1 overflow-hidden rounded-full bg-border"
+                                  role="img"
+                                  aria-label={`Relevance ${Math.round(score * 100)}%`}
+                                >
+                                  <span
+                                    className="block h-full rounded-full bg-accent"
+                                    style={{ width: `${Math.round(score * 100)}%` }}
+                                  />
+                                </span>
+                                <span className="font-mono text-[10px] text-muted tabular-nums">
+                                  {Math.round(score * 100)}%
+                                </span>
+                              </div>
+                            ) : null}
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                   {scoredChunks.length > 1 ? (
                     <div className="mt-4 flex items-center justify-between gap-2">
@@ -523,7 +564,14 @@ export function SourceBrowser() {
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => chunkNavigator.clamp(chunkNavigator.index - 1)}
+                          onClick={() => {
+                            const nextIndex = chunkNavigator.index - 1;
+                            chunkNavigator.clamp(nextIndex);
+                            if (chunkViewMode === "list" && scoredChunks[Math.max(0, nextIndex)]) {
+                              const el = document.getElementById(`chunk-item-${scoredChunks[Math.max(0, nextIndex)].chunk.id}`);
+                              el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                            }
+                          }}
                           disabled={chunkNavigator.index <= 0}
                           aria-label="Previous chunk"
                           className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
@@ -532,7 +580,14 @@ export function SourceBrowser() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => chunkNavigator.clamp(chunkNavigator.index + 1)}
+                          onClick={() => {
+                            const nextIndex = chunkNavigator.index + 1;
+                            chunkNavigator.clamp(nextIndex);
+                            if (chunkViewMode === "list" && scoredChunks[Math.min(scoredChunks.length - 1, nextIndex)]) {
+                              const el = document.getElementById(`chunk-item-${scoredChunks[Math.min(scoredChunks.length - 1, nextIndex)].chunk.id}`);
+                              el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                            }
+                          }}
                           disabled={chunkNavigator.index >= scoredChunks.length - 1}
                           aria-label="Next chunk"
                           className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"

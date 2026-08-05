@@ -7,6 +7,7 @@ import { runAgenticRag } from "@/server/rag/agents/orchestrator";
 import { disambiguateQuery } from "@/server/rag/disambiguation";
 import { isQueryOutOfDomain } from "@/server/rag/guardrail";
 import { getHybridRetriever } from "@/server/rag/instance";
+import type { PipelineEvent } from "@/server/rag/types";
 import { maskPii } from "@/server/pii/masker";
 import { runWithTraceGen, setTraceInput } from "@/server/tracing";
 import { NotFoundError } from "@/server/lib/errors";
@@ -57,6 +58,79 @@ function chunkText(text: string, wordsPerChunk: number = WORDS_PER_CHUNK): strin
     chunks.push(tokens.slice(i, i + wordsPerChunk).join(""));
   }
   return chunks;
+}
+
+/**
+ * Minimal async push-queue used to stream `onEvent` telemetry out of
+ * `runAgenticRag` (which runs as a plain promise) through this async
+ * generator. Unlike a manual promise/queue bridge, the iterator protocol
+ * guarantees no event can be lost or double-woken, and terminating the
+ * consumer (SSE client disconnect) wakes any pending waiter instead of
+ * leaking a microtask.
+ */
+class AsyncEventQueue<T> {
+  private events: T[] = [];
+  private waiters: Array<(result: IteratorResult<T>) => void> = [];
+  private done = false;
+  private error: unknown = undefined;
+
+  push(event: T): void {
+    if (this.done) {
+      return;
+    }
+    const waiter = this.waiters.shift();
+    if (waiter) {
+      waiter({ value: event, done: false });
+    } else {
+      this.events.push(event);
+    }
+  }
+
+  complete(): void {
+    this.finish(undefined);
+  }
+
+  fail(error: unknown): void {
+    this.finish(error);
+  }
+
+  private finish(error: unknown): void {
+    if (this.done) {
+      return;
+    }
+    this.done = true;
+    this.error = error;
+    for (const waiter of this.waiters.splice(0)) {
+      waiter({ value: undefined, done: true });
+    }
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<T> {
+    return {
+      next: (): Promise<IteratorResult<T>> => this.next(),
+      return: (): Promise<IteratorResult<T>> => {
+        // Consumer bailed early (stream cancelled) — wake pending waiters so
+        // the background pipeline promise can settle without a leaked task.
+        this.finish(undefined);
+        return Promise.resolve({ value: undefined, done: true });
+      },
+    };
+  }
+
+  private next(): Promise<IteratorResult<T>> {
+    const event = this.events.shift();
+    if (event !== undefined) {
+      return Promise.resolve({ value: event, done: false });
+    }
+    if (this.done) {
+      return this.error !== undefined
+        ? Promise.reject(this.error)
+        : Promise.resolve({ value: undefined, done: true });
+    }
+    return new Promise<IteratorResult<T>>((resolve) => {
+      this.waiters.push(resolve);
+    });
+  }
 }
 
 async function findOrCreateUserMessage(
@@ -127,12 +201,26 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
       updatedAt: new Date(),
     },
   });
-
-  yield { type: "status", stage: "guardrail" };
-
   const { text: maskedQuery } = maskPii(trimmedQuery);
   setTraceInput(maskedQuery);
+
+  const t0_dis = Date.now();
+  yield {
+    type: "stage_start",
+    stage: "disambiguation",
+    label: "Disambiguation Check",
+    timestamp: t0_dis,
+  };
   const disambiguation = await disambiguateQuery(maskedQuery);
+  const disDurationMs = Date.now() - t0_dis;
+  yield {
+    type: "stage_end",
+    stage: "disambiguation",
+    label: "Disambiguation Check",
+    timestamp: Date.now(),
+    durationMs: disDurationMs,
+  };
+
   if (disambiguation.isAmbiguous && disambiguation.options.length >= 2) {
     yield { type: "disambiguation", options: disambiguation.options };
     return;
@@ -190,13 +278,33 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
         isCached: standardResult.isCached,
       };
     } else {
-      yield { type: "status", stage: "agent_research" };
-      const agenticResult = await runAgenticRag(trimmedQuery, {
+      // No coarse `agent_research` status here: the orchestrator emits a
+      // granular `agent_start: research` event (mapped to the Research Tools
+      // stage by the client) AFTER the guardrail, keeping the status-bar
+      // order correct (Disambiguation → Guardrail → … → Research → …).
+      const eventQueue = new AsyncEventQueue<PipelineEvent>();
+      const agenticPromise = runAgenticRag(trimmedQuery, {
         hybridRetriever: getHybridRetriever(),
         cache: semanticCache,
         memory,
         bypassCache,
+        disambiguation: {
+          durationMs: disDurationMs,
+          isAmbiguous: disambiguation.isAmbiguous,
+          options: disambiguation.options,
+        },
+        onEvent: (event) => eventQueue.push(event),
       });
+      // Close the queue when the pipeline settles so the iterator terminates.
+      agenticPromise.then(() => eventQueue.complete()).catch((error) => eventQueue.fail(error));
+
+      // Stream granular telemetry (stage_start/stage_end, agent_start/end,
+      // retrieval_telemetry, tool_call) as it is produced, then await the result.
+      for await (const event of eventQueue) {
+        yield event as unknown as ChatStreamEvent;
+      }
+      const agenticResult = await agenticPromise;
+
       result = {
         answer: agenticResult.finalAnswer,
         sources: agenticResult.sources,

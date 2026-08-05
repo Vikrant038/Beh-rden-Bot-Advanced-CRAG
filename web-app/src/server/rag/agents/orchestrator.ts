@@ -6,7 +6,12 @@ import {
   type AnalystMatrix,
 } from "@/server/rag/agents/analyst";
 import type { SemanticCache, CachedResponse } from "@/server/rag/cache/semantic-cache";
-import type { Source } from "@/server/rag/types";
+import type {
+  Source,
+  RetrievalTelemetry,
+  ToolCallTelemetry,
+  PipelineEvent,
+} from "@/server/rag/types";
 import { maskPii } from "@/server/pii/masker";
 import { isQueryOutOfDomain } from "@/server/rag/guardrail";
 import { createLogger } from "@/server/lib/logger";
@@ -27,6 +32,8 @@ export interface AgenticRagOptions {
   cache: SemanticCache;
   memory: MemoryLike;
   bypassCache?: boolean;
+  disambiguation?: { durationMs: number; isAmbiguous: boolean; options: string[] };
+  onEvent?: (event: PipelineEvent) => void;
 }
 
 /** Per-stage timing recorded for the pipeline tracer. */
@@ -43,11 +50,14 @@ export interface PipelineStage {
 export interface AgenticRagResponse {
   userQuery: string;
   maskedQuery: string;
-  guardrail: { passed: boolean; reason?: string };
+  guardrail: { passed: boolean; reason?: string; durationMs?: number };
   finalAnswer: string;
   researchSteps: ResearchStep[];
   analysisMatrix: AnalystMatrix;
   sources: Source[];
+  disambiguation?: { durationMs: number; isAmbiguous: boolean; options: string[] };
+  retrievalTelemetry?: RetrievalTelemetry;
+  toolCalls: ToolCallTelemetry[];
   totalLatencyMs: number;
   /** Per-stage timings — unique durations, not the total repeated. */
   stages: PipelineStage[];
@@ -106,7 +116,14 @@ export async function runAgenticRag(
   const collector = new LlmUsageCollector();
   return withLlmUsageCollector(collector, async () => {
     const startTime = Date.now();
-    const { hybridRetriever, cache, memory, bypassCache = false } = options;
+    const {
+      hybridRetriever,
+      cache,
+      memory,
+      bypassCache = false,
+      disambiguation,
+      onEvent,
+    } = options;
 
     const { text: maskedQuery } = maskPii(userQuery);
     const queryVector = await hybridRetriever.embedQuery(maskedQuery);
@@ -139,17 +156,36 @@ export async function runAgenticRag(
             verified_facts: [],
           },
           sources: cached.sources,
+          disambiguation,
+          retrievalTelemetry: undefined,
+          toolCalls: [],
           totalLatencyMs: Date.now() - startTime,
           stages: buildStages([Date.now() - stage0Start, 0, 0, 0], 0),
           llmCalls: collector.calls,
           totalCostUsd: collector.totalCostUsd,
         },
         maskedQuery,
-        { passed: true, reason: "In-domain" },
+        { passed: true, reason: "In-domain", durationMs: Date.now() - stage0Start },
       );
     }
 
+    const t0_guardrail = Date.now();
+    onEvent?.({
+      type: "stage_start",
+      stage: "guardrail",
+      label: "Domain Guardrail",
+      timestamp: t0_guardrail,
+    });
     const blocked = await isQueryOutOfDomain(maskedQuery);
+    const stage0Duration = Date.now() - t0_guardrail;
+    onEvent?.({
+      type: "stage_end",
+      stage: "guardrail",
+      label: "Domain Guardrail",
+      timestamp: Date.now(),
+      durationMs: stage0Duration,
+    });
+
     if (blocked) {
       logger.info("[AGENT ORCHESTRATOR] Out-of-domain query rejected early");
       return withStageZero(
@@ -171,36 +207,72 @@ export async function runAgenticRag(
             verified_facts: [],
           },
           sources: [],
+          disambiguation,
+          retrievalTelemetry: undefined,
+          toolCalls: [],
           totalLatencyMs: Date.now() - startTime,
           stages: buildStages([Date.now() - stage0Start, 0, 0, 0], 0),
           llmCalls: collector.calls,
           totalCostUsd: collector.totalCostUsd,
         },
         maskedQuery,
-        { passed: false, reason: "Out of domain" },
+        { passed: false, reason: "Out of domain", durationMs: stage0Duration },
       );
     }
-    const stage0Duration = Date.now() - stage0Start;
 
     const memoryContext = await memory.getContextFormatted();
 
     // Stage 1 — Research agent (ReAct).
     const stage1Start = Date.now();
+    onEvent?.({ type: "agent_start", agent: "research", timestamp: stage1Start });
     collector.setStage("Stage 1 — Research agent (ReAct)");
-    const research = await agentResearchReact(maskedQuery, hybridRetriever, memoryContext);
+    const research = await agentResearchReact(maskedQuery, hybridRetriever, memoryContext, onEvent);
+
+    // Emit telemetry events
+    if (research.retrievalTelemetry) {
+      onEvent?.({
+        type: "retrieval_telemetry",
+        telemetry: research.retrievalTelemetry,
+        timestamp: Date.now(),
+      });
+    }
+    for (const call of research.toolCalls) {
+      onEvent?.({ type: "tool_call", telemetry: call, timestamp: Date.now() });
+    }
+
     const stage1Duration = Date.now() - stage1Start;
+    onEvent?.({
+      type: "agent_end",
+      agent: "research",
+      timestamp: Date.now(),
+      durationMs: stage1Duration,
+    });
 
     // Stage 2 — Analyst (comparison matrix).
     const stage2Start = Date.now();
+    onEvent?.({ type: "agent_start", agent: "analyst", timestamp: stage2Start });
     collector.setStage("Stage 2 — Analyst (comparison matrix)");
     const analysis = await agentAnalystEvaluation(maskedQuery, research);
     const stage2Duration = Date.now() - stage2Start;
+    onEvent?.({
+      type: "agent_end",
+      agent: "analyst",
+      timestamp: Date.now(),
+      durationMs: stage2Duration,
+    });
 
     // Stage 3 — Writer (markdown synthesis).
     const stage3Start = Date.now();
+    onEvent?.({ type: "agent_start", agent: "writer", timestamp: stage3Start });
     collector.setStage("Stage 3 — Writer (markdown synthesis)");
     const finalAnswer = await agentWriterSynthesis(maskedQuery, research, analysis);
     const stage3Duration = Date.now() - stage3Start;
+    onEvent?.({
+      type: "agent_end",
+      agent: "writer",
+      timestamp: Date.now(),
+      durationMs: stage3Duration,
+    });
 
     if (!bypassCache) {
       const parentDocIds = Array.from(
@@ -226,13 +298,19 @@ export async function runAgenticRag(
         researchSteps: research.researchSteps,
         analysisMatrix: analysis,
         sources: research.sources,
+        disambiguation,
+        retrievalTelemetry: research.retrievalTelemetry,
+        toolCalls: research.toolCalls,
         totalLatencyMs: Date.now() - startTime,
-        stages: buildStages([stage0Duration, stage1Duration, stage2Duration, stage3Duration], 3),
+        stages: buildStages(
+          [Date.now() - stage0Start, stage1Duration, stage2Duration, stage3Duration],
+          3,
+        ),
         llmCalls: collector.calls,
         totalCostUsd: collector.totalCostUsd,
       },
       maskedQuery,
-      { passed: true, reason: "In-domain" },
+      { passed: true, reason: "In-domain", durationMs: stage0Duration },
     );
   });
 }

@@ -1,4 +1,4 @@
-import type { Chunk } from "@/server/rag/types";
+import type { Chunk, HybridRetrievalResult, HybridRetrievalResultWithTelemetry } from "@/server/rag/types";
 import {
   CRAG_THRESHOLD,
   DEFAULT_MIN_SIMILARITY,
@@ -33,13 +33,6 @@ export interface HybridRetrieverOptions {
   corpusProvider: CorpusProvider;
 }
 
-export interface HybridRetrievalResult {
-  chunks: Chunk[];
-  bestCrossScore: number;
-  needsWebFallback: boolean;
-  pathUsed: string;
-}
-
 /**
  * Hybrid retriever: dense (pgvector) + sparse (BM25) → RRF fusion →
  * cross-encoder rerank → CRAG confidence gate.
@@ -52,7 +45,11 @@ export class HybridRetriever {
     return this.options.embeddingClient.embedQuery(query);
   }
 
-  async retrieve(query: string, queries: string[]): Promise<HybridRetrievalResult> {
+  async retrieve(
+    query: string,
+    queries: string[],
+    queryExpansionDurationMs: number = 0,
+  ): Promise<HybridRetrievalResultWithTelemetry> {
     const corpus = await this.options.corpusProvider.loadChunks();
 
     let bm25 = bm25IndexCache.get(corpus);
@@ -64,37 +61,38 @@ export class HybridRetriever {
     const denseRankings: Chunk[][] = [];
     const sparseRankings: Chunk[][] = [];
 
-    // Latency (2026-08-05): embed ALL sub-queries in ONE HTTP request — the
-    // Cloudflare worker / HF inference contract accepts `{"inputs": [...]}` and
-    // returns vectors in input order — then run the per-query dense pgvector
-    // lookups concurrently. Previously each sub-query was a sequential
-    // embedQuery() round-trip followed by a sequential dense query, i.e. N ×
-    // (RTT + inference + DB latency). The BGE query prefix is applied per query
-    // so vectors stay in the corpus space (parity with embedQuery()).
+    const t0_dense = performance.now();
     const queryVectors = await this.options.embeddingClient.embedTexts(
       queries.map((subQuery) => `${QUERY_EMBEDDING_PREFIX}${subQuery.trim()}`),
     );
-
-    const perQuery = await Promise.all(
+    const perQueryDense = await Promise.all(
       queries.map(async (subQuery, index) => {
-        const denseResults = await denseRetrieve(queryVectors[index], {
+        return await denseRetrieve(queryVectors[index], {
           topK: DENSE_TOP_K,
           minSimilarity: DEFAULT_MIN_SIMILARITY,
         });
-        const sparseResults = bm25.search(subQuery, SPARSE_TOP_K);
-        return { denseResults, sparseResults };
       }),
     );
-    for (const { denseResults, sparseResults } of perQuery) {
-      denseRankings.push(denseResults);
-      sparseRankings.push(sparseResults);
+    const denseDurationMs = performance.now() - t0_dense;
+
+    const t0_sparse = performance.now();
+    const perQuerySparse = queries.map((subQuery) => bm25!.search(subQuery, SPARSE_TOP_K));
+    const sparseBm25DurationMs = performance.now() - t0_sparse;
+
+    for (let i = 0; i < queries.length; i++) {
+      denseRankings.push(perQueryDense[i]);
+      sparseRankings.push(perQuerySparse[i]);
     }
 
     const allRankings = [...denseRankings, ...sparseRankings];
+    const t0_rrf = performance.now();
     const fused = reciprocalRankFusion(allRankings, RRF_K);
+    const rrfFusionDurationMs = performance.now() - t0_rrf;
     logger.info(`[HYBRID] RRF fusion produced ${fused.length} unique chunks`);
 
+    const t0_rerank = performance.now();
     const reranked = await this.options.reranker.rerank(query, fused, RERANK_TOP_K);
+    const rerankDurationMs = performance.now() - t0_rerank;
 
     const bestCrossScore = reranked[0]?.crossScore ?? 0;
     const needsWebFallback = bestCrossScore < CRAG_THRESHOLD;
@@ -115,6 +113,16 @@ export class HybridRetriever {
       bestCrossScore,
       needsWebFallback,
       pathUsed,
+      telemetry: {
+        queryExpansionDurationMs,
+        expandedQueries: queries,
+        denseDurationMs,
+        sparseBm25DurationMs,
+        rrfFusionDurationMs,
+        rerankDurationMs,
+        bestCrossScore,
+        cragFallbackTriggered: needsWebFallback,
+      },
     };
   }
 }

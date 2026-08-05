@@ -4,12 +4,14 @@ import { Check } from "lucide-react";
 import type { PipelineStage } from "@/lib/chat/types";
 import { cn } from "@/lib/utils";
 
-const STAGES: Array<{ key: PipelineStage; label: string }> = [
-  { key: "guardrail", label: "Guardrail" },
-  { key: "retrieving", label: "Retrieving" },
-  { key: "research", label: "Research" },
-  { key: "analyst", label: "Analysis" },
-  { key: "writer", label: "Writing" },
+const STAGES: Array<{ keys: PipelineStage[]; label: string; primaryKey: string }> = [
+  { keys: ["disambiguation"], label: "Disambiguation", primaryKey: "disambiguation" },
+  { keys: ["guardrail"], label: "Guardrail", primaryKey: "guardrail" },
+  { keys: ["query_expansion"], label: "Query Expansion", primaryKey: "query_expansion" },
+  { keys: ["dense_retrieval", "bm25_retrieval", "rrf_fusion", "rerank", "crag_gate", "retrieving"], label: "Dense/BM25 Search", primaryKey: "dense_retrieval" },
+  { keys: ["research", "tool_calls"], label: "Research Tools", primaryKey: "research" },
+  { keys: ["analyst"], label: "Analyst", primaryKey: "analyst" },
+  { keys: ["writer"], label: "Writer", primaryKey: "writer" },
 ];
 
 export function PipelineStatus({ status }: { status: PipelineStage }) {
@@ -17,8 +19,10 @@ export function PipelineStatus({ status }: { status: PipelineStage }) {
     return null;
   }
 
-  const currentIndex = STAGES.findIndex((stage) => stage.key === status);
-  const progress = ((currentIndex + 1) / STAGES.length) * 100;
+  const currentIndex = STAGES.findIndex((stage) => stage.keys.includes(status));
+  const activeIndex = currentIndex === -1 ? 0 : currentIndex;
+  // If we are at 'done', progress would be 100, but we return null early.
+  const progress = ((activeIndex + 1) / STAGES.length) * 100;
 
   return (
     <div className="px-1 py-2" aria-live="polite">
@@ -38,12 +42,11 @@ export function PipelineStatus({ status }: { status: PipelineStage }) {
         <span className="shrink-0 font-mono text-xs text-muted">{Math.round(progress)}%</span>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-        {STAGES.map((stage) => {
-          const index = STAGES.findIndex((s) => s.key === stage.key);
-          const isActive = stage.key === status;
-          const isComplete = currentIndex > index;
+        {STAGES.map((stage, index) => {
+          const isActive = stage.keys.includes(status);
+          const isComplete = activeIndex > index;
           return (
-            <div key={stage.key} className="flex items-center gap-1.5">
+            <div key={stage.primaryKey} className="flex items-center gap-1.5">
               {isComplete ? (
                 <Check className="h-3 w-3 text-success" aria-hidden="true" />
               ) : (

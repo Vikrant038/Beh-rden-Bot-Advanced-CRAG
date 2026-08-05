@@ -13,6 +13,11 @@ import { createLogger } from "@/server/lib/logger";
 const logger = createLogger("chat-stream-route");
 
 export const runtime = "nodejs";
+// The agentic pipeline makes 3–5 sequential LLM calls and can run well past
+// the platform default; without an explicit ceiling the function is killed
+// mid-stream and the client sees a truncated SSE connection instead of a
+// graceful error event. 60s matches the tRPC route (Hobby max).
+export const maxDuration = 60;
 
 const streamRequestSchema = z.object({
   conversationId: z.string().min(1),

@@ -1,3 +1,4 @@
+import type { ChatMetadata } from "@/lib/chat/types";
 export interface Chunk {
   id: string;
   documentId?: string;
@@ -60,3 +61,72 @@ export const BLOCKED_ACCOUNT_MONTHLY_EUR = 992;
 export const BLOCKED_ACCOUNT_MONTHS = 12;
 export const INR_PER_EUR = 90;
 export const QUERY_EMBEDDING_PREFIX = "Represent this sentence for searching relevant passages: ";
+
+/** Detailed telemetry for the hybrid retrieval stage (Stage 1B/1C/1D). */
+export interface RetrievalTelemetry {
+  queryExpansionDurationMs: number;
+  expandedQueries: string[];
+  denseDurationMs: number;
+  sparseBm25DurationMs: number;
+  rrfFusionDurationMs: number;
+  rerankDurationMs: number;
+  bestCrossScore: number;
+  cragFallbackTriggered: boolean;
+}
+
+/** Telemetry for an individual tool call during Research Agent execution. */
+export interface ToolCallTelemetry {
+  id: string;
+  tool: string;
+  query?: string;
+  startTime: number;
+  durationMs: number;
+  status: "success" | "failed";
+}
+/** Hybrid retrieval result (mirrors HybridRetriever.retrieve return type). */
+export interface HybridRetrievalResult {
+  chunks: Chunk[];
+  bestCrossScore: number;
+  needsWebFallback: boolean;
+  pathUsed: string;
+}
+
+/** HybridRetrievalResult extended with granular telemetry. */
+export interface HybridRetrievalResultWithTelemetry extends HybridRetrievalResult {
+  telemetry: RetrievalTelemetry;
+}
+
+/**
+ * Pipeline event types for granular SSE streaming.
+ * Matches ChatStreamEvent on the client (lib/chat/types.ts).
+ */
+export type PipelineEvent =
+  | { type: "stage_start"; stage: string; label: string; timestamp: number }
+  | {
+      type: "stage_end";
+      stage: string;
+      label: string;
+      timestamp: number;
+      durationMs: number;
+      details?: Record<string, unknown>;
+    }
+  | { type: "disambiguation"; options: string[]; timestamp: number }
+  | { type: "guardrail"; passed: boolean; reason?: string; timestamp: number }
+  | { type: "retrieval_telemetry"; telemetry: RetrievalTelemetry; timestamp: number }
+  | { type: "tool_call"; telemetry: ToolCallTelemetry; timestamp: number }
+  | { type: "agent_start"; agent: "research" | "analyst" | "writer"; timestamp: number }
+  | {
+      type: "agent_end";
+      agent: "research" | "analyst" | "writer";
+      timestamp: number;
+      durationMs: number;
+      details?: Record<string, unknown>;
+    }
+  | {
+      type: "done";
+      messageId: string;
+      sources: Source[];
+      metadata: ChatMetadata;
+      timestamp: number;
+    }
+  | { type: "error"; message: string; timestamp: number };

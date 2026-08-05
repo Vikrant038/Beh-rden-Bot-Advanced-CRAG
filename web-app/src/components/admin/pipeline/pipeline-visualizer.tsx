@@ -25,56 +25,146 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
     const stages: Array<{
       title: string;
       status: StageStatus;
-      durationMs: number;
+      durationMs: number | undefined;
       body: React.ReactNode;
     }> = [
       {
-        title: "Stage 0 — Query disambiguation & guardrail",
+        title: "Stage 0A/B — Disambiguation & Guardrail",
         status: guardrailBlocked ? "warning" : "done",
-        durationMs: stageDuration(0),
+        durationMs: (trace.disambiguation?.durationMs ?? 0) + (trace.guardrail?.durationMs ?? stageDuration(0)),
         body: (
           <div className="space-y-2">
-            <div className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2 text-xs">
-              <ShieldCheck className="h-4 w-4 shrink-0 text-accent" />
-              <span className="text-muted">Masked query:</span>
-              <code className="min-w-0 flex-1 truncate rounded bg-surface-hover px-1.5 py-0.5 text-foreground">
-                {trace.maskedQuery}
-              </code>
+            {trace.disambiguation && (
+              <div className="flex items-center justify-between rounded-lg bg-surface px-3 py-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 shrink-0 text-accent" />
+                  <span className="text-muted">Disambiguation check:</span>
+                  <span className="font-medium text-foreground">
+                    {trace.disambiguation.isAmbiguous ? "AMBIGUOUS" : "CLEAR"}
+                  </span>
+                </div>
+                <span className="font-mono text-[10px] text-muted">{Math.round(trace.disambiguation.durationMs)}ms</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between rounded-lg bg-surface px-3 py-2 text-xs">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 shrink-0 text-accent" />
+                <span className="text-muted">Masked query:</span>
+                <code className="min-w-0 flex-1 truncate rounded bg-surface-hover px-1.5 py-0.5 text-foreground">
+                  {trace.maskedQuery}
+                </code>
+              </div>
             </div>
             <div
               className={
                 guardrailBlocked
-                  ? "flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs"
-                  : "flex items-center gap-2 rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-xs"
+                  ? "flex items-center justify-between rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs"
+                  : "flex items-center justify-between rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-xs"
               }
             >
-              {guardrailBlocked ? (
-                <ShieldX className="h-4 w-4 shrink-0 text-warning" />
-              ) : (
-                <ShieldCheck className="h-4 w-4 shrink-0 text-success" />
-              )}
-              <span className="font-medium text-foreground">
-                Guardrail: {guardrailBlocked ? "BLOCKED" : "PASSED"}
-              </span>
-              {trace.guardrail.reason ? (
-                <span className="text-muted">— {trace.guardrail.reason}</span>
-              ) : null}
+              <div className="flex items-center gap-2">
+                {guardrailBlocked ? (
+                  <ShieldX className="h-4 w-4 shrink-0 text-warning" />
+                ) : (
+                  <ShieldCheck className="h-4 w-4 shrink-0 text-success" />
+                )}
+                <span className="font-medium text-foreground">
+                  Guardrail: {guardrailBlocked ? "BLOCKED" : "PASSED"}
+                </span>
+                {trace.guardrail.reason ? (
+                  <span className="text-muted">— {trace.guardrail.reason}</span>
+                ) : null}
+              </div>
+              <span className="font-mono text-[10px] text-muted">{Math.round(trace.guardrail?.durationMs ?? stageDuration(0))}ms</span>
             </div>
           </div>
         ),
       },
       {
-        title: "Stage 1 — Research agent (ReAct)",
+        title: "Stage 1A/B/C/D — Query Expansion & Hybrid Retrieval",
+        status: guardrailBlocked ? "skipped" : trace.sources.length > 0 ? "done" : "warning",
+        durationMs: trace.retrievalTelemetry 
+          ? Math.round(trace.retrievalTelemetry.queryExpansionDurationMs + trace.retrievalTelemetry.denseDurationMs + trace.retrievalTelemetry.sparseBm25DurationMs + trace.retrievalTelemetry.rrfFusionDurationMs + trace.retrievalTelemetry.rerankDurationMs)
+          : undefined,
+        body: (
+          <div className="space-y-2">
+            {trace.retrievalTelemetry && (
+              <>
+                <div className="rounded-lg border border-glass-border bg-surface p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-medium text-foreground">Query Expansion</span>
+                    <span className="font-mono text-[10px] text-muted">{Math.round(trace.retrievalTelemetry.queryExpansionDurationMs)}ms</span>
+                  </div>
+                  <ul className="list-disc pl-4 space-y-1 text-xs text-muted">
+                    {trace.retrievalTelemetry.expandedQueries.map((q, i) => (
+                      <li key={i}>{q}</li>
+                    ))}
+                  </ul>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-lg border border-glass-border bg-surface p-3">
+                    <span className="mb-1 block text-xs font-medium text-foreground">Dense Search (pgvector)</span>
+                    <span className="font-mono text-xs text-muted">{Math.round(trace.retrievalTelemetry.denseDurationMs)}ms</span>
+                  </div>
+                  <div className="rounded-lg border border-glass-border bg-surface p-3">
+                    <span className="mb-1 block text-xs font-medium text-foreground">Sparse Search (BM25)</span>
+                    <span className="font-mono text-xs text-muted">{Math.round(trace.retrievalTelemetry.sparseBm25DurationMs)}ms</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-md bg-surface-hover px-2 py-1 font-mono text-[10px] text-muted">
+                    RRF Fusion: {Math.round(trace.retrievalTelemetry.rrfFusionDurationMs)}ms
+                  </span>
+                  <span className="rounded-md bg-surface-hover px-2 py-1 font-mono text-[10px] text-muted">
+                    Cross-Encoder: {Math.round(trace.retrievalTelemetry.rerankDurationMs)}ms
+                  </span>
+                  <span className={`rounded-md px-2 py-1 font-mono text-[10px] font-medium ${trace.retrievalTelemetry.cragFallbackTriggered ? "bg-warning/10 text-warning" : "bg-success/10 text-success"}`}>
+                    Score: {trace.retrievalTelemetry.bestCrossScore.toFixed(2)} — {trace.retrievalTelemetry.cragFallbackTriggered ? "FAIL (CRAG Fallback)" : "PASS"}
+                  </span>
+                </div>
+              </>
+            )}
+            {!trace.retrievalTelemetry && (
+              <p className="rounded-lg border border-glass-border bg-surface/60 px-3 py-2 text-xs text-muted">
+                Retrieval telemetry not available for this run.
+              </p>
+            )}
+          </div>
+        ),
+      },
+      {
+        title: "Stage 1E — Research Agent & Tool Calls",
         status: guardrailBlocked ? "skipped" : trace.sources.length > 0 ? "done" : "warning",
         durationMs: stageDuration(1),
         body: (
-          <div className="space-y-2">
+          <div className="space-y-3">
+            {trace.toolCalls && trace.toolCalls.length > 0 && (
+              <div className="space-y-2">
+                <span className="text-xs font-medium text-muted">Tool Calls</span>
+                <div className="space-y-1">
+                  {trace.toolCalls.map((call, index) => (
+                    <div key={index} className="flex items-center justify-between rounded-lg border border-glass-border bg-surface px-3 py-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-medium text-accent">{call.tool}</span>
+                        {call.query && <span className="max-w-xs truncate text-muted">{call.query}</span>}
+                      </div>
+                      <span className="font-mono text-[10px] text-muted">{Math.round(call.durationMs)}ms</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
             <div className="space-y-2">
+              <span className="text-xs font-medium text-muted">ReAct Steps</span>
               {trace.researchSteps.map((step, index) => (
                 <ReactStep key={`${step.iteration}-${index}`} step={step} />
               ))}
             </div>
-            <div className="flex items-center gap-1.5 px-1 pt-1 text-xs font-medium text-muted">
+
+            <div className="flex items-center gap-1.5 px-1 pt-2 text-xs font-medium text-muted">
               <FileSearch className="h-3.5 w-3.5" />
               Sources ({trace.sources.length}) — child snippet → expanded parent
             </div>
@@ -86,8 +176,7 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
               </div>
             ) : (
               <p className="rounded-lg border border-glass-border bg-surface/60 px-3 py-2 text-xs text-muted">
-                No local chunks passed the CRAG threshold — the research agent fell back to web
-                search.
+                No local chunks passed the CRAG threshold — the research agent fell back to web search.
               </p>
             )}
           </div>

@@ -1,0 +1,26 @@
+Implementation Verification Notes
+
+1. Multi-Stage Pipeline Latency & Query Expansion Breakdown
+- Implemented `StageTiming`, `RetrievalTelemetry`, and `ToolCallTelemetry` types in `src/server/rag/types.ts` and `src/lib/chat/types.ts`.
+- Updated `src/server/rag/retrieval/hybrid.ts` to capture durations (ms) for Query Expansion, Dense Vector Search, Sparse BM25 Search, RRF Fusion, and Cross-Encoder Re-ranking using `performance.now()`.
+- Updated `src/server/rag/agents/orchestrator.ts` to attach the detailed `retrievalTelemetry` and individual `toolCalls` to the final `AgenticRagResponse`.
+- Updated `src/server/rag/chat-pipeline.ts` to emit specific SSE `stage_start`, `stage_end`, `retrieval_telemetry`, and `tool_call` events over the stream.
+- Re-architected `pipeline-visualizer.tsx` to display stages: Disambiguation & Guardrail (0A/0B), Query Expansion & Hybrid Retrieval (1A/1B/1C/1D), and Research Agent & Tool Calls (1E). It correctly highlights detailed timing and parameters as requested.
+- `pipeline-status.tsx` in the chat UI updated to accurately reflect real-time active stages ("Disambiguation", "Guardrail", "Query Expansion", "Dense/BM25 Search", "Research Tools", "Analyst", "Writer").
+
+2. Chat Input Send Button UX
+- Addressed in `chat-input.tsx`.
+- The stop button removes `text-destructive` and morphing conic gradient during streaming. It replaces them with a sleek dark-mode aligned design (`border-glass-border`, `bg-surface`), retaining the 40x40 dimension and hover states while featuring a subtle `fill-muted-foreground text-muted-foreground` square stop icon.
+
+3. Document Chunk Pagination & Navigation Fix
+- `source-browser.tsx`:
+  - Included a `chunkViewMode` toggle ("list" | "paginated") near the search bar.
+  - Linked the "Next" / "Previous" chunk navigation controls to a smooth scroll action: `document.getElementById('chunk-item-ID')?.scrollIntoView({ behavior: "smooth", block: "nearest" })` when in list mode.
+- `document-manager.tsx`:
+  - Added similar functionality inside the `DocumentPreviewModal`.
+  - Added the `chunkViewMode` toggle allowing preview of long chunks individually or inside a continuous list.
+  - "Load more chunks" fetches the next React Query infinite query page effectively updating the UI state organically while preserving current navigation position.
+
+Automated Tests
+- `pnpm typecheck` successfully passes on the entire codebase following type changes.
+- `pnpm test` (Vitest) successfully executed all 414 units, confirming pipeline flow logic remains unaffected and accurately relays events.
