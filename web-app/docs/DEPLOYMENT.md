@@ -12,18 +12,18 @@
 | Layer | Pick | Why (vs alternatives) |
 |---|---|---|
 | **Hosting** | **Vercel Hobby** | Next.js is a first-class citizen; `vercel.json` cron + deploy workflow already exist; 100 GB/mo bandwidth, 1M function invocations/mo, custom domains free. |
-| **Database** | **Neon Postgres (free)** | Postgres **with `pgvector`** — the schema REQUIRES it (`vector(768)` + HNSW indexes). 0.5 GB storage, scale-to-zero, **never pauses**. Supabase free (500 MB) also works but **pauses after 1 week inactivity** — bad for a public site. Aiven free (1 GB, pgvector) is a third option. |
+| **Database** | **Neon Postgres (free)** | Postgres **with `pgvector`** — the schema REQUIRES it (`vector(1024)` + HNSW indexes). 0.5 GB storage, scale-to-zero, **never pauses**. Supabase free (500 MB) also works but **pauses after 1 week inactivity** — bad for a public site. Aiven free (1 GB, pgvector) is a third option. |
 | **LLM** | **Google AI Studio (Gemini)** | `GEMINI_API_KEY` is the only *required* LLM key (`env.ts`). Free tier is generous. |
 | **LLM (primary)** | **Groq** | `GROQ_API_KEY` free tier (14.4k req/day) powers the default `llama-3.1-8b-instant`. |
 | **LLM (fallback)** | **Hugging Face** | `HF_TOKEN` optional; used for reranking/embeddings fallback. |
-| **Embeddings** | **Cloudflare Workers AI** | `@cf/baai/bge-base-en-v1.5` (768-dim) served by a tiny Worker (`embeddings-worker/`) — $0, serverless, same weights as the local corpus embed (§3). |
+| **Embeddings** | **Cloudflare Workers AI** | `@cf/baai/bge-m3` (1024-dim, multilingual) served by a tiny Worker (`embeddings-worker/`) — $0, serverless, same weights as the local corpus embed (§3). |
 | **File storage** | **None needed yet** | PDF uploads are parsed **in-memory** (4 MiB cap, `ingestPdf`) and stored as chunks in Postgres. Add **Cloudflare R2** (10 GB free, $0 egress) later if you keep raw files. |
 | **Domain** | **Cloudflare Registrar / Porkbun** | ~$10/yr at cost. Free interim: `<project>.vercel.app`. |
 | **Auth** | GitHub + Google OAuth | Free developer accounts. Email magic-link (Resend) optional. |
 | **Monitoring** | Langfuse (free cloud) | Optional tracing; `LANGFUSE_*` env vars already supported. |
 
-**Storage budget (0.5 GB Neon free):** a 768-dim vector ≈ 3 KB/row plus HNSW index overhead
-(≈ 9 KB/chunk end-to-end). Run the estimator for your own numbers:
+**Storage budget (0.5 GB Neon free):** a 1024-dim vector ≈ 4 KB/row plus HNSW index overhead
+(≈ 10 KB/chunk end-to-end). Run the estimator for your own numbers:
 
 ```bash
 pnpm storage:estimate                        # defaults: 1K users, 40K chunks, cache TTL 7d
@@ -85,7 +85,7 @@ value is fine on Neon free).
 ## 3. Production embedding architecture (seeded corpus, not re-embed)
 
 > The single most important deployment fact: **production never bulk-embeds the corpus.**
-> The vectors (768-dim, pgvector) live in Postgres tables — `documents`,
+> The vectors (1024-dim bge-m3, pgvector) live in Postgres tables — `documents`,
 > `document_parent_chunks`, `document_chunks`, `semantic_cache`. You embed the corpus
 > **once, offline**, ship the rows to Neon, and at runtime Vercel only embeds 1 query
 > vector per chat message + a handful per incremental admin add.
@@ -101,7 +101,9 @@ value is fine on Neon free).
 ### 3.2 Seed the corpus into Neon (one-time)
 
 Once migrations are applied on Neon (§2), transfer the vectors with
-`web-app/scripts/seed-corpus.sh` — **no re-embedding**:
+`web-app/scripts/seed-corpus.sh` — **no re-embedding**. The corpus is embedded
+locally with `BAAI/bge-m3` (1024-dim, multilingual) via `scripts/embed-server.py`,
+so both sides share the bge-m3 space:
 
 ```bash
 cd web-app
@@ -114,6 +116,9 @@ NEON_DATABASE_URL="postgresql://behoerden_app:...@ep-xxx-pooler.eu-central-1.aws
   ships `semantic_cache` (and bumps its id sequence).
 - **Deliberately excludes** auth, sessions, conversations, messages, `ingest_jobs` — prod
   keeps its own.
+- Handles the `document_chunks.id` + `document_parent_chunks.id` sequences: `pg_dump
+  --data-only` emits `setval` calls, and `--include-cache` bumps `semantic_cache_id_seq`
+  after loading.
 - Safety gates: aborts if the target already has corpus rows unless `--replace` is given;
   connection strings are redacted from all output; counts are verified local → target and
   a mismatch fails the run.
@@ -125,7 +130,7 @@ Each chat query embeds once (a single request) to search the seeded vectors — 
 Vercel does at runtime, a handful of requests/day at real usage. With
 `EMBEDDING_PROVIDER=hf`, the `HfEmbeddingClient` POSTs the query (prefixed per §3.5) to
 `HF_INFERENCE_URL` — the deployed Cloudflare embeddings worker (`embeddings-worker/`) —
-which runs `@cf/baai/bge-base-en-v1.5` via Workers AI and returns the 768-dim vector.
+which runs `@cf/baai/bge-m3` via Workers AI and returns the 1024-dim vector.
 
 ### 3.4 Incremental adds (admin → ingest queue → on-demand drain)
 
@@ -151,18 +156,19 @@ already open. `drainPendingJobs()` no-ops on an empty queue (one cheap count que
 
 ### 3.5 Provider decision
 
-The schema pins `vector(768)`, which rules out models like bge-large (1024-dim — would
-require a migration + full re-embed). Options that fit:
+The schema pins `vector(1024)`, the bge-m3 space (migrated from 768-dim bge-base in
+`20260805000002_bge_m3_1024_dim` — the English-only bge-base scored the German corpus
+poorly and forced CRAG web-search fallbacks). Options that fit:
 
 | Option | Dim | Fits schema | Runs on Vercel? | Notes |
 |---|---|---|---|---|
-| **Cloudflare Workers AI (chosen)** | `@cf/baai/bge-base-en-v1.5` = 768 | ✅ | ✅ via a tiny Worker (`embeddings-worker/`) | $0 (10k neurons/day free ≈ millions of query embeds). Same BGE weights as the local corpus embed → same vector space. Token-auth'd endpoint. |
-| **Gemini** | 768 (client sets `outputDimensionality: 768`) | ✅ | ✅ natively | Works out of the box with `GEMINI_API_KEY`; the previous default. Free daily quota made a one-time 3,000-request corpus seed take ~10–12 days — fine for queries, painful for the bulk pass. |
-| **HF Inference** | 768 (bge-base) | ✅ | ✅ (Vercel's network is fine; the local HTTP-000 block was machine-specific) | 30k req/month ceiling — workable, but Cloudflare's free tier is higher on the same model. |
-| **Ollama (local)** | nomic-embed-text = 768 | ✅ | ❌ needs a **self-hosted endpoint reachable from Vercel** (small VM/Railway/Fly) | $0/unlimited, best quality, but an always-on box to babysit. |
+| **Cloudflare Workers AI (chosen)** | `@cf/baai/bge-m3` = 1024 | ✅ | ✅ via a tiny Worker (`embeddings-worker/`) | $0 (10k neurons/day free ≈ millions of query embeds). Multilingual — covers the German corpus. Same bge-m3 weights as the local corpus embed → same vector space. Token-auth'd endpoint. |
+| **Gemini** | 768 (client sets `outputDimensionality: 768`) | ❌ different space | ✅ natively | Works, but its vectors live in Gemini's 768-dim space — incompatible with the bge-m3 corpus without a full re-embed. |
+| **HF Inference** | 1024 (bge-m3) | ✅ | ✅ (Vercel's network is fine; the local HTTP-000 block was machine-specific) | 30k req/month ceiling — workable, but Cloudflare's free tier is higher on the same model. |
+| **Ollama (local)** | bge-m3 = 1024 | ✅ | ❌ needs a **self-hosted endpoint reachable from Vercel** (small VM/Railway/Fly) | $0/unlimited, best quality, but an always-on box to babysit. |
 
-**Decision: Cloudflare bge-base — the same model on both sides.** The corpus is embedded
-locally with `BAAI/bge-base-en-v1.5` via `web-app/scripts/embed-server.py` (FastAPI +
+**Decision: Cloudflare bge-m3 — the same model on both sides.** The corpus is embedded
+locally with `BAAI/bge-m3` via `web-app/scripts/embed-server.py` (FastAPI +
 sentence-transformers, MPS GPU), and queries are embedded on Vercel by the deployed worker
 running the same weights. Same model = same vector space — the non-negotiable rule for
 pgvector cosine retrieval (a mix, e.g. Ollama corpus + Gemini queries, returns garbage
@@ -175,15 +181,16 @@ Two sides, two prefixes (BGE is asymmetric):
   `QUERY_EMBEDDING_PREFIX` — `"Represent this sentence for searching relevant passages: "`.
   Getting this backwards silently degrades retrieval.
 
-**One more same-space requirement — pooling.** The local sentence-transformers model's
-`1_Pooling` config is `pooling_mode_cls_token: true` (CLS). Cloudflare's
-`@cf/baai/bge-base-en-v1.5` **defaults to `mean` pooling**, and the two are documented as
-incompatible — so the worker passes `pooling: "cls"` explicitly (`embeddings-worker/`).
-If you ever change pooling on one side, change it on the other **and re-seed** (`--replace`).
+**Pooling:** bge-m3 pools internally (CLS) and takes no `pooling` parameter — the worker
+passes only `{ text }`, and the local server pools the same way, so both sides agree with
+no extra config. (For bge-base this was a real trap: Cloudflare defaulted to `mean` while
+the local model was CLS — the worker passed `pooling: "cls"` explicitly. bge-m3 removes
+that footgun.) If you ever change the model on one side, change it on the other **and
+re-seed** (`--replace`).
 
 Wiring (Vercel env): `EMBEDDING_PROVIDER=hf`,
 `HF_INFERENCE_URL=https://<worker>.workers.dev`, `HF_TOKEN=<worker EMBED_TOKEN>`,
-`EMBEDDING_MODEL=BAAI/bge-base-en-v1.5`. The worker itself is token-auth'd
+`EMBEDDING_MODEL=BAAI/bge-m3`. The worker itself is token-auth'd
 (constant-time compare) — an open `/pipeline/feature-extraction` would be free compute for
 anyone on the internet.
 

@@ -3,7 +3,7 @@
 # seed-corpus.sh — one-time corpus transfer: local docker Postgres → Neon.
 #
 # Why: the vector corpus (documents + parent chunks + child chunks with
-# 768-dim embeddings) is the expensive thing to produce. Production never
+# 1024-dim bge-m3 embeddings) is the expensive thing to produce. Production never
 # needs to re-embed it: embed once locally (or wherever quota allows), then
 # ship the vectors with this script. Auth, sessions, conversations, messages
 # and ingest_jobs are intentionally NOT transferred — prod keeps its own.
