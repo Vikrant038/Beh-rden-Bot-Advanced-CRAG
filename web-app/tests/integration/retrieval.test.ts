@@ -3,6 +3,7 @@ import { HybridRetriever } from "@/server/rag/retrieval/hybrid";
 import type { EmbeddingClient } from "@/server/embeddings/client";
 import type { Reranker } from "@/server/rag/retrieval/reranker";
 import type { Chunk } from "@/server/rag/types";
+import { QUERY_EMBEDDING_PREFIX } from "@/server/rag/types";
 
 vi.mock("@/server/db", async () => {
   const prisma = {
@@ -35,7 +36,7 @@ const mockEmbeddingClient: EmbeddingClient = {
   embedQuery: vi.fn(async (query: string) => {
     return Array.from({ length: 3 }, (_, i) => query.length + i * 0.1);
   }),
-  embedTexts: vi.fn(async () => []),
+  embedTexts: vi.fn(async (texts: string[]) => texts.map(() => [0.1, 0.2, 0.3])),
 };
 
 const mockReranker: Reranker = {
@@ -118,5 +119,20 @@ describe("HybridRetriever (pgvector + BM25 + RRF)", () => {
   it("should expose embedQuery for cache lookups", async () => {
     const vector = await retriever.embedQuery("test query");
     expect(Array.isArray(vector)).toBe(true);
+  });
+
+  it("embeds all sub-queries in one batched request (not per-query calls)", async () => {
+    await retriever.retrieve("blocked account visa", [
+      "blocked account visa",
+      "Sperrkonto Visum",
+    ]);
+
+    expect(mockEmbeddingClient.embedTexts).toHaveBeenCalledTimes(1);
+    expect(mockEmbeddingClient.embedTexts).toHaveBeenCalledWith([
+      `${QUERY_EMBEDDING_PREFIX}blocked account visa`,
+      `${QUERY_EMBEDDING_PREFIX}Sperrkonto Visum`,
+    ]);
+    expect(mockEmbeddingClient.embedQuery).not.toHaveBeenCalled();
+    expect(mockedDenseRetrieve).toHaveBeenCalledTimes(2);
   });
 });

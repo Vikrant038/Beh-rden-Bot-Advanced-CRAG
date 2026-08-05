@@ -8,6 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning:
 
 ### Added
 
+- **Bilingual query expansion + retrieval latency optimization (Phase J):**
+  `generateSubQueries` now returns a deterministic `2+2` EN/DE alternative split via a structured
+  JSON response (one LLM call), and `HybridRetriever.retrieve` embeds **all** sub-queries in a
+  **single batched** request to the Cloudflare worker (query-embedding only) and runs the dense
+  pgvector lookups in **parallel**. Rationale: the corpus is ~2/3 English / ~1/3 German and BM25 is
+  lexical, so English-only sub-queries left the German half unmatched and tripped CRAG web fallback;
+  batching collapses ~6 sequential worker round-trips per turn to 1. See
+  `docs/status/phase-j-bilingual-retrieval-latency.md`.
+
 - **Phase 4 test coverage:** unit tests for `pdf-parser` (empty buffer, image-only,
   >200 pages, parse failure), scraper content-type rejection (JSON/PDF/missing header,
   charset acceptance, Content-Length + decoded-body caps), `chunkParentChild`

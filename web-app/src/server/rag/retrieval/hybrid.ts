@@ -3,6 +3,7 @@ import {
   CRAG_THRESHOLD,
   DEFAULT_MIN_SIMILARITY,
   DENSE_TOP_K,
+  QUERY_EMBEDDING_PREFIX,
   RERANK_TOP_K,
   RRF_K,
   SPARSE_TOP_K,
@@ -63,16 +64,29 @@ export class HybridRetriever {
     const denseRankings: Chunk[][] = [];
     const sparseRankings: Chunk[][] = [];
 
-    for (const subQuery of queries) {
-      const queryVector = await this.options.embeddingClient.embedQuery(subQuery);
+    // Latency (2026-08-05): embed ALL sub-queries in ONE HTTP request — the
+    // Cloudflare worker / HF inference contract accepts `{"inputs": [...]}` and
+    // returns vectors in input order — then run the per-query dense pgvector
+    // lookups concurrently. Previously each sub-query was a sequential
+    // embedQuery() round-trip followed by a sequential dense query, i.e. N ×
+    // (RTT + inference + DB latency). The BGE query prefix is applied per query
+    // so vectors stay in the corpus space (parity with embedQuery()).
+    const queryVectors = await this.options.embeddingClient.embedTexts(
+      queries.map((subQuery) => `${QUERY_EMBEDDING_PREFIX}${subQuery.trim()}`),
+    );
 
-      const denseResults = await denseRetrieve(queryVector, {
-        topK: DENSE_TOP_K,
-        minSimilarity: DEFAULT_MIN_SIMILARITY,
-      });
+    const perQuery = await Promise.all(
+      queries.map(async (subQuery, index) => {
+        const denseResults = await denseRetrieve(queryVectors[index], {
+          topK: DENSE_TOP_K,
+          minSimilarity: DEFAULT_MIN_SIMILARITY,
+        });
+        const sparseResults = bm25.search(subQuery, SPARSE_TOP_K);
+        return { denseResults, sparseResults };
+      }),
+    );
+    for (const { denseResults, sparseResults } of perQuery) {
       denseRankings.push(denseResults);
-
-      const sparseResults = bm25.search(subQuery, SPARSE_TOP_K);
       sparseRankings.push(sparseResults);
     }
 
