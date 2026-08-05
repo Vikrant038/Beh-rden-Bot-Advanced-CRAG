@@ -19,6 +19,15 @@ export const authConfig = {
       clientSecret: env.GOOGLE_CLIENT_SECRET,
     }),
   ],
+  // NextAuth v5 reads AUTH_SECRET / AUTH_URL directly from process.env and an
+  // EMPTY value (dashboards store unset vars as "") is NOT nullish — so it
+  // would override the validated NEXTAUTH_SECRET with "" and break OAuth
+  // callbacks with error=Configuration. Pin the values explicitly so the
+  // ambient AUTH_* names are ignored entirely.
+  secret: env.NEXTAUTH_SECRET,
+  // trustHost lets Vercel's request Host header be used instead of requiring
+  // a hardcoded AUTH_URL, which removes the malformed-AUTH_URL crash class.
+  trustHost: true,
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   callbacks: {
