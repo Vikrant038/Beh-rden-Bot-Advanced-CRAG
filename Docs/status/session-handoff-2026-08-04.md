@@ -76,7 +76,13 @@ b8e24e0 style(web-app): apply prettier to satisfy the CI format gate
 891e041 fix(web-app): repair E2E mocks so CI can run Playwright for the first time
 c58da89 test(web-app): close the coverage gate (functions 75% → 80%)
 559cc95 fix(web-app): reconcile live DB with schema.prisma (enums, indexes, defaults)
+c98caeb docs: add session handoff, migration policy, and two-compose DB setup notes
 ```
+
+**Post-handoff docs commit (2026-08-05):** `c98caeb` added `MIGRATION_POLICY.md` (in
+`web-app/prisma/migrations/`), `Docs/Postgres_Docker_Setup.md`, and this handoff doc. All four
+workflows ran on it — CI ✅ and E2E ✅ green, security 🔴 and deploy 🔴 (same two causes below,
+verified on `c98caeb`: run IDs 30963711418 / 30963711384).
 
 ---
 
@@ -86,18 +92,25 @@ c58da89 test(web-app): close the coverage gate (functions 75% → 80%)
 |----------|--------|-------|-----|
 | Web App CI | ✅ green | — | — |
 | Web App E2E | ✅ green | — | — |
-| Web App Security Scan | 🔴 red | Semgrep gate: 28 findings, **all WARNING, 0 real vulnerabilities** (22 mutable action tags, 2 React false positives `top-questions.tsx`/`source-browser.tsx`, 1 `api.py` wildcard CORS, 1 memory-pinning heuristic, 2 legacy compose hardening) | Optional 15-min: scope `api.py` CORS + SHA-pin action tags, or add `nosemgrep` on the 2 provably-safe lines, or log as security backlog — nothing blocks shipping |
-| Web App Deploy (Vercel) | 🔴 red | `Error: Input required and not supplied: vercel-token` — the `VERCEL_TOKEN` secret isn't configured in the repo's GitHub secrets | Add `VERCEL_TOKEN` (and `VERCEL_ORG_ID`/`VERCEL_PROJECT_ID` if not set) in GitHub → Settings → Secrets. Not a code issue |
+| Web App Security Scan | 🔴 red | **Fails at the `SAST (Semgrep)` job** (run 30963711418): `semgrep scan --config=auto --error` → 28 findings, **all WARNING, 0 real vulnerabilities** (22 mutable action tags, 2 React false positives `top-questions.tsx`/`source-browser.tsx`, 1 `api.py` wildcard CORS, 1 memory-pinning heuristic, 2 legacy compose hardening). **Full triage + fix/suppress decisions now tracked in `web-app/docs/security/semgrep-backlog.md`** (uncommitted). Gitleaks, CodeQL, SBOM pass. | Optional 15-min: scope `api.py` CORS + SHA-pin action tags, or add `nosemgrep` on the provably-safe lines per the backlog — nothing blocks shipping |
+| Web App Deploy (Vercel) | 🔴 red | **Fails at the `Deploy to Vercel` step** (run 30963711384): `Error: Input required and not supplied: vercel-token` — the `VERCEL_TOKEN` secret isn't configured in the repo's GitHub secrets | Add `VERCEL_TOKEN` (and `VERCEL_ORG_ID`/`VERCEL_PROJECT_ID` if not set) in GitHub → Settings → Secrets. Not a code issue |
 
 ---
 
 ## Open items / next steps (in priority order)
 
-1. **Add `VERCEL_TOKEN` secret** — deploy workflow is a config gap, not a code gap.
-2. **Decide on Semgrep backlog** — triage done (see `docs/status/` reasoning in session): zero real
-   vulns; fix-or-suppress is a 15-minute decision.
-3. **Background queue** — the enqueue+202 pattern ships now; replace Vercel-Cron polling with
-   BullMQ/Inngest for large-PDF ingestion before it becomes a bottleneck.
+1. **Add `VERCEL_TOKEN` secret** — deploy workflow is a config gap, not a code gap (verified failing at the `Deploy to Vercel` step).
+2. **Semgrep backlog is written** — `web-app/docs/security/semgrep-backlog.md` lists all 28 findings
+   with severity, file:line, and fix/suppress decision. Commit it; fix-or-suppress is a 15-minute
+   decision (zero real vulns).
+3. **Resumable ingest queue (corrected)** — the enqueue+202 pattern ships, but the **real** gap found
+   by code inspection: the cron worker's 50 s time budget is checked only *between* jobs, so a large
+   PDF (parse + thousands of child-chunk embeds, Gemini batches of 100) gets killed at the 60 s cap
+   mid-job, restarts from scratch after lease expiry, and fails permanently after 3 attempts.
+   **BullMQ is NOT recommended** — it requires Redis (reintroduces the removed dependency) and its
+   worker still sits inside the serverless 60 s cap. The fit is making the Postgres queue **resumable**
+   (per-batch embed+store with a progress cursor, mid-job budget check) — no new infra, identical on
+   docker/Vercel. See the analysis in-session; implementation pending user go-ahead.
 4. **No DB reconciliation needed** — verified: local DB records only new 14-digit names, no cloud DB
    is configured in the repo or deploy path. Only risk is a hand-migrated Neon prod DB (unlikely);
    recipe documented in session if ever hit (`migrate resolve --rolled-back` + `--applied`).
