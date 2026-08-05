@@ -22,7 +22,7 @@ const mockedQueryRaw = vi.mocked(prisma.$queryRaw);
 const mockedFindMany = vi.mocked(prisma.semanticCacheEntry.findMany);
 const mockedDeleteMany = vi.mocked(prisma.semanticCacheEntry.deleteMany);
 
-function makeVector(dim = 768, value = 0.1): number[] {
+function makeVector(dim = 1024, value = 0.1): number[] {
   return Array.from({ length: dim }, (_, i) => value + i * 0.001);
 }
 

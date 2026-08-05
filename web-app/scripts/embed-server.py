@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
 """
-embed-server.py — local sentence-transformers embedding server (bge-base).
+embed-server.py — local sentence-transformers embedding server (bge-m3).
 
 Speaks the exact contract of the web-app's `HfEmbeddingClient`, so corpus
 ingestion can run through sentence-transformers locally with NO web-app code
 changes: the client POSTs to `{url}/pipeline/feature-extraction/{model}` with
 `{"inputs": [...], "options": {"wait_for_model": true}}` and expects
-`number[][]` (768-dim) back. Point `HF_INFERENCE_URL` at this server and set
+`number[][]` (1024-dim) back. Point `HF_INFERENCE_URL` at this server and set
 a non-empty `HF_TOKEN` (any value) when running `pnpm ingest`.
 
-Same model weights as Cloudflare's `@cf/baai/bge-base-en-v1.5` (BAAI/bge-base-
-en-v1.5) → the corpus and query vectors live in the SAME space, which is what
-pgvector cosine retrieval requires.
+Same model weights as Cloudflare's `@cf/baai/bge-m3` (BAAI/bge-m3) → the
+corpus and query vectors live in the SAME space, which is what pgvector cosine
+retrieval requires. BGE-M3 is multilingual, so the German-language corpus is
+embedded properly (bge-base-en-v1.5 was English-only and scored German text
+poorly, which forced CRAG web-search fallbacks).
 
 Usage:
-    .venv/bin/python web-app/scripts/embed-server.py [--port 8765] [--model BAAI/bge-base-en-v1.5]
+    .venv/bin/python web-app/scripts/embed-server.py [--port 8765] [--model BAAI/bge-m3]
 
-Defaults: port 8765, model BAAI/bge-base-en-v1.5, device = MPS if available.
+Defaults: port 8765, model BAAI/bge-m3, device = MPS if available.
 """
 
 from __future__ import annotations
@@ -65,7 +67,7 @@ async def healthz() -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--model", default="BAAI/bge-base-en-v1.5")
+    parser.add_argument("--model", default="BAAI/bge-m3")
     parser.add_argument("--host", default="127.0.0.1")
     args = parser.parse_args()
 

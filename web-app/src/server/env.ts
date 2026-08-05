@@ -36,7 +36,7 @@ const serverEnvSchema = z.object({
     normalizeUrl,
     z.string().url().default("https://api-inference.huggingface.co"),
   ),
-  RERANKER_MODEL: z.string().default("BAAI/bge-reranker-base"),
+  RERANKER_MODEL: z.string().default("BAAI/bge-reranker-v2-m3"),
   /**
    * Cross-encoder endpoint — deliberately SEPARATE from HF_INFERENCE_URL.
    * HF_INFERENCE_URL now points at the Cloudflare embeddings worker, which
@@ -50,7 +50,7 @@ const serverEnvSchema = z.object({
   /** Token for the reranker endpoint; falls back to HF_TOKEN when unset. */
   RERANKER_TOKEN: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
-  EMBEDDING_MODEL: z.string().default("BAAI/bge-base-en-v1.5"),
+  EMBEDDING_MODEL: z.string().default("BAAI/bge-m3"),
   /** Which embed client the app constructs by default: "gemini" or "hf".
    * The corpus is embedded with BAAI/bge-base-en-v1.5 (same-space rule), so
    * "hf" is the safe default — queries must use the same model as the corpus.

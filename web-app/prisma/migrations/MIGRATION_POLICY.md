@@ -8,7 +8,9 @@ rules below are what keep the live database reconcilable with `schema.prisma`.
 
 ## 1. The intentional HNSW divergence (do not "fix" it)
 
-`schema.prisma` declares vector columns as `Unsupported("vector(768)")`. Prisma
+`schema.prisma` declares vector columns as `Unsupported("vector(1024)")` (BGE-M3
+embedding space since `20260805000002_bge_m3_1024_dim`; previously `vector(768)`
+for bge-base-en-v1.5). Prisma
 **cannot model an index on an `Unsupported` column** — there is no `@@index`
 syntax that produces an HNSW index. As a result, `prisma migrate diff` against
 a correctly-provisioned database *always* proposes dropping the HNSW indexes
@@ -19,7 +21,7 @@ below. **That proposal is wrong and must never be applied.**
 | Index | Column | Status | Notes |
 |---|---|---|---|
 | `document_chunks_embedding_idx` | `document_chunks.embedding` | **KEEP — real search index** | Created in `20260731000000_init` (`USING hnsw ... vector_cosine_ops`). Used by `findSimilarChunks` via the `<=>` cosine operator. |
-| `idx_semantic_cache_query_vector_hnsw` | `semantic_cache.queryVector` | **KEEP — real search index** | Created in `20260802000002_add_semantic_cache_hnsw_index` (`WITH (m = 16, ef_construction = 64)`). Used by `findSimilarCacheEntry` via `<=>`. |
+| `idx_semantic_cache_query_vector_hnsw` | `semantic_cache.queryVector` | **KEEP — real search index** | Created in `20260802000002_add_semantic_cache_hnsw_index` (`WITH (m = 16, ef_construction = 64)`), rebuilt in `20260805000002_bge_m3_1024_dim` after the column widened to `vector(1024)`. Used by `findSimilarCacheEntry` via `<=>`. |
 | `semantic_cache_queryVector_idx` | `semantic_cache.queryVector` | **DROPPED** | Created in `_init`; duplicate of `idx_semantic_cache_query_vector_hnsw` on the same column. Removed in `20260804000003_reconcile_schema_drift`. |
 
 ### Rules
@@ -67,9 +69,14 @@ owned by the migrator; grants must be re-asserted if privileges are lost.
    to "make them rerunnable" — that turns migrations into data-destroyers. For a
    broken dev DB, use `prisma migrate reset`, not hand-rolled drops.
 4. **`DROP INDEX IF EXISTS`** is fine and encouraged when removing an index.
-5. **Vector columns stay `Unsupported("vector(768)")` in `schema.prisma`.** Do
+5. **Vector columns stay `Unsupported("vector(1024)")` in `schema.prisma`.** Do
    not convert them to a supported Prisma type; the type is a load-bearing
-   contract with the embedding layer.
+   contract with the embedding layer (BGE-M3, 1024-dim).
+8. **Approved destructive exception (2026-08-05):** `20260805000002_bge_m3_1024_dim`
+   deliberately drops the corpus tables (documents / document_parent_chunks /
+   document_chunks) to re-embed from scratch under a new embedding model. This
+   was an explicit, one-time data migration — do not treat it as a precedent
+   for baking `DROP TABLE` into future migrations.
 6. **Never edit an already-applied migration.** If a migration is wrong on
    environments that already ran it, write a new corrective migration (that is
    what `20260804000003_reconcile_schema_drift` is).
@@ -122,5 +129,6 @@ wraps it), so a failure rolls back everything.
 
 - `20260804000003_reconcile_schema_drift/migration.sql` — worked example (enums, defaults, duplicate-HNSW removal, btree additions)
 - `20260802000002_add_semantic_cache_hnsw_index/migration.sql` — HNSW tuning notes (`m`, `ef_construction`, CONCURRENTLY caveat)
+- `20260805000002_bge_m3_1024_dim/migration.sql` — approved destructive exception: corpus re-embed under BGE-M3 (768→1024-dim)
 - `docs/status/session-handoff-2026-08-04.md` — session state; drift analysis history
 - `web-app/docker/postgres-init.sql` — PoLP roles + extension bootstrap

@@ -15,7 +15,7 @@
 
 import type { PrismaClient } from "@prisma/client";
 import type { Chunk } from "@/server/rag/types";
-import { DEFAULT_MIN_SIMILARITY, DENSE_TOP_K } from "@/server/rag/types";
+import { DEFAULT_MIN_SIMILARITY, DENSE_TOP_K, EMBEDDING_DIM } from "@/server/rag/types";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -59,8 +59,8 @@ export function toVectorLiteral(vector: number[]): string {
   if (!Array.isArray(vector) || vector.length === 0) {
     throw new Error("Invalid vector: array is empty or not an array");
   }
-  if (vector.length !== 768) {
-    throw new Error(`Invalid vector dimension: expected 768, got ${vector.length}`);
+  if (vector.length !== EMBEDDING_DIM) {
+    throw new Error(`Invalid vector dimension: expected ${EMBEDDING_DIM}, got ${vector.length}`);
   }
   for (let i = 0; i < vector.length; i++) {
     if (typeof vector[i] !== "number" || !Number.isFinite(vector[i])) {

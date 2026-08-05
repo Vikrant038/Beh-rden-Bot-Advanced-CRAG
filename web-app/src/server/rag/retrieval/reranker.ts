@@ -22,7 +22,7 @@ interface RerankResponse {
  */
 export class HfReranker implements Reranker {
   constructor(
-    private readonly model: string = env.RERANKER_MODEL ?? "BAAI/bge-reranker-base",
+    private readonly model: string = env.RERANKER_MODEL ?? "BAAI/bge-reranker-v2-m3",
     private readonly inferenceUrl: string = env.RERANKER_URL,
     private readonly apiToken: string = env.RERANKER_TOKEN ?? env.HF_TOKEN ?? "",
   ) {}

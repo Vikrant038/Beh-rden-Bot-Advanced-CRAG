@@ -4,9 +4,13 @@
  * Speaks the exact contract of the web-app's HfEmbeddingClient so the TS side
  * needs no custom client: it POSTs to
  * `/pipeline/feature-extraction/{model}` with `{"inputs": [...]}` and expects
- * `number[][]` (768-dim) back. Vercel points `HF_INFERENCE_URL` at this
+ * `number[][]` (1024-dim) back. Vercel points `HF_INFERENCE_URL` at this
  * worker's URL for the QUERY side; the CORPUS side embeds via the local
  * sentence-transformers server (same model → same space).
+ *
+ * Model: @cf/baai/bge-m3 — multilingual (covers the German corpus). The local
+ * corpus server must load the same BAAI/bge-m3 weights so query and corpus
+ * vectors live in one space (bge-m3 pools via CLS on both sides).
  *
  * Auth: bearer token via `EMBED_TOKEN` secret. Rejects anything without it —
  * otherwise this endpoint is free compute for anyone on the internet.
@@ -15,22 +19,13 @@ export interface Env {
   AI: {
     run(
       model: string,
-      inputs: { text: string | string[]; pooling?: "mean" | "cls" },
+      inputs: { text: string | string[] },
     ): Promise<{ shape: number[]; data: number[][] }>;
   };
   EMBED_TOKEN: string;
 }
 
-const MODEL = "@cf/baai/bge-base-en-v1.5";
-
-/**
- * Pooling must match the corpus side. The local sentence-transformers server
- * (scripts/embed-server.py) loads BAAI/bge-base-en-v1.5 whose 1_Pooling config
- * is `pooling_mode_cls_token: true` (CLS). Cloudflare's default is `mean`;
- * the docs explicitly state cls-pooled and mean-pooled embeddings are NOT
- * compatible. Forcing `cls` keeps query vectors in the corpus's space.
- */
-const POOLING = "cls" as const;
+const MODEL = "@cf/baai/bge-m3";
 
 /** Constant-time string equality (prevents timing side channels on the token). */
 function timingSafeEqual(a: string, b: string): boolean {
@@ -76,7 +71,8 @@ export default {
 
     const texts = body.inputs as string[];
     // Workers AI returns { shape, data } for embedding models — unwrap data.
-    const result = await env.AI.run(MODEL, { text: texts, pooling: POOLING });
+    // bge-m3 takes `text` (string | string[]) and pools with CLS internally.
+    const result = await env.AI.run(MODEL, { text: texts });
     const vectors = result.data;
 
     return Response.json(vectors);

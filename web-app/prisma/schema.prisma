@@ -233,7 +233,7 @@ model DocumentChunk {
   sourceName String
   sourceUrl  String
   text       String
-  embedding  Unsupported("vector(768)")
+  embedding  Unsupported("vector(1024)")
   createdAt  DateTime            @default(now())
 
   document Document               @relation(fields: [documentId], references: [id], onDelete: Cascade)
@@ -300,7 +300,7 @@ model SemanticCacheEntry {
   id           Int      @id @default(autoincrement())
   queryHash    String   @unique
   queryText    String
-  queryVector  Unsupported("vector(768)")
+  queryVector  Unsupported("vector(1024)")
   responseJson Json
   parentDocIds String[]
   createdAt    DateTime @default(now())

@@ -47,7 +47,7 @@ export interface VisaCalculation {
   summary: string;
 }
 
-export const EMBEDDING_DIM = 768;
+export const EMBEDDING_DIM = 1024;
 export const DEFAULT_MIN_SIMILARITY = 0.2;
 export const RRF_K = 60;
 export const DENSE_TOP_K = 15;
