@@ -23,8 +23,8 @@ interface RerankResponse {
 export class HfReranker implements Reranker {
   constructor(
     private readonly model: string = env.RERANKER_MODEL ?? "BAAI/bge-reranker-base",
-    private readonly inferenceUrl: string = env.HF_INFERENCE_URL,
-    private readonly apiToken: string = env.HF_TOKEN ?? "",
+    private readonly inferenceUrl: string = env.RERANKER_URL,
+    private readonly apiToken: string = env.RERANKER_TOKEN ?? env.HF_TOKEN ?? "",
   ) {}
 
   async rerank(query: string, chunks: Chunk[], topK: number = RERANK_TOP_K): Promise<Chunk[]> {
@@ -84,7 +84,10 @@ function extractScores(data: unknown, expectedLength: number): number[] {
     }
 
     if (Array.isArray(first) && typeof first[0] === "number") {
-      return (first as number[]).slice(0, expectedLength);
+      // Nested numeric arrays: one inner array per input pair ([[0.1], [0.9]]).
+      // Take the first score of each row — previously this returned only the
+      // first row, so every chunk after index 0 got undefined → NaN crossScore.
+      return (data as number[][]).map((row) => row[0] ?? 0).slice(0, expectedLength);
     }
 
     if (Array.isArray(first) && first[0] && typeof first[0] === "object") {
@@ -107,8 +110,16 @@ function sigmoid(value: number): number {
 }
 
 function fallbackRerank(query: string, chunks: Chunk[], topK: number): Chunk[] {
-  return chunks.slice(0, topK).map((chunk) => ({
+  const scored = chunks.slice(0, topK).map((chunk) => ({
     ...chunk,
-    crossScore: chunk.crossScore ?? chunk.rrfScore ?? chunk.similarityScore ?? 0.75,
+    // Prefer the dense cosine similarity — a REAL semantic score on a
+    // comparable scale — over the RRF rank score. RRF values are 1/(60+rank)
+    // (≈0.01–0.05), which is NOT a similarity and is always below the CRAG
+    // threshold (0.50), so using it here silently forced web-search fallback
+    // for every query whenever the reranker was unavailable.
+    crossScore: chunk.crossScore ?? chunk.similarityScore ?? 0.75,
   }));
+  // Same contract as the success path: sorted by crossScore descending, so
+  // reranked[0].crossScore is a true best-score for the CRAG gate.
+  return scored.sort((a, b) => (b.crossScore ?? 0) - (a.crossScore ?? 0));
 }

@@ -31,6 +31,18 @@ const serverEnvSchema = z.object({
   HF_TOKEN: z.string().optional(),
   HF_LLM_MODEL: z.string().default("meta-llama/Llama-3.1-8B-Instruct"),
   RERANKER_MODEL: z.string().default("BAAI/bge-reranker-base"),
+  /**
+   * Cross-encoder endpoint — deliberately SEPARATE from HF_INFERENCE_URL.
+   * HF_INFERENCE_URL now points at the Cloudflare embeddings worker, which
+   * only serves /pipeline/feature-extraction (it cannot run bge-reranker).
+   * The reranker must always target a real text-classification endpoint.
+   */
+  RERANKER_URL: z.preprocess(
+    normalizeUrl,
+    z.string().url().default("https://api-inference.huggingface.co"),
+  ),
+  /** Token for the reranker endpoint; falls back to HF_TOKEN when unset. */
+  RERANKER_TOKEN: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   EMBEDDING_MODEL: z.string().default("BAAI/bge-base-en-v1.5"),
   /** Which embed client the app constructs by default: "gemini" or "hf". */
