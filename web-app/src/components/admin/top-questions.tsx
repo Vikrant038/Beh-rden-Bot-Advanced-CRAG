@@ -29,7 +29,9 @@ export function TopQuestions({ queries, loading }: TopQuestionsProps) {
         <p className="py-4 text-sm text-muted">No queries recorded yet.</p>
       ) : (
         <ol className="space-y-3">
-          {queries.map((question, index) => (
+          {queries.map((question, index) => {
+            return (
+            // nosemgrep: javascript.express.security.injection.raw-html-format.raw-html-format — question.query is a React key + escaped text child, never dangerouslySetInnerHTML (see semgrep-backlog.md).
             <li key={`${question.query}-${index}`} className="flex items-center gap-3">
               <span className="w-5 shrink-0 text-xs font-medium tabular-nums text-muted">
                 {index + 1}
@@ -43,7 +45,8 @@ export function TopQuestions({ queries, loading }: TopQuestionsProps) {
               </div>
               <span className="shrink-0 text-xs tabular-nums text-muted">{question.count}×</span>
             </li>
-          ))}
+            );
+          })}
         </ol>
       )}
     </div>

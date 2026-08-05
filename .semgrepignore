@@ -1,0 +1,8 @@
+# Semgrep ignore rules — see web-app/docs/security/semgrep-backlog.md.
+#
+# Root docker-compose.yml (ankane/pgvector) is the dev-only compose for the
+# Python/Streamlit pipeline. no-new-privileges / writable-filesystem-service
+# hardening on a local database container with a bind-mounted volume is
+# low-value and can cause spurious boot failures. Documented in
+# Docs/Postgres_Docker_Setup.md.
+/docker-compose.yml

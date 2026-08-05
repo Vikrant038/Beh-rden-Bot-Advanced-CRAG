@@ -43,6 +43,7 @@ function highlightMatches(text: string, terms: string): React.ReactNode {
     return text;
   }
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp — query is regex-escaped above, so the pattern is a literal (linear-time, no ReDoS); see semgrep-backlog.md.
   const parts = text.split(new RegExp(`(${escaped})`, "ig"));
   return parts.map((part, index) =>
     part.toLowerCase() === query.toLowerCase() ? (
