@@ -13,8 +13,8 @@ export interface EmbeddingClient {
 
 /**
  * Embedding client backed by the Hugging Face Inference API
- * (feature-extraction pipeline). 768-dim BGE embeddings.
- * Option B (Transformers.js) can replace this later without changing callers.
+ * (feature-extraction pipeline). 1024-dim BGE-M3 embeddings (multilingual —
+ * matches the corpus space; see the Cloudflare embeddings worker).
  */
 export class HfEmbeddingClient implements EmbeddingClient {
   constructor(
@@ -89,7 +89,7 @@ export class HfEmbeddingClient implements EmbeddingClient {
  *     embedded with a Gemini model (vectors live in Gemini's space).
  *   - "hf"     → HfEmbeddingClient pointed at HF_INFERENCE_URL (the
  *     Cloudflare embeddings worker). Default — the corpus is embedded with
- *     BAAI/bge-base-en-v1.5, and queries MUST land in the same space.
+ *     BAAI/bge-m3 (1024-dim), and queries MUST land in the same space.
  * The client must be the SAME on both the ingest side and the query side, or
  * cosine retrieval compares vectors from different spaces.
  */

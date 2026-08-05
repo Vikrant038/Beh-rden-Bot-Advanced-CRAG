@@ -45,7 +45,7 @@ class EmbedRequest(BaseModel):
 
 @app.post("/pipeline/feature-extraction/{model:path}")
 async def feature_extraction(model: str, request: EmbedRequest) -> list[list[float]]:
-    """HF-style feature-extraction contract: texts in, 768-dim vectors out."""
+    """HF-style feature-extraction contract: texts in, 1024-dim vectors out."""
     if model != app.state.model_name:
         logger.warning("requested model %r != loaded %r — using loaded model", model, app.state.model_name)
     texts = request.inputs

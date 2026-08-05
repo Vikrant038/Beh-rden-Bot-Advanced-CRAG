@@ -13,9 +13,9 @@
  * All sizes are grounded in the Prisma schema:
  *   - Message: content + metadata Json + sources Json + row overhead
  *   - ConversationMemory: 1 row per conversation (summaryText)
- *   - SemanticCacheEntry: queryVector vector(768) (3 KB) + responseJson
+ *   - SemanticCacheEntry: queryVector vector(1024) (4 KB) + responseJson
  *     (full answer + sources) + queryText/hash/overhead — bounded by TTL
- *   - DocumentChunk: embedding vector(768) (3 KB) + text + HNSW index overhead
+ *   - DocumentChunk: embedding vector(1024) (4 KB) + text + HNSW index overhead
  *
  * Usage (from web-app/):
  *   pnpm storage:estimate
@@ -44,11 +44,11 @@ interface EstimateParams {
   questionsPerUserPerDay: number;
   /** Fraction of questions that are distinct enough to create new cache entries. */
   distinctQuestionRatio: number;
-  /** Bytes per SemanticCacheEntry (3 KB vector + ~4 KB responseJson + overhead). */
+  /** Bytes per SemanticCacheEntry (4 KB vector + ~4 KB responseJson + overhead). */
   cacheEntryBytes: number;
   /** Total document chunks ingested into the corpus. */
   chunks: number;
-  /** Bytes per chunk (3 KB vector + ~1 KB text + ~5 KB HNSW index overhead). */
+  /** Bytes per chunk (4 KB vector + ~1 KB text + ~5 KB HNSW index overhead). */
   chunkBytes: number;
   /** Postgres real-world overhead: WAL, page headers, MVCC bloat. */
   overheadPct: number;

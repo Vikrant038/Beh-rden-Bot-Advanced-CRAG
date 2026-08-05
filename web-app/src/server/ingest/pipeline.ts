@@ -1,5 +1,5 @@
 /**
- * Ingest pipeline: fetch URL → clean → chunk → embed (768-d BGE) →
+ * Ingest pipeline: fetch URL → clean → chunk → embed (1024-d BGE-M3) →
  * transactional store in Postgres (pgvector) → invalidate corpus + cache.
  * Ported from `src/ingest.py` + `src/embed.py` (Python reference).
  *

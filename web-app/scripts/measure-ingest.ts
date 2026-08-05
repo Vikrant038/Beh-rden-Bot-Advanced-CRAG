@@ -50,10 +50,7 @@ function parseArgs(argv: string[]) {
   };
   return {
     file: get("file", "../data/pdfs/laws/englisch_aufenthg.pdf"),
-    provider: get(
-      "provider",
-      process.env.GEMINI_API_KEY ? "gemini" : "hf",
-    ),
+    provider: get("provider", process.env.GEMINI_API_KEY ? "gemini" : "hf"),
     maxBlocks: Number(get("max-blocks", "0")), // 0 = all
     storeBlocks: Number(get("store-blocks", "10")),
   };
@@ -66,9 +63,7 @@ async function main() {
   const { parsePdf } = await import("@/server/ingest/pdf-parser");
   const { cleanText } = await import("@/server/ingest/cleaner");
   const { chunkParentChild } = await import("@/server/ingest/chunker");
-  const { HfEmbeddingClient, GeminiEmbeddingClient } = await import(
-    "@/server/embeddings/client"
-  );
+  const { HfEmbeddingClient, GeminiEmbeddingClient } = await import("@/server/embeddings/client");
   const { prisma } = await import("@/server/db");
   const { Prisma } = await import("@prisma/client");
 
@@ -85,14 +80,18 @@ async function main() {
   const t3 = performance.now();
 
   const childCount = structure.reduce((n, b) => n + b.children.length, 0);
-  console.log(`parsePdf:      ${fmt(t1 - t0)} (${parsed.pages} pages, ${parsed.text.length} chars)`);
+  console.log(
+    `parsePdf:      ${fmt(t1 - t0)} (${parsed.pages} pages, ${parsed.text.length} chars)`,
+  );
   console.log(`cleanText:     ${fmt(t2 - t1)}`);
-  console.log(`chunkParentChild: ${fmt(t3 - t2)} (${structure.length} parent blocks, ${childCount} children)`);
+  console.log(
+    `chunkParentChild: ${fmt(t3 - t2)} (${structure.length} parent blocks, ${childCount} children)`,
+  );
 
-  const childrenPerBlock = structure
-    .map((b) => b.children.length)
-    .sort((a, b) => a - b);
-  console.log(`children/parent: median ${median(childrenPerBlock)}, max ${Math.max(...childrenPerBlock)}`);
+  const childrenPerBlock = structure.map((b) => b.children.length).sort((a, b) => a - b);
+  console.log(
+    `children/parent: median ${median(childrenPerBlock)}, max ${Math.max(...childrenPerBlock)}`,
+  );
 
   if (structure.length === 0) {
     console.log("No chunks; aborting.");
@@ -101,12 +100,12 @@ async function main() {
 
   // ---- 2. per-parent-block embed (the worker's commit unit) ----
   const provider = args.provider;
-  // `sim` uses synthetic normalized 768-d vectors — for measuring the store
+  // `sim` uses synthetic normalized 1024-d vectors — for measuring the store
   // path only when no embed provider is reachable (e.g. HF blocked locally).
   const simClient = {
     embedTexts: async (texts: string[]): Promise<number[][]> =>
       texts.map(() => {
-        const v = Array.from({ length: 768 }, () => Math.random() * 2 - 1);
+        const v = Array.from({ length: 1024 }, () => Math.random() * 2 - 1);
         const mag = Math.sqrt(v.reduce((s, x) => s + x * x, 0));
         return v.map((x) => x / mag);
       }),
@@ -117,7 +116,9 @@ async function main() {
       : provider === "hf"
         ? new HfEmbeddingClient()
         : simClient;
-  console.log(`\n=== Embedding via ${provider.toUpperCase()} (per parent block, serial — mimics the worker) ===`);
+  console.log(
+    `\n=== Embedding via ${provider.toUpperCase()} (per parent block, serial — mimics the worker) ===`,
+  );
 
   const blocksToEmbed =
     args.maxBlocks > 0 ? Math.min(args.maxBlocks, structure.length) : structure.length;
@@ -165,18 +166,26 @@ async function main() {
   const t5 = performance.now();
 
   const totalEmbedMs = t5 - t4;
-  console.log(`embedded: ${embeddedChildren}/${childCount} children across ${blockLatencies.length} parent-block calls`);
+  console.log(
+    `embedded: ${embeddedChildren}/${childCount} children across ${blockLatencies.length} parent-block calls`,
+  );
   console.log(`total embed (block-level): ${fmt(totalEmbedMs)}`);
   if (blockLatencies.length > 0) {
-    console.log(`per-block embed: first ${fmt(blockLatencies[0])}, median ${fmt(median(blockLatencies))}, p95 ${fmt(p95(blockLatencies))}`);
+    console.log(
+      `per-block embed: first ${fmt(blockLatencies[0])}, median ${fmt(median(blockLatencies))}, p95 ${fmt(p95(blockLatencies))}`,
+    );
   }
   if (batchLatencies.length > 0) {
-    console.log(`per-100 batch: first ${fmt(batchLatencies[0])}, median ${fmt(median(batchLatencies))}, p95 ${fmt(p95(batchLatencies))}`);
+    console.log(
+      `per-100 batch: first ${fmt(batchLatencies[0])}, median ${fmt(median(batchLatencies))}, p95 ${fmt(p95(batchLatencies))}`,
+    );
   }
 
   // ---- 3. real store sample (exact pipeline tx shape) with cleanup ----
   const storeBlocks = Math.min(args.storeBlocks, blocksToEmbed, structure.length);
-  console.log(`\n=== Real store sample: ${storeBlocks} blocks through the pipeline transaction ===`);
+  console.log(
+    `\n=== Real store sample: ${storeBlocks} blocks through the pipeline transaction ===`,
+  );
 
   const measureKey = `pdf://measure-${Date.now()}/englisch_aufenthg.pdf`;
   let docId: string | null = null;
@@ -184,7 +193,13 @@ async function main() {
   try {
     const t6 = performance.now();
     const doc = await prisma.document.create({
-      data: { url: measureKey, title: "MEASURE", hash: "measure", chunkCount: 0, status: "INGESTING" },
+      data: {
+        url: measureKey,
+        title: "MEASURE",
+        hash: "measure",
+        chunkCount: 0,
+        status: "INGESTING",
+      },
       select: { id: true },
     });
     docId = doc.id;
@@ -217,7 +232,9 @@ async function main() {
       });
       storeLatencies.push(performance.now() - s);
     }
-    console.log(`store tx: first ${fmt(storeLatencies[0])}, median ${fmt(median(storeLatencies))}, p95 ${fmt(p95(storeLatencies))}`);
+    console.log(
+      `store tx: first ${fmt(storeLatencies[0])}, median ${fmt(median(storeLatencies))}, p95 ${fmt(p95(storeLatencies))}`,
+    );
   } catch (err) {
     console.error(`Store sample failed: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
@@ -240,18 +257,28 @@ async function main() {
   const ticks = Math.ceil(structure.length / blocksPerTick);
 
   console.log(`\n=== SIZING (derived from data) ===`);
-  console.log(`Vercel hard cap: ${VERCEL_CAP_MS / 1000}s → safe worker budget: ${BUDGET_MS / 1000}s (75%)`);
+  console.log(
+    `Vercel hard cap: ${VERCEL_CAP_MS / 1000}s → safe worker budget: ${BUDGET_MS / 1000}s (75%)`,
+  );
   console.log(`per-block cost: embed ${fmt(embedMed)} + store ${fmt(storeMed)} = ${fmt(perBlock)}`);
   console.log(`blocks per tick: ${blocksPerTick}`);
-  console.log(`ticks to complete ${structure.length} blocks: ${ticks} (each ~1 min cron cadence → ~${ticks} min background)`);
+  console.log(
+    `ticks to complete ${structure.length} blocks: ${ticks} (each ~1 min cron cadence → ~${ticks} min background)`,
+  );
   if (blockLatencies.length > 0) {
-    console.log(`whole doc, single tick (no resume): ${fmt(totalEmbedMs)} embed-only → ${totalEmbedMs > BUDGET_MS ? "EXCEEDS budget ✗" : "fits ✓"}`);
+    console.log(
+      `whole doc, single tick (no resume): ${fmt(totalEmbedMs)} embed-only → ${totalEmbedMs > BUDGET_MS ? "EXCEEDS budget ✗" : "fits ✓"}`,
+    );
   }
   if (batchLatencies.length > 0) {
     const batchBlocks = Math.floor(BUDGET_MS / Math.max(1, median(batchLatencies)));
-    console.log(`if children were batched 100/call instead: ~${batchBlocks} × 100-child batches per tick (different cursor granularity)`);
+    console.log(
+      `if children were batched 100/call instead: ~${batchBlocks} × 100-child batches per tick (different cursor granularity)`,
+    );
   }
-  console.log(`\nProvider note: production default is Gemini (GEMINI_API_KEY currently commented in .env); these timings are ${provider.toUpperCase()}. Re-run with GEMINI_API_KEY active for production-path numbers.`);
+  console.log(
+    `\nProvider note: production default is HF/BGE-M3 (corpus space); these timings are ${provider.toUpperCase()}.`,
+  );
 }
 
 main().catch((err) => {
