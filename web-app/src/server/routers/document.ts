@@ -3,7 +3,13 @@ import { router, adminProcedure } from "@/server/trpc/t";
 import { prisma } from "@/server/db";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { getCorpusProvider } from "@/server/rag/instance";
-import { enqueueUrlJob, enqueueSyncJobs, getJob, getJobStats } from "@/server/ingest/jobs";
+import {
+  drainPendingJobs,
+  enqueueUrlJob,
+  enqueueSyncJobs,
+  getJob,
+  getJobStats,
+} from "@/server/ingest/jobs";
 import { assertSafeUrl } from "@/server/lib/security/url-validator";
 import { NotFoundError } from "@/server/lib/errors";
 import { createLogger } from "@/server/lib/logger";
@@ -66,6 +72,9 @@ export const documentRouter = router({
 
   /** Poll a single ingest job (admin UI progress). */
   jobGet: adminProcedure.input(z.object({ id: z.string().min(1) })).query(async ({ input }) => {
+    // Hobby plan: no per-minute cron is allowed, so the admin UI's poll loop
+    // doubles as the queue drain (drainPendingJobs no-ops on an empty queue).
+    await drainPendingJobs({ maxJobs: 3, timeBudgetMs: 20_000 });
     const job = await getJob(input.id);
     if (!job) {
       throw new NotFoundError("IngestJob", input.id);
@@ -74,7 +83,10 @@ export const documentRouter = router({
   }),
 
   /** Queue depth for the admin UI (sync-all progress). */
-  jobStats: adminProcedure.query(async () => getJobStats()),
+  jobStats: adminProcedure.query(async () => {
+    await drainPendingJobs({ maxJobs: 3, timeBudgetMs: 20_000 });
+    return getJobStats();
+  }),
 
   deleteMany: adminProcedure
     .input(z.object({ ids: z.array(z.string().min(1)).min(1).max(100) }))

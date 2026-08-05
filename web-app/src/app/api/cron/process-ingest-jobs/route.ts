@@ -14,9 +14,12 @@ const logger = createLogger("cron");
  * src/server/ingest/jobs.ts). Guarded by `CRON_SECRET` (Vercel sends it as
  * `Authorization: Bearer <secret>`), same pattern as /api/cron/cleanup-cache.
  *
- * Scheduled via `vercel.json` — note the plan caveat: Vercel Hobby allows a
- * single daily cron, so this needs the Pro plan (per-minute crons) for fast
- * ingestion; the route itself also works when hit manually or via `vercel dev`.
+ * On Vercel Hobby (daily crons only), the five-minute schedule is NOT
+ * registered in `vercel.json` — the admin UI's poll loop
+ * (`document.jobGet`/`jobStats`) calls `drainPendingJobs()` instead, so
+ * ingestion works without a timer. This route remains as the Pro-plan path
+ * (per-minute cron) and for manual triggering (e.g. an external scheduler
+ * hitting it with `CRON_SECRET`).
  */
 export async function GET(request: Request): Promise<NextResponse> {
   const auth = request.headers.get("authorization");

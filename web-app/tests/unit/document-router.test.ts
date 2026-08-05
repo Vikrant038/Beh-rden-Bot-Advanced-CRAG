@@ -15,6 +15,7 @@ vi.mock("@/server/db", () => ({
 }));
 
 vi.mock("@/server/ingest/jobs", () => ({
+  drainPendingJobs: vi.fn(),
   enqueueUrlJob: vi.fn(),
   enqueueSyncJobs: vi.fn(),
   getJob: vi.fn(),
@@ -34,13 +35,20 @@ vi.mock("@/server/lib/security/url-validator", () => ({
 }));
 
 import { prisma } from "@/server/db";
-import { enqueueUrlJob, enqueueSyncJobs, getJob, getJobStats } from "@/server/ingest/jobs";
+import {
+  drainPendingJobs,
+  enqueueUrlJob,
+  enqueueSyncJobs,
+  getJob,
+  getJobStats,
+} from "@/server/ingest/jobs";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { assertSafeUrl } from "@/server/lib/security/url-validator";
 
 const prismaMock = prisma as unknown as {
   document: { findUnique: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
 };
+const mockedDrainPendingJobs = vi.mocked(drainPendingJobs);
 const mockedEnqueueUrl = vi.mocked(enqueueUrlJob);
 const mockedEnqueueSync = vi.mocked(enqueueSyncJobs);
 const mockedGetJob = vi.mocked(getJob);
@@ -64,6 +72,7 @@ describe("document router", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedAssertSafeUrl.mockResolvedValue();
+    mockedDrainPendingJobs.mockResolvedValue({ drained: false, processed: 0, remaining: 0 });
   });
 
   it("requires the ADMIN role", async () => {
@@ -134,7 +143,7 @@ describe("document router", () => {
     expect(mockedEnqueueSync).toHaveBeenCalledWith({ force: false });
   });
 
-  it("jobGet: returns the pollable job view", async () => {
+  it("jobGet: drains pending jobs (Hobby poll-loop trigger) then returns the job", async () => {
     mockedGetJob.mockResolvedValue({
       id: "job-1",
       type: "URL",
@@ -146,6 +155,7 @@ describe("document router", () => {
     });
     const caller = makeCaller();
     const job = await caller.document.jobGet({ id: "job-1" });
+    expect(mockedDrainPendingJobs).toHaveBeenCalledWith({ maxJobs: 3, timeBudgetMs: 20_000 });
     expect(job.status).toBe("RUNNING");
   });
 
@@ -155,7 +165,7 @@ describe("document router", () => {
     await expect(caller.document.jobGet({ id: "gone" })).rejects.toThrow();
   });
 
-  it("jobStats: reports queue depth", async () => {
+  it("jobStats: drains pending jobs then reports queue depth", async () => {
     mockedGetJobStats.mockResolvedValue({
       queued: 3,
       running: 1,
@@ -164,6 +174,7 @@ describe("document router", () => {
     });
     const caller = makeCaller();
     const stats = await caller.document.jobStats();
+    expect(mockedDrainPendingJobs).toHaveBeenCalledWith({ maxJobs: 3, timeBudgetMs: 20_000 });
     expect(stats.queued).toBe(3);
     expect(stats.running).toBe(1);
   });

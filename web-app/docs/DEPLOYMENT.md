@@ -127,27 +127,27 @@ Vercel does at runtime, a handful of requests/day at real usage. With
 `HF_INFERENCE_URL` — the deployed Cloudflare embeddings worker (`embeddings-worker/`) —
 which runs `@cf/baai/bge-base-en-v1.5` via Workers AI and returns the 768-dim vector.
 
-### 3.4 Incremental adds (admin → ingest queue → cron drain)
+### 3.4 Incremental adds (admin → ingest queue → on-demand drain)
 
-Documents added via the admin UI are **enqueued** as `ingest_jobs`, then drained by
-`/api/cron/process-ingest-jobs` (every 5 min, `vercel.json`) alongside
-`/api/cron/cleanup-cache` (daily 4 am). The queue is **resumable**: a per-job progress
-cursor + mid-tick time-budget check lets a large PDF finish across several cron ticks
-instead of dying on Vercel's 60 s serverless cap, and per-tick pacing stays under the
-provider's rate limits. Design: `docs/status/phase-h-resumable-ingest.md` +
-`../Docs/status/adr-resumable-ingest-queue.md`.
+Documents added via the admin UI are **enqueued** as `ingest_jobs`, then drained serially
+(concurrency 1, embedding-rate-limit friendly). The queue is **resumable**: a per-job
+progress cursor + mid-tick time-budget check lets a large PDF finish across several drain
+ticks instead of dying on Vercel's 60 s serverless cap. Design:
+`docs/status/phase-h-resumable-ingest.md` + `../Docs/status/adr-resumable-ingest-queue.md`.
 
-> ⚠️ **Hobby-plan blocker — read this before deploying.** Vercel Hobby permits **daily**
-> crons only; a `*/5 * * * *` entry in `vercel.json` **fails the deployment build** with
-> *"Hobby accounts are limited to daily cron jobs"*. Two ways forward:
->
-> 1. **Hobby (keep $0):** remove the `process-ingest-jobs` cron from `vercel.json` and
->    trigger the drain on-demand — the admin upload flow (or a frontend-polled endpoint)
->    calls the same route after enqueueing. Incremental adds still work; they just drain
->    on demand instead of by timer.
-> 2. **Pro ($20/mo):** keep the 5-min cron as-is (Pro supports per-minute precision).
->
-> The corpus-seed model (§3.1) is unaffected either way — runtime embed load is tiny.
+**How the drain is triggered on the free plan:** Vercel Hobby permits **daily** crons
+only — a `*/5 * * * *` entry in `vercel.json` **fails the deployment build** with
+*"Hobby accounts are limited to daily cron jobs"*. So `vercel.json` registers only
+`/api/cron/cleanup-cache` (daily 4 am), and the ingest queue is drained **on demand** by
+the admin UI's own 2.5 s poll loop: `document.jobGet` / `document.jobStats` call
+`drainPendingJobs()` (a bounded `processIngestJobs` tick, max 3 jobs / 20 s) on every
+poll while the admin watches progress. Uploads and sync-all therefore process in the
+background exactly as with a cron — the timer is just replaced by the poll that is
+already open. `drainPendingJobs()` no-ops on an empty queue (one cheap count query).
+
+> **Pro option (optional):** with Vercel Pro you can re-add the `*/5 * * * *`
+> `process-ingest-jobs` cron to `vercel.json` — the route already exists and wraps the
+> same worker. It is deliberately absent from the Hobby config.
 
 ### 3.5 Provider decision
 
@@ -276,7 +276,7 @@ anyone on the internet.
 - [ ] **Cloudflare worker deployed**: `wrangler secret put EMBED_TOKEN` + `wrangler deploy` (§3.5); `EMBEDDING_PROVIDER=hf` + `HF_INFERENCE_URL`/`HF_TOKEN` set in Vercel
 - [ ] All required env vars set in Vercel; `NEXTAUTH_SECRET` generated
 - [ ] GitHub OAuth + Google OAuth callback URLs point at the production host
-- [ ] Cron plan decided: `cleanup-cache` (daily) fits Hobby; `process-ingest-jobs` (`*/5`) **requires Pro or an on-demand drain on Hobby** — resolve before first deploy, `CRON_SECRET` set
+- [ ] Cron plan: `cleanup-cache` (daily) is the only cron in `vercel.json` — Hobby-legal; ingest drains on-demand via the admin poll loop (`drainPendingJobs`), `CRON_SECRET` set
 - [ ] Custom domain + TLS live; `metadataBase`/`APP_URL` updated
 - [ ] Sitemap + robots deployed; Search Console verified + sitemap submitted
 - [ ] Test guest mode → sign in → **data claim** (guest conversations appear under the account)
@@ -293,8 +293,9 @@ anyone on the internet.
 | Domain | ~$10/year |
 | **Total** | **~$10/year** (or $0 while using the `.vercel.app` subdomain) |
 
-> Vercel **Pro ($20/mo)** is only needed for the 5-minute ingest cron (§3.4). On Hobby,
-> remove that cron and drain the ingest queue on-demand — runtime cost stays $0.
+> Vercel **Pro ($20/mo)** is only needed if you want the timer-based 5-minute ingest
+> cron (§3.4). On Hobby the ingest queue drains on-demand through the admin poll loop,
+> so runtime cost stays $0 either way.
 
 ## 9. Later upgrades (when traffic grows)
 

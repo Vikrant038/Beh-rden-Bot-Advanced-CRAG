@@ -2,9 +2,11 @@
  * Background ingest job queue — the production upgrade path documented in
  * `pipeline.ts`. URL/PDF ingestion (scrape + chunk + embed) can exceed the
  * serverless request budget, so the admin surface enqueues work here instead
- * of blocking on it. A Vercel Cron (`/api/cron/process-ingest-jobs`) drains
- * the queue serially (concurrency 1, embedding-rate-limit friendly) and the
- * admin UI polls job status.
+ * of blocking on it. The queue drains serially (concurrency 1,
+ * embedding-rate-limit friendly) via `drainPendingJobs()`, which the admin
+ * UI's poll loop calls on every tick — no per-minute cron required (Vercel
+ * Hobby only allows daily crons), and the Pro-plan
+ * `/api/cron/process-ingest-jobs` route wraps the same worker.
  *
  * Design notes:
  * - Postgres-only by design: no Redis/BullMQ/Inngest dependency, so this runs
@@ -329,6 +331,27 @@ async function pruneOldJobs(): Promise<void> {
       finishedAt: { lt: cutoff },
     },
   });
+}
+
+/**
+ * Hobby-compatible on-demand drain: Vercel Hobby only allows a single daily
+ * cron, so `/api/cron/process-ingest-jobs` cannot be scheduled every five
+ * minutes on the free plan. Instead the admin UI's 2.5 s poll loop
+ * (jobGet/jobStats) calls this, which runs the same bounded worker tick
+ * whenever jobs are pending. No-ops on an empty queue, so idle polling costs
+ * one cheap count query.
+ */
+export async function drainPendingJobs(
+  options: { maxJobs?: number; timeBudgetMs?: number } = {},
+): Promise<{ drained: boolean; processed: number; remaining: number }> {
+  const pending = await prisma.ingestJob.count({
+    where: { status: { in: ["QUEUED", "RUNNING"] } },
+  });
+  if (pending === 0) {
+    return { drained: false, processed: 0, remaining: 0 };
+  }
+  const result = await processIngestJobs(options);
+  return { drained: true, ...result };
 }
 
 /** Single-job view for the admin UI's poll loop. */

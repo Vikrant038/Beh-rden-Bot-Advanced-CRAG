@@ -25,6 +25,7 @@ vi.mock("@/server/ingest/pipeline", () => ({
 
 import { ingestUrl, ingestPdf } from "@/server/ingest/pipeline";
 import {
+  drainPendingJobs,
   enqueueUrlJob,
   enqueuePdfJob,
   enqueueSyncJobs,
@@ -315,6 +316,50 @@ describe("processIngestJobs (cron worker)", () => {
     const result = await processIngestJobs({ maxJobs: 5, timeBudgetMs: 60_000 });
     expect(result.processed).toBe(1);
     expect(result.remaining).toBe(7);
+  });
+});
+
+describe("drainPendingJobs (Hobby on-demand drain)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("no-ops (no worker tick) when the queue is empty", async () => {
+    prismaMock.ingestJob.count.mockResolvedValue(0);
+    const result = await drainPendingJobs();
+    expect(result).toEqual({ drained: false, processed: 0, remaining: 0 });
+    expect(prismaMock.ingestJob.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("runs a bounded worker tick when jobs are pending", async () => {
+    stubClaim({
+      id: "job-drain",
+      type: "URL",
+      url: "https://example.com/drain",
+      title: null,
+      filename: null,
+      payload: null,
+      force: false,
+    });
+    mockedIngestUrl.mockResolvedValue({
+      url: "https://example.com/drain",
+      title: "Drain",
+      status: "created",
+      chunkCount: 4,
+      hash: "h",
+      cacheInvalidated: 0,
+    });
+    prismaMock.ingestJob.update.mockResolvedValue({ id: "job-drain" });
+    prismaMock.document.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.ingestJob.deleteMany.mockResolvedValue({ count: 0 });
+    // First count = pending check (1), second = remaining after the tick (0).
+    prismaMock.ingestJob.count
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(0);
+
+    const result = await drainPendingJobs({ maxJobs: 1, timeBudgetMs: 10_000 });
+    expect(result).toEqual({ drained: true, processed: 1, remaining: 0 });
+    expect(mockedIngestUrl).toHaveBeenCalled();
   });
 });
 
