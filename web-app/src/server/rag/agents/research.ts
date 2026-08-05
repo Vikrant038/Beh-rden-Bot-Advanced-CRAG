@@ -1,5 +1,6 @@
 import type { Source } from "@/server/rag/types";
 import type { HybridRetriever } from "@/server/rag/retrieval/hybrid";
+import { generateSubQueries } from "@/server/rag/query-expansion";
 import { webSearch } from "@/server/rag/tools/web-search";
 import { calculateVisaRequirements } from "@/server/rag/tools/visa-calculator";
 import { createLogger } from "@/server/lib/logger";
@@ -45,8 +46,10 @@ export async function agentResearchReact(
 
   const lower = userQuery.toLowerCase();
 
-  // ReAct iteration 1: retrieve from the knowledge base.
-  const retrieval = await hybridRetriever.retrieve(userQuery, [userQuery]);
+  // ReAct iteration 1: retrieve from the knowledge base. Bilingual sub-query
+  // expansion (EN + DE) so BM25 matches both halves of the corpus.
+  const searchQueries = await generateSubQueries(userQuery, 5);
+  const retrieval = await hybridRetriever.retrieve(userQuery, searchQueries);
   const chunks = retrieval.chunks;
 
   if (chunks.length > 0) {

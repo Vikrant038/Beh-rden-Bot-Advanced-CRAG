@@ -72,7 +72,7 @@ export async function runStandardCrag(
     };
   }
 
-  const subQueries = await generateSubQueries(maskedQuestion, 3);
+  const subQueries = await generateSubQueries(maskedQuestion, 5);
   const retrieval = await hybridRetriever.retrieve(maskedQuestion, subQueries);
   const gate = await runCragGate(retrieval, maskedQuestion);
 
