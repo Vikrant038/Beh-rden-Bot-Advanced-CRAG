@@ -83,6 +83,20 @@ export class HfEmbeddingClient implements EmbeddingClient {
   }
 }
 
+/**
+ * Default embed client selected by `EMBEDDING_PROVIDER`:
+ *   - "gemini" → GeminiEmbeddingClient (production default; corpus + query
+ *     vectors live in Gemini's space)
+ *   - "hf"     → HfEmbeddingClient pointed at HF_INFERENCE_URL. Used for
+ *     corpus ingestion against a local sentence-transformers server
+ *     (scripts/embed-server.py) or the HF Inference API. The client must be
+ *     the SAME on both the ingest side and the query side, or cosine
+ *     retrieval compares vectors from different spaces.
+ */
+export function createDefaultEmbeddingClient(): EmbeddingClient {
+  return env.EMBEDDING_PROVIDER === "hf" ? new HfEmbeddingClient() : new GeminiEmbeddingClient();
+}
+
 /** Gemini batchEmbedContents accepts at most this many inputs per request. */
 export const GEMINI_BATCH_LIMIT = 100;
 
@@ -136,7 +150,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
           outputDimensionality: 768,
         }));
 
-        const response = await model.batchEmbedContents({ requests });
+        const response = await this.retryOnRateLimit(() => model.batchEmbedContents({ requests }));
         if (!response || !response.embeddings) {
           throw new Error("Invalid response from Gemini API");
         }
@@ -160,6 +174,35 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
     const prefixed = `${QUERY_EMBEDDING_PREFIX}${query.trim()}`;
     const vectors = await this.embedTexts([prefixed]);
     return vectors[0];
+  }
+
+  /**
+   * Retries a Gemini batch call on transient rate-limit / server errors with
+   * exponential backoff. Embedding calls are idempotent, so re-sending a batch
+   * after a 429/5xx is safe. Free-tier RPM limits make this necessary for
+   * large corpus runs (a single serial sync can sit at the 100 req/min edge).
+   */
+  private async retryOnRateLimit<T>(fn: () => Promise<T>): Promise<T> {
+    const maxAttempts = 3;
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error;
+        const detail = String(error);
+        const retryable =
+          /(429|RESOURCE_EXHAUSTED|rate.?limit)/i.test(detail) ||
+          /(5\d\d|503|UNAVAILABLE|DEADLINE_EXCEEDED)/i.test(detail);
+        if (!retryable || attempt === maxAttempts) {
+          throw error;
+        }
+        const backoffMs = 500 * 2 ** (attempt - 1);
+        logger.warn({ attempt, backoffMs }, "[EMBED] Gemini rate-limited; backing off");
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      }
+    }
+    throw lastError;
   }
 }
 

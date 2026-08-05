@@ -11,6 +11,8 @@ const serverEnvSchema = z.object({
   RERANKER_MODEL: z.string().default("BAAI/bge-reranker-base"),
   GEMINI_API_KEY: z.string().optional(),
   EMBEDDING_MODEL: z.string().default("BAAI/bge-base-en-v1.5"),
+  /** Which embed client the app constructs by default: "gemini" or "hf". */
+  EMBEDDING_PROVIDER: z.enum(["gemini", "hf"]).default("gemini"),
   HF_INFERENCE_URL: z.string().url().default("https://api-inference.huggingface.co"),
   UPSTASH_REDIS_URL: z.string().optional(),
   UPSTASH_REDIS_TOKEN: z.string().optional(),

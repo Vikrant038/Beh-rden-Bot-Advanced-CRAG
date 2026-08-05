@@ -21,9 +21,13 @@ vi.mock("@/server/rag/retrieval/hybrid", () => ({
 vi.mock("@/server/rag/retrieval/reranker", () => ({
   HfReranker: class {},
 }));
-vi.mock("@/server/embeddings/client", () => ({
-  GeminiEmbeddingClient: class {},
-}));
+vi.mock("@/server/embeddings/client", () => {
+  class MockEmbeddingClient {}
+  return {
+    GeminiEmbeddingClient: MockEmbeddingClient,
+    createDefaultEmbeddingClient: () => new MockEmbeddingClient(),
+  };
+});
 
 import { getCorpusProvider, getHybridRetriever } from "@/server/rag/instance";
 import type { HybridRetriever as HybridRetrieverType } from "@/server/rag/retrieval/hybrid";

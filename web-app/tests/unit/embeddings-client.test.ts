@@ -1,5 +1,13 @@
+vi.mock("@/server/tracing", () => ({
+  observeGeneration: vi.fn((_name, _args) => ({
+    end: vi.fn(),
+    endError: vi.fn(),
+  })),
+}));
+
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { GeminiEmbeddingClient, GEMINI_BATCH_LIMIT } from "@/server/embeddings/client";
+import { GeminiEmbeddingClient, HfEmbeddingClient, GEMINI_BATCH_LIMIT } from "@/server/embeddings/client";
+import { QUERY_EMBEDDING_PREFIX } from "@/server/rag/types";
 
 /**
  * Mocks the GoogleGenerativeAI SDK's HTTP layer (it uses global fetch) with a
@@ -79,5 +87,70 @@ describe("GeminiEmbeddingClient", () => {
   it("exports a sane batch limit", () => {
     expect(GEMINI_BATCH_LIMIT).toBeGreaterThan(0);
     expect(GEMINI_BATCH_LIMIT).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("HfEmbeddingClient", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("returns [] for empty input without any API call", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new HfEmbeddingClient("model", "url", "token");
+    await expect(client.embedTexts([])).resolves.toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("throws a clear error when no API token is configured", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new HfEmbeddingClient("model", "url", "");
+    await expect(client.embedTexts(["x"])).rejects.toThrow(/HF_TOKEN not configured/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("makes an API call and returns embeddings on success", async () => {
+    const fetchMock = vi.fn(async (_input: unknown, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => [[1, 0, 0]],
+    } as Response));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new HfEmbeddingClient("model", "https://hf.api", "token");
+    const vectors = await client.embedTexts(["hello"]);
+    
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vectors).toEqual([[1, 0, 0]]);
+    const callUrl = fetchMock.mock.calls[0][0];
+    expect(callUrl).toBe("https://hf.api/pipeline/feature-extraction/model");
+  });
+
+  it("throws an error on non-200 API response", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      text: async () => "Service Unavailable",
+    } as Response));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new HfEmbeddingClient("model", "url", "token");
+    
+    await expect(client.embedTexts(["hello"])).rejects.toThrow(/Embedding API error 503/);
+  });
+
+  it("embedQuery prefixes the text and calls embedTexts", async () => {
+    const fetchMock = vi.fn(async (_input: unknown, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => [[1, 0, 0]],
+    } as Response));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new HfEmbeddingClient("model", "url", "token");
+    const vector = await client.embedQuery("search query");
+    
+    expect(vector).toEqual([1, 0, 0]);
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
+    expect(requestBody.inputs).toEqual([`${QUERY_EMBEDDING_PREFIX}search query`]);
   });
 });

@@ -1,0 +1,28 @@
+# Cloudflare Workers AI embedding endpoint — @cf/baai/bge-base-en-v1.5
+#
+# Deploy:
+#   npx wrangler login
+#   npx wrangler deploy
+#
+# The endpoint is protected by a bearer token. Set it as a secret:
+#   npx wrangler secret put EMBED_TOKEN
+#
+# Your web-app calls it at runtime with the same token, using the HF-style
+# contract this worker implements (same as the local embed-server.py):
+#   POST https://embed-worker.<subdomain>.workers.dev/pipeline/feature-extraction/BAAI/bge-base-en-v1.5
+#   Authorization: Bearer <EMBED_TOKEN>
+#   {"inputs": ["text1", "text2", ...]}
+#   → [[768 floats], ...]
+#
+# IMPORTANT (same-model rule): corpus vectors produced by the local
+# sentence-transformers server (web-app/scripts/embed-server.py) and query
+# vectors produced here are BOTH BAAI/bge-base-en-v1.5 → same vector space,
+# which is what pgvector cosine retrieval requires. Never mix embed models
+# between corpus and query side.
+
+name = "behoerden-embeddings"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+[ai]
+binding = "AI"
