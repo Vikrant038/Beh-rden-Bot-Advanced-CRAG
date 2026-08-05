@@ -13,12 +13,24 @@
  */
 export interface Env {
   AI: {
-    run(model: string, inputs: { texts: string[] }): Promise<number[][]>;
+    run(
+      model: string,
+      inputs: { text: string | string[]; pooling?: "mean" | "cls" },
+    ): Promise<{ shape: number[]; data: number[][] }>;
   };
   EMBED_TOKEN: string;
 }
 
 const MODEL = "@cf/baai/bge-base-en-v1.5";
+
+/**
+ * Pooling must match the corpus side. The local sentence-transformers server
+ * (scripts/embed-server.py) loads BAAI/bge-base-en-v1.5 whose 1_Pooling config
+ * is `pooling_mode_cls_token: true` (CLS). Cloudflare's default is `mean`;
+ * the docs explicitly state cls-pooled and mean-pooled embeddings are NOT
+ * compatible. Forcing `cls` keeps query vectors in the corpus's space.
+ */
+const POOLING = "cls" as const;
 
 /** Constant-time string equality (prevents timing side channels on the token). */
 function timingSafeEqual(a: string, b: string): boolean {
@@ -63,7 +75,9 @@ export default {
     }
 
     const texts = body.inputs as string[];
-    const vectors = await env.AI.run(MODEL, { texts });
+    // Workers AI returns { shape, data } for embedding models — unwrap data.
+    const result = await env.AI.run(MODEL, { text: texts, pooling: POOLING });
+    const vectors = result.data;
 
     return Response.json(vectors);
   },

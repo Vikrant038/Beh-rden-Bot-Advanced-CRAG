@@ -5,6 +5,12 @@ query side. The **corpus** is embedded locally with the same model
 (`web-app/scripts/embed-server.py` + sentence-transformers), so both sides
 live in the same vector space — required for pgvector cosine retrieval.
 
+> **Pooling must match the corpus.** The local model's `1_Pooling` config uses
+> `pooling_mode_cls_token: true` (CLS). Cloudflare's default is `mean`, and
+> the two are **not** compatible — so this worker passes `pooling: "cls"`
+> explicitly. If you ever re-embed the corpus with a different pooling,
+> change it here too and re-seed.
+
 ## Deploy (one-time)
 
 ```bash
