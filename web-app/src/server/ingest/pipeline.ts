@@ -23,7 +23,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db";
 import { cleanText } from "@/server/ingest/cleaner";
-import { RecursiveChunker, chunkParentChild, type ParentChildChunk } from "@/server/ingest/chunker";
+import { RecursiveChunker, chunkParentChild } from "@/server/ingest/chunker";
 import { scrapeWebPage, type ScrapedDocument } from "@/server/ingest/scraper";
 import { parsePdf } from "@/server/ingest/pdf-parser";
 import { createDefaultEmbeddingClient, type EmbeddingClient } from "@/server/embeddings/client";

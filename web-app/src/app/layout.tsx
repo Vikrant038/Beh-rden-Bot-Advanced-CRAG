@@ -8,7 +8,13 @@ import { PreferenceProvider } from "@/components/preferences/preference-provider
 const APP_NAME = "Behörden-Bot";
 const APP_DESCRIPTION =
   "AI assistant for German student visa, APS certification, university applications, blocked accounts, and immigration questions — built for Indian students.";
-const APP_URL = "https://behoerden-bot.vercel.app";
+// Canonical public URL for metadataBase/OG/canonical. Derived from the
+// validated NEXTAUTH_URL so production (Vercel) and local builds both get the
+// correct origin without a hardcoded, rot-prone domain. Treat an empty string
+// as unset (platform dashboards store "" for unset vars) — otherwise
+// `new URL("")` throws ERR_INVALID_URL during page-data collection.
+const rawAppUrl = process.env.NEXTAUTH_URL?.trim();
+const APP_URL = rawAppUrl ? rawAppUrl : "http://localhost:3000";
 
 export const metadata: Metadata = {
   title: {

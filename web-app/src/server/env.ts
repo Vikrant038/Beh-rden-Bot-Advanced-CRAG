@@ -29,7 +29,17 @@ const serverEnvSchema = z.object({
 });
 
 function loadServerEnv(): z.infer<typeof serverEnvSchema> {
-  const parsed = serverEnvSchema.safeParse(process.env);
+  /**
+   * Platform dashboards (Vercel/Neon) often store "empty" vars as "".
+   * Treat an empty string exactly like an unset var so `.default()` values
+   * apply — otherwise `z.string().url().default(...)` rejects "" with an
+   * "Invalid server environment variables" build error.
+   */
+  const env: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    env[key] = typeof value === "string" && value.trim() === "" ? undefined : value;
+  }
+  const parsed = serverEnvSchema.safeParse(env);
   if (!parsed.success) {
     const missing = parsed.error.issues.map((issue) => issue.path.join(".")).join(", ");
     throw new Error(`Invalid server environment variables: ${missing}`);
