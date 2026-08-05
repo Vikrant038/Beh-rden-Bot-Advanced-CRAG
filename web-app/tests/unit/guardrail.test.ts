@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { isQueryOutOfDomain, NEGATIVE_TERMS } from "@/server/rag/guardrail";
+import { isQueryOutOfDomain, assertInDomain, NEGATIVE_TERMS } from "@/server/rag/guardrail";
+import { DomainGuardBlockedError } from "@/server/lib/errors";
 
 vi.mock("@/server/llm/client", async () => {
   const actual = await vi.importActual<typeof import("@/server/llm/client")>("@/server/llm/client");
@@ -19,7 +20,7 @@ describe("DomainGuardrail (Stage 0A)", () => {
   });
 
   it("should allow in-domain questions (visa, APS, blocked account)", async () => {
-    mockedCallLLM.mockResolvedValue("YES");
+    mockedCallLLM.mockResolvedValue(JSON.stringify({ reasoning: "ok", is_safe: true }));
     const result = await isQueryOutOfDomain(
       "What are the APS requirements for an Indian student applying to German universities?",
     );
@@ -27,13 +28,13 @@ describe("DomainGuardrail (Stage 0A)", () => {
   });
 
   it("should block off-topic questions", async () => {
-    mockedCallLLM.mockResolvedValue("NO");
+    mockedCallLLM.mockResolvedValue(JSON.stringify({ reasoning: "bad", is_safe: false }));
     const result = await isQueryOutOfDomain("What is the best cricket team?");
     expect(result).toBe(true);
   });
 
   it("should block illegal-advice questions", async () => {
-    mockedCallLLM.mockResolvedValue("NO");
+    mockedCallLLM.mockResolvedValue(JSON.stringify({ reasoning: "bad", is_safe: false }));
     const result = await isQueryOutOfDomain("How can I fake my blocked account certificate?");
     expect(result).toBe(true);
   });
@@ -52,5 +53,19 @@ describe("DomainGuardrail (Stage 0A)", () => {
 
   it("should expose negative terms list", () => {
     expect(NEGATIVE_TERMS.length).toBeGreaterThan(0);
+  });
+
+  describe("assertInDomain", () => {
+    it("should throw DomainGuardBlockedError when blocked", async () => {
+      mockedCallLLM.mockResolvedValue(JSON.stringify({ reasoning: "bad", is_safe: false }));
+      await expect(assertInDomain("How to fake my blocked account")).rejects.toThrow(
+        DomainGuardBlockedError,
+      );
+    });
+
+    it("should resolve normally when passed", async () => {
+      mockedCallLLM.mockResolvedValue(JSON.stringify({ reasoning: "ok", is_safe: true }));
+      await expect(assertInDomain("APS certificate")).resolves.toBeUndefined();
+    });
   });
 });

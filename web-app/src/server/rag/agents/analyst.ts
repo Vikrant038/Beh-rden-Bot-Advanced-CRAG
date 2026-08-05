@@ -8,6 +8,7 @@ import { createLogger } from "@/server/lib/logger";
 const logger = createLogger("analyst-agent");
 
 export const AnalystMatrixSchema = z.object({
+  thinking_process: z.string().optional(),
   summary: z.string(),
   structured_table: z.string(),
   key_insights: z.array(z.string()),
@@ -17,6 +18,7 @@ export const AnalystMatrixSchema = z.object({
 export type AnalystMatrix = z.infer<typeof AnalystMatrixSchema>;
 
 const FALLBACK_MATRIX: AnalystMatrix = {
+  thinking_process: "Fallback triggered.",
   summary: "Analysis completed based on retrieved context.",
   structured_table:
     "| Dimension | Details |\n|---|---|\n| General Info | See research details below |",
@@ -45,6 +47,7 @@ export async function agentAnalystEvaluation(
     `3. Return ONLY a valid JSON object without markdown code fences.\n\n` +
     `JSON Format:\n` +
     `{\n` +
+    `  "thinking_process": "Use this scratchpad to vent your reasoning before committing to the arrays",\n` +
     `  "summary": "Executive summary text",\n` +
     `  "structured_table": "Markdown table string",\n` +
     `  "key_insights": ["Insight 1", "Insight 2"],\n` +
@@ -84,7 +87,7 @@ export async function agentWriterSynthesis(
     `1. Synthesize a pristine, professional Markdown answer.\n` +
     `2. Use clear subheadings (##), bullet points, and include the comparative/structured matrix table if relevant.\n` +
     `3. Include an 'Actionable Next Steps' section.\n` +
-    `4. Do NOT hallucinate. Stick strictly to verified details.`;
+    `4. Base your answer SOLELY on the provided ANALYST and RESEARCH context. If the context lacks information to answer the query, state that the information is unavailable.`;
 
   try {
     const messages: LlmMessage[] = [{ role: "user", content: prompt }];
