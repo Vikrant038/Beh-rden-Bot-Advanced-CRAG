@@ -1,9 +1,19 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
 import { Providers } from "@/lib/trpc/provider";
 import { PreferenceProvider } from "@/components/preferences/preference-provider";
+
+// The CSP in middleware.ts uses a per-request nonce so inline scripts (Next.js
+// bootstrap: __next_f flight data, theme init, $RT/$RB/$RV hydration) can run
+// without 'unsafe-inline'. Nonces can only be attached when the page renders
+// per-request — a statically prerendered HTML file has no request to draw a
+// nonce from, so its inline scripts get blocked by the CSP and the page never
+// hydrates (blank screen). Force dynamic rendering so the renderer can read
+// the CSP from the forwarded request headers and stamp the nonce on scripts.
+export const dynamic = "force-dynamic";
 
 const APP_NAME = "Behörden-Bot";
 const APP_DESCRIPTION =
@@ -80,11 +90,15 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Per-request CSP nonce set by middleware. Passed to next-themes so its
+  // inline theme-bootstrap <script> carries the nonce (otherwise the strict
+  // CSP blocks it).
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
@@ -95,7 +109,7 @@ export default function RootLayout({
           Skip to content
         </a>
         <PreferenceProvider>
-          <Providers>{children}</Providers>
+          <Providers nonce={nonce}>{children}</Providers>
         </PreferenceProvider>
       </body>
     </html>

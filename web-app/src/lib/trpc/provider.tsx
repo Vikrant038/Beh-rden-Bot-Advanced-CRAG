@@ -9,7 +9,18 @@ import { api } from "@/lib/trpc/client";
 import { ToastProvider } from "@/lib/toast";
 import { CommandPalette } from "@/components/ui/command-palette";
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  nonce,
+}: {
+  children: React.ReactNode;
+  /**
+   * Per-request CSP nonce (from middleware's x-nonce header). next-themes
+   * injects an inline <script> for the theme bootstrap; without the nonce
+   * the strict CSP blocks it (theme flash + a console CSP violation).
+   */
+  nonce?: string;
+}) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -31,7 +42,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <SessionProvider>
-      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem nonce={nonce}>
         <ToastProvider>
           <api.Provider client={trpcClient} queryClient={queryClient}>
             <QueryClientProvider client={queryClient}>

@@ -51,8 +51,6 @@ export default auth((request) => {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
 
-  const response = NextResponse.next({ request: { headers: requestHeaders } });
-
   // Attach the nonce-based CSP only in production. In development the
   // webpack hot-reload scripts don't carry nonces, so we allow unsafe-inline
   // there to avoid breaking the DX.
@@ -72,7 +70,21 @@ export default auth((request) => {
       "form-action 'self'",
     ].join("; ");
 
-    response.headers.set("Content-Security-Policy", csp);
+    // CRITICAL: the CSP must ALSO be forwarded in the request headers, not
+    // only on the response. Next.js's app-render reads the nonce out of
+    // req.headers['content-security-policy'] (parseRequestHeaders) and attaches
+    // it to its inline bootstrap scripts (__next_f flight data, theme init,
+    // $RT/$RB/$RV hydration). Without the header on the request, no inline
+    // script gets a nonce attribute, CSP blocks them all, hydration never
+    // runs, and the page renders blank. The response header below is what the
+    // browser enforces.
+    requestHeaders.set("Content-Security-Policy", csp);
+  }
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+
+  if (process.env.NODE_ENV === "production") {
+    response.headers.set("Content-Security-Policy", requestHeaders.get("Content-Security-Policy")!);
     // Expose the nonce to the app layout so it can be set on <Script> tags.
     response.headers.set("x-nonce", nonce);
   }
