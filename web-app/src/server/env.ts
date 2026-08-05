@@ -1,8 +1,30 @@
 import { z } from "zod";
 
+/**
+ * Normalizes an env URL before zod validation. Platform dashboards (Vercel)
+ * store unset vars as "" and users sometimes paste a bare host without a
+ * scheme ("my-app.vercel.app" instead of "https://..."). Both would otherwise
+ * fail `z.string().url()` and crash `next build` with "Invalid server
+ * environment variables". Returns undefined when the value is unusable so
+ * `.default()` applies.
+ */
+function normalizeUrl(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+  if (trimmed === "") return undefined;
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const parsed = new URL(withScheme);
+    // Strip trailing slash so auth/redirect logic never double-slashes.
+    return parsed.origin + parsed.pathname.replace(/\/$/, "");
+  } catch {
+    return undefined;
+  }
+}
+
 const serverEnvSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-  NEXTAUTH_URL: z.string().url().default("http://localhost:3000"),
+  NEXTAUTH_URL: z.preprocess(normalizeUrl, z.string().url().default("http://localhost:3000")),
   NEXTAUTH_SECRET: z.string().min(1, "NEXTAUTH_SECRET is required"),
   GROQ_API_KEY: z.string().optional(),
   GROQ_MODEL: z.string().default("llama-3.1-8b-instant"),
@@ -13,12 +35,15 @@ const serverEnvSchema = z.object({
   EMBEDDING_MODEL: z.string().default("BAAI/bge-base-en-v1.5"),
   /** Which embed client the app constructs by default: "gemini" or "hf". */
   EMBEDDING_PROVIDER: z.enum(["gemini", "hf"]).default("gemini"),
-  HF_INFERENCE_URL: z.string().url().default("https://api-inference.huggingface.co"),
+  HF_INFERENCE_URL: z.preprocess(
+    normalizeUrl,
+    z.string().url().default("https://api-inference.huggingface.co"),
+  ),
   UPSTASH_REDIS_URL: z.string().optional(),
   UPSTASH_REDIS_TOKEN: z.string().optional(),
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
-  LANGFUSE_HOST: z.string().url().default("https://cloud.langfuse.com"),
+  LANGFUSE_HOST: z.preprocess(normalizeUrl, z.string().url().default("https://cloud.langfuse.com")),
   GITHUB_CLIENT_ID: z.string().optional(),
   GITHUB_CLIENT_SECRET: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),

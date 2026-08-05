@@ -10,11 +10,23 @@ const APP_DESCRIPTION =
   "AI assistant for German student visa, APS certification, university applications, blocked accounts, and immigration questions — built for Indian students.";
 // Canonical public URL for metadataBase/OG/canonical. Derived from the
 // validated NEXTAUTH_URL so production (Vercel) and local builds both get the
-// correct origin without a hardcoded, rot-prone domain. Treat an empty string
-// as unset (platform dashboards store "" for unset vars) — otherwise
-// `new URL("")` throws ERR_INVALID_URL during page-data collection.
-const rawAppUrl = process.env.NEXTAUTH_URL?.trim();
-const APP_URL = rawAppUrl ? rawAppUrl : "http://localhost:3000";
+// correct origin without a hardcoded, rot-prone domain.
+//
+// Bulletproof against platform mistakes: an empty value (dashboards store ""
+// for unset vars) OR a malformed value (e.g. a bare host without a scheme)
+// must never crash the build with `new URL()` throwing — fall back to
+// localhost instead.
+function resolveAppUrl(): string {
+  const raw = process.env.NEXTAUTH_URL?.trim() ?? "";
+  if (raw === "") return "http://localhost:3000";
+  try {
+    const parsed = new URL(raw);
+    return parsed.origin;
+  } catch {
+    return "http://localhost:3000";
+  }
+}
+const APP_URL = resolveAppUrl();
 
 export const metadata: Metadata = {
   title: {
