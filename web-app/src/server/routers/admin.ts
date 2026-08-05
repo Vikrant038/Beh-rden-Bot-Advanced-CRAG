@@ -1,4 +1,5 @@
 import { router, adminProcedure, adminLongProcedure } from "@/server/trpc/t";
+import { TRPCError } from "@trpc/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
@@ -110,6 +111,30 @@ class NoopMemory {
     return "";
   }
   async clear(): Promise<void> {}
+}
+
+/**
+ * Serializes a pipeline failure for the admin-only Developer mode surface:
+ * error class, raw message, `cause`, and the stack trace. Safe here because the
+ * pipeline tester is behind the ADMIN role gate — end-user chat errors never
+ * flow through this path.
+ */
+export function formatDebugError(error: unknown): string {
+  if (error instanceof Error) {
+    const cause =
+      error.cause instanceof Error
+        ? `${error.cause.name}: ${error.cause.message}`
+        : error.cause !== undefined
+          ? String(error.cause)
+          : "none";
+    return [
+      `[${error.name}] ${error.message}`,
+      `Cause: ${cause}`,
+      `Stack:`,
+      error.stack ?? "(no stack captured)",
+    ].join("\n");
+  }
+  return `[UnknownError] ${String(error)}`;
 }
 
 export const adminRouter = router({
@@ -450,6 +475,9 @@ export const adminRouter = router({
       z.object({
         prompt: z.string().trim().min(5).max(2000),
         bypassCache: z.boolean().default(true),
+        // Developer mode: rethrows failures with the full name/message/cause/stack
+        // so admins can debug the pipeline from the tester UI. Off by default.
+        debug: z.boolean().default(false),
       }),
     )
     .mutation(async ({ input }): Promise<AgenticRagResponse> => {
@@ -483,7 +511,11 @@ export const adminRouter = router({
         return result;
       } catch (error) {
         const latencyMs = Date.now() - startedAt;
-        const message = error instanceof Error ? error.message : String(error);
+        const detail = input.debug
+          ? formatDebugError(error)
+          : error instanceof Error
+            ? error.message
+            : String(error);
         await prisma.pipelineRun
           .create({
             data: {
@@ -491,7 +523,7 @@ export const adminRouter = router({
               traceJson: {},
               latencyMs,
               status: "FAILED",
-              error: message.slice(0, 2000),
+              error: detail.slice(0, 2000),
             },
           })
           .catch((persistError) => {
@@ -500,6 +532,15 @@ export const adminRouter = router({
               "[ADMIN] failed to persist failed pipeline run",
             );
           });
+        logger.warn(
+          { prompt: input.prompt, latencyMs, debug: input.debug },
+          "[ADMIN] pipeline test failed",
+        );
+        // Developer mode surfaces the full failure (stack + cause) through the
+        // tRPC error message; otherwise keep the plain message as before.
+        if (input.debug) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: detail });
+        }
         throw error;
       }
     }),

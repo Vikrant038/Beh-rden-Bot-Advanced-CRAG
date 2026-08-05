@@ -8,6 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning:
 
 ### Added
 
+- **Developer mode for the admin pipeline tester (Phase K):** the `/admin/pipeline-tester`
+  page gains an admin-only **Developer mode** toggle next to "Bypass cache". When enabled,
+  `admin.testPipeline` rethrows failures with the full error detail — class name, raw message,
+  `cause`, and stack trace (via the new `formatDebugError`) — and the page renders it in a
+  scrollable `<pre>` panel instead of the generic error card. The full detail (including the
+  stack) is also persisted on the FAILED `pipelineRun` row. Off by default; end-user chat
+  errors never flow through this path (ADMIN gate only). See
+  `docs/status/phase-k-admin-developer-mode.md`.
+
 - **Bilingual query expansion + retrieval latency optimization (Phase J):**
   `generateSubQueries` now returns a deterministic `2+2` EN/DE alternative split via a structured
   JSON response (one LLM call), and `HybridRetriever.retrieve` embeds **all** sub-queries in a

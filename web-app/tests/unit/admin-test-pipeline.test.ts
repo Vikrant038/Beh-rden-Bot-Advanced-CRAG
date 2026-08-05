@@ -29,6 +29,7 @@ vi.mock("@/server/rag/instance", () => ({
 import { prisma } from "@/server/db";
 import type { MockPrisma } from "../helpers/mock-prisma";
 import type { AgenticRagResponse } from "@/server/rag/agents/orchestrator";
+import { formatDebugError } from "@/server/routers/admin";
 
 const prismaMock = prisma as unknown as MockPrisma;
 
@@ -224,9 +225,9 @@ describe("admin.testPipeline", () => {
     prismaMock.pipelineRun?.create.mockResolvedValue({ id: "run-err" } as never);
     const caller = makeCaller();
 
-    await expect(
-      caller.admin.testPipeline({ prompt: "Why is my visa delayed?" }),
-    ).rejects.toThrow("LLM provider down");
+    await expect(caller.admin.testPipeline({ prompt: "Why is my visa delayed?" })).rejects.toThrow(
+      "LLM provider down",
+    );
 
     expect(prismaMock.pipelineRun?.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -237,6 +238,68 @@ describe("admin.testPipeline", () => {
         }),
       }),
     );
+  });
+
+  it("keeps the plain error message (no stack) when debug mode is off", async () => {
+    mockRunAgenticRag.mockRejectedValue(new Error("LLM provider down"));
+    prismaMock.pipelineRun?.create.mockResolvedValue({ id: "run-err" } as never);
+    const caller = makeCaller();
+
+    const err = await caller.admin
+      .testPipeline({ prompt: "Why is my visa delayed?" })
+      .catch((error: unknown) => error);
+
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toBe("LLM provider down");
+    expect((err as Error).message).not.toContain("Stack:");
+    expect(prismaMock.pipelineRun?.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ error: "LLM provider down" }),
+      }),
+    );
+  });
+
+  it("debug mode rethrows the full error detail (name, message, cause, stack)", async () => {
+    const failure = new Error("LLM provider down");
+    failure.cause = new Error("groq 429 rate limited");
+    mockRunAgenticRag.mockRejectedValue(failure);
+    prismaMock.pipelineRun?.create.mockResolvedValue({ id: "run-err" } as never);
+    const caller = makeCaller();
+
+    const err = await caller.admin
+      .testPipeline({ prompt: "Why is my visa delayed?", debug: true })
+      .catch((error: unknown) => error);
+
+    expect(err).toBeInstanceOf(Error);
+    const message = (err as Error).message;
+    expect(message).toContain("[Error] LLM provider down");
+    expect(message).toContain("Cause: Error: groq 429 rate limited");
+    expect(message).toContain("Stack:");
+    expect(message).toContain("admin-test-pipeline.test.ts");
+
+    // The full detail (including the stack) is also persisted on the run.
+    expect(prismaMock.pipelineRun?.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          error: expect.stringContaining("Stack:"),
+        }),
+      }),
+    );
+  });
+
+  it("formatDebugError serializes name, message, cause and stack", () => {
+    const cause = new Error("root cause");
+    const failure = new Error("boom");
+    failure.cause = cause;
+    const out = formatDebugError(failure);
+    expect(out).toContain("[Error] boom");
+    expect(out).toContain("Cause: Error: root cause");
+    expect(out).toContain("Stack:");
+  });
+
+  it("formatDebugError falls back for non-Error values", () => {
+    expect(formatDebugError("boom")).toBe("[UnknownError] boom");
   });
 
   it("listTestRuns: returns paginated run summaries with nextCursor", async () => {

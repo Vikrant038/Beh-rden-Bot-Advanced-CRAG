@@ -48,6 +48,7 @@ export default function AdminPipelineTesterPage() {
   const [prompt, setPrompt] = useState("");
   const [copied, setCopied] = useState(false);
   const [bypassCache, setBypassCache] = useState(true);
+  const [debugMode, setDebugMode] = useState(false);
   // A stored trace being inspected from the recent-runs list. When null the
   // visualizer shows the freshest run (testPipeline.data).
   const [selectedTrace, setSelectedTrace] = useState<AgenticRagResponse | null>(null);
@@ -79,7 +80,7 @@ export default function AdminPipelineTesterPage() {
     if (!trimmed || testPipeline.isPending) {
       return;
     }
-    testPipeline.mutate({ prompt: trimmed, bypassCache });
+    testPipeline.mutate({ prompt: trimmed, bypassCache, debug: debugMode });
   };
 
   const copyTrace = async () => {
@@ -159,33 +160,63 @@ export default function AdminPipelineTesterPage() {
             </button>
           ))}
 
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={bypassCache}
-              aria-label="Toggle cache bypass"
-              onClick={() => setBypassCache((v) => !v)}
-              className={`relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors focus-visible:ring-2 focus-visible:ring-primary ${
-                bypassCache ? "border-primary/50 bg-primary/15" : "border-border bg-surface-hover"
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-foreground transition-transform ${
-                  bypassCache ? "translate-x-5" : "translate-x-1"
+          <div className="ml-auto flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={debugMode}
+                aria-label="Toggle developer mode"
+                onClick={() => setDebugMode((v) => !v)}
+                className={`relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors focus-visible:ring-2 focus-visible:ring-primary ${
+                  debugMode ? "border-primary/50 bg-primary/15" : "border-border bg-surface-hover"
                 }`}
-              />
-            </button>
-            <span className="inline-flex items-center gap-1 text-xs text-muted">
-              <Zap className={`h-3.5 w-3.5 ${bypassCache ? "text-warning" : ""}`} />
-              Bypass cache
-            </span>
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-foreground transition-transform ${
+                    debugMode ? "translate-x-5" : "translate-x-1"
+                  }`}
+                />
+              </button>
+              <span
+                className={`inline-flex items-center gap-1 text-xs ${debugMode ? "text-primary" : "text-muted"}`}
+              >
+                <FlaskConical className="h-3.5 w-3.5" />
+                Developer mode
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={bypassCache}
+                aria-label="Toggle cache bypass"
+                onClick={() => setBypassCache((v) => !v)}
+                className={`relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors focus-visible:ring-2 focus-visible:ring-primary ${
+                  bypassCache ? "border-primary/50 bg-primary/15" : "border-border bg-surface-hover"
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-foreground transition-transform ${
+                    bypassCache ? "translate-x-5" : "translate-x-1"
+                  }`}
+                />
+              </button>
+              <span className="inline-flex items-center gap-1 text-xs text-muted">
+                <Zap className={`h-3.5 w-3.5 ${bypassCache ? "text-warning" : ""}`} />
+                Bypass cache
+              </span>
+            </div>
           </div>
         </div>
 
         <p className="mt-3 text-xs text-muted">
           Queries run with PII masking, no conversation memory, and
           {bypassCache ? " bypass" : " use"} the semantic cache so every stage executes live.
+          {debugMode
+            ? " Developer mode surfaces full error details (stack + cause) on failure."
+            : ""}
         </p>
       </div>
 
@@ -199,11 +230,35 @@ export default function AdminPipelineTesterPage() {
       ) : null}
 
       {testPipeline.isError ? (
-        <ErrorState
-          message={testPipeline.error.message}
-          code={testPipeline.error.data?.code}
-          retry={run}
-        />
+        debugMode ? (
+          <div className="glass-card space-y-3 rounded-2xl border-destructive/40 p-5">
+            <p className="font-mono text-xs uppercase tracking-wide text-destructive">
+              Pipeline error — developer mode
+            </p>
+            <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-xl border border-border bg-background p-4 font-mono text-xs leading-relaxed text-foreground">
+              {testPipeline.error.message}
+            </pre>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-muted">
+                Full error detail (name, message, cause, stack) — admin only. Copy it into the
+                trace-persistence bug report if the pipeline keeps failing.
+              </p>
+              <button
+                type="button"
+                onClick={run}
+                className="rounded-lg border border-border bg-surface px-4 py-2 text-sm transition hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                Try again
+              </button>
+            </div>
+          </div>
+        ) : (
+          <ErrorState
+            message={testPipeline.error.message}
+            code={testPipeline.error.data?.code}
+            retry={run}
+          />
+        )
       ) : null}
 
       {displayedTrace ? (

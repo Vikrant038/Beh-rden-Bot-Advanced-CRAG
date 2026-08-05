@@ -49,7 +49,9 @@ function parseRequest(url: URL, method: string, postData: string | null): TrpcRe
 /**
  * Intercepts tRPC HTTP calls and answers them from a handler map keyed by
  * procedure name. Handles single- and multi-procedure batches (GET and POST).
- * Handlers not present answer 404 so the test fails loudly.
+ * Handlers not present answer 404 so the test fails loudly. Handlers that throw
+ * answer a tRPC `INTERNAL_SERVER_ERROR` error item so clients exercise their
+ * real error path (used e.g. to test the admin developer-mode error surface).
  */
 export function mockTrpc(page: Page, handlers: Record<string, TrpcHandler>) {
   return page.route("**/api/trpc/**", async (route) => {
@@ -65,9 +67,28 @@ export function mockTrpc(page: Page, handlers: Record<string, TrpcHandler>) {
       if (!handler) {
         throw new Error(`E2E tRPC mock: no handler for "${procedure}"`);
       }
-      // No transformer is configured, so the wire format carries the raw data
-      // (no `{ json: ... }` wrapper — that only appears with superjson).
-      return { result: { data: handler(parsed.inputs[index] ?? {}) } };
+      try {
+        // No transformer is configured, so the wire format carries the raw data
+        // (no `{ json: ... }` wrapper — that only appears with superjson).
+        return { result: { data: handler(parsed.inputs[index] ?? {}) } };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const stack = error instanceof Error ? (error.stack ?? null) : null;
+        return {
+          error: {
+            json: {
+              message,
+              code: "INTERNAL_SERVER_ERROR",
+              data: {
+                code: "INTERNAL_SERVER_ERROR",
+                httpStatus: 500,
+                path: procedure,
+                stack,
+              },
+            },
+          },
+        };
+      }
     });
 
     return route.fulfill({

@@ -90,9 +90,7 @@ test("renders all four stages after running a trace", async ({ page }) => {
 
   await expect(page.getByText("Pipeline trace")).toBeVisible({ timeout: 10_000 });
 
-  await expect(
-    page.getByRole("heading", { name: /Stage 0 — Query disambiguation/ }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Stage 0 — Query disambiguation/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Stage 1 — Research agent/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Stage 2 — Analyst/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Stage 3 — Writer/ })).toBeVisible();
@@ -214,7 +212,9 @@ test("marks a cache-hit trace with a badge", async ({ page }) => {
 test("shows the empty state before the first run", async ({ page }) => {
   await openTester(page);
   await expect(page.getByText("No trace yet")).toBeVisible();
-  await expect(page.getByText("No stored runs yet — run a trace above and it will appear here.")).toBeVisible();
+  await expect(
+    page.getByText("No stored runs yet — run a trace above and it will appear here."),
+  ).toBeVisible();
 });
 
 test("loads a stored trace from the recent-runs list", async ({ page }) => {
@@ -239,4 +239,62 @@ test("loads a stored trace from the recent-runs list", async ({ page }) => {
   await expect(page.getByText("Stored trace")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText("Pipeline trace")).toBeVisible();
   await expect(page.getByText(fullTrace.finalAnswer, { exact: true })).toBeVisible();
+});
+
+test("developer mode surfaces the full pipeline error detail", async ({ page }) => {
+  await setSessionCookie(page.context(), { role: "ADMIN" });
+  // The server puts the formatted debug detail (name/message/cause/stack) into
+  // the tRPC error message, so the mock mimics that shape.
+  await mockTrpc(page, {
+    "admin.testPipeline": () => {
+      throw new Error(
+        "[Error] LLM provider down (groq 429)\nCause: Error: rate limited\nStack:\nError: LLM provider down (groq 429)\n    at runResearch (src/server/rag/agents/orchestrator.ts:42:9)",
+      );
+    },
+    "admin.listTestRuns": () => noRuns,
+    "admin.metrics": () => ({
+      totalUsers: 1,
+      totalMessages: 1,
+      queriesToday: 0,
+      cacheHitRate: 0,
+      avgLatencyMs: 0,
+    }),
+  });
+  await page.goto("/admin/pipeline-tester");
+
+  await page.getByLabel("Toggle developer mode").click();
+  await page.getByLabel("Test pipeline query").fill("visa documents");
+  await page.getByRole("button", { name: "Run trace" }).click();
+
+  await expect(page.getByText("Pipeline error — developer mode")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/\[Error\] LLM provider down \(groq 429\)/)).toBeVisible();
+  await expect(page.getByText(/Cause: Error: rate limited/)).toBeVisible();
+  await expect(
+    page.getByText(/at runResearch \(src\/server\/rag\/agents\/orchestrator\.ts:42:9\)/),
+  ).toBeVisible();
+});
+
+test("without developer mode the raw error message is shown but no stack", async ({ page }) => {
+  await setSessionCookie(page.context(), { role: "ADMIN" });
+  await mockTrpc(page, {
+    "admin.testPipeline": () => {
+      throw new Error("LLM provider down");
+    },
+    "admin.listTestRuns": () => noRuns,
+    "admin.metrics": () => ({
+      totalUsers: 1,
+      totalMessages: 1,
+      queriesToday: 0,
+      cacheHitRate: 0,
+      avgLatencyMs: 0,
+    }),
+  });
+  await page.goto("/admin/pipeline-tester");
+
+  await page.getByLabel("Test pipeline query").fill("visa documents");
+  await page.getByRole("button", { name: "Run trace" }).click();
+
+  await expect(page.getByText("LLM provider down")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("Pipeline error — developer mode")).not.toBeVisible();
+  await expect(page.getByText(/Stack:/)).not.toBeVisible();
 });
