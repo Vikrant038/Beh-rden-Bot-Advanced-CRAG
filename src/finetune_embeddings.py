@@ -131,6 +131,7 @@ def finetune_embedding_model(epochs: int = 3, batch_size: int = 16):
     baseline_mrr = calculate_mrr_at_k(model, test_queries, test_positives, corpus_texts, k=10)
     logger.info(f"   • Baseline Model MRR@10: {baseline_mrr:.4f} ({baseline_mrr*100:.1f}%)")
     
+    # nosemgrep: trailofbits.python.automatic-memory-pinning.automatic-memory-pinning — pin_memory is intentionally left off for this offline MPS training script (performance note, not security); see semgrep-backlog.md.
     train_dataloader = DataLoader(train_examples_final, shuffle=True, batch_size=batch_size)
     train_loss = losses.MultipleNegativesRankingLoss(model=model)
     

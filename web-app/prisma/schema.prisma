@@ -1,0 +1,307 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+// @ai-exception: Enum members use PascalCase per WEB_APP_PLAN §5 (user-approved
+// source of truth) instead of SCREAMING_SNAKE_CASE required by CODING_STANDARDS P1.7.
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+  DISAMBIGUATION
+}
+
+enum EngineMode {
+  STANDARD
+  AGENTIC
+}
+
+enum FeedbackRating {
+  UP
+  DOWN
+}
+
+enum DocumentStatus {
+  PENDING
+  INGESTING
+  SYNCED
+  FAILED
+}
+
+enum DocumentSourceType {
+  URL
+  PDF
+}
+
+/// Background ingest jobs drained by the Vercel Cron worker (see
+/// src/server/ingest/jobs.ts). Jobs are transient: they are pruned after
+/// completion, so the PDF payload column never accumulates long-term.
+enum IngestJobType {
+  URL
+  PDF
+}
+
+enum IngestJobStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
+// ─── Authentication ────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  conversations Conversation[]
+  feedback      MessageFeedback[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// ─── Conversations & Messages ───────────────────────────────────
+
+model Conversation {
+  id        String     @id @default(cuid())
+  title     String?
+  userId    String
+  mode      EngineMode @default(AGENTIC)
+  pinned    Boolean    @default(false)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Soft delete: `delete` sets this, `restore` clears it. Keeping the row means
+  // undo restores the original id (permalinks survive) and preserves message
+  // roles, timestamps and memory, none of which a re-create can reproduce.
+  deletedAt DateTime?
+
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+  memory   ConversationMemory?
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@index([userId, deletedAt, pinned, updatedAt(sort: Desc)])
+  @@map("conversations")
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  conversationId String
+  role           MessageRole
+  content        String
+  metadata       Json?
+  sources        Json?
+  createdAt      DateTime    @default(now())
+
+  conversation Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  feedback     MessageFeedback[]
+
+  @@index([conversationId, createdAt])
+  @@index([role, createdAt])
+  @@map("messages")
+}
+
+/// Thumbs up/down on an assistant answer. Unique per (message, user) so a user's
+/// rating is idempotent — toggling replaces rather than accumulating rows.
+model MessageFeedback {
+  id        String         @id @default(cuid())
+  messageId String
+  userId    String
+  rating    FeedbackRating
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([rating, createdAt])
+  @@map("message_feedback")
+}
+
+model ConversationMemory {
+  id             String   @id @default(cuid())
+  conversationId String   @unique
+  summaryText    String   @default("")
+  updatedAt      DateTime @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("conversation_memories")
+}
+
+// ─── Knowledge Base ─────────────────────────────────────────────
+
+// @ai-exception: Document model added beyond WEB_APP_PLAN §5 to give
+// DocumentChunk a stable parent identifier. Semantic-cache invalidation
+// (invalidateForDocument) requires real document IDs in parentDocIds —
+// source names are not unique/stable (C2 fix).
+
+model Document {
+  id         String                @id @default(cuid())
+  title      String
+  url        String                @unique
+  hash       String
+  chunkCount Int                   @default(0)
+  // Real ingest state, so the UI can distinguish "still working" from "failed"
+  // instead of inferring staleness from updatedAt.
+  status     DocumentStatus        @default(SYNCED)
+  sourceType DocumentSourceType    @default(URL)
+  lastError  String?
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  chunks  DocumentChunk[]
+  parents DocumentParentChunk[]
+
+  @@index([status, updatedAt(sort: Desc)])
+  @@map("documents")
+}
+
+// True Parent-Child Chunking: parents (~2000 ch) are stored and handed to the
+// LLM as context; children (~200 ch) are embedded and indexed for search. On a
+// child match the retriever joins back to its parent via parentId (§2.5).
+model DocumentParentChunk {
+  id         Int             @id @default(autoincrement())
+  documentId String
+  text       String
+  createdAt  DateTime        @default(now())
+
+  document Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  children DocumentChunk[]
+
+  @@index([documentId])
+  @@map("document_parent_chunks")
+}
+
+model DocumentChunk {
+  id         Int                 @id @default(autoincrement())
+  documentId String
+  parentId   Int?
+  sourceName String
+  sourceUrl  String
+  text       String
+  embedding  Unsupported("vector(768)")
+  createdAt  DateTime            @default(now())
+
+  document Document               @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  parent   DocumentParentChunk?   @relation(fields: [parentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([sourceName])
+  @@index([parentId])
+  @@map("document_chunks")
+}
+
+// ─── Admin Diagnostics ──────────────────────────────────────────
+
+/// One glass-box pipeline test run from the admin pipeline tester. The full
+/// AgenticRagResponse trace is stored as JSON so a run can be re-inspected
+/// after the fact (retrieval steps, analysis matrix, sources, latency).
+model PipelineRun {
+  id        String   @id @default(cuid())
+  prompt    String
+  traceJson Json
+  latencyMs Int
+  status    String   @default("SUCCESS")
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@map("pipeline_runs")
+}
+
+// ─── Background Ingest Jobs ─────────────────────────────────────
+
+/// One unit of background ingestion work (a single URL or PDF). Created by the
+/// admin UI (enqueue) and processed serially by the cron worker at
+/// /api/cron/process-ingest-jobs. `payload` holds the PDF buffer for PDF jobs
+/// (bytea, ≤4 MiB); URL jobs carry only `url`. Pruned after completion.
+model IngestJob {
+  id         String          @id @default(cuid())
+  type       IngestJobType
+  url        String? // URL job target; PDF jobs set the pdf:// source key after ingest
+  title      String? // Optional display-name override
+  payload    Bytes? // PDF buffer (bytea) for PDF jobs only
+  filename   String? // Original PDF filename (display/UX)
+  force      Boolean         @default(false)
+  status     IngestJobStatus @default(QUEUED)
+  attempts   Int             @default(0)
+  error      String?
+  result     Json? // IngestResult when DONE
+  createdAt  DateTime        @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  @@index([status, createdAt])
+  @@index([createdAt(sort: Desc)])
+  @@map("ingest_jobs")
+}
+
+// ─── Semantic Cache ─────────────────────────────────────────────
+
+model SemanticCacheEntry {
+  id           Int      @id @default(autoincrement())
+  queryHash    String   @unique
+  queryText    String
+  queryVector  Unsupported("vector(768)")
+  responseJson Json
+  parentDocIds String[]
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+
+  @@index([expiresAt])
+  @@map("semantic_cache")
+}

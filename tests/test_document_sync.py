@@ -67,6 +67,7 @@ async def test_transactional_sync_and_cache_invalidation(setup_db: None) -> None
             await cache.add_to_cache(query, q_vector, response_data, parent_doc_ids=["DAAD_TEST"])
             
             res_chunks = await db.execute(select(DocumentChunk).where(DocumentChunk.source_name == "DAAD_TEST"))
+            # nosemgrep: python.sqlalchemy.performance.performance-improvements.len-all-count — test asserts the exact row count of a tiny in-memory result set; count() adds a second query for no benefit here.
             assert len(res_chunks.scalars().all()) == 1, "Expected 1 initial chunk"
             
             res_cache = await db.execute(select(SemanticCacheEntry).where(SemanticCacheEntry.query_text == query))

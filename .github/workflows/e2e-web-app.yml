@@ -1,0 +1,85 @@
+name: Web App E2E (Playwright)
+
+on:
+  push:
+    branches: [main, web-app]
+    paths:
+      - "web-app/**"
+      - ".github/workflows/e2e-web-app.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "web-app/**"
+      - ".github/workflows/e2e-web-app.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-web-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: behoerden_app
+          POSTGRES_PASSWORD: behoerden_password
+          POSTGRES_DB: behoerden_bot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U behoerden_app -d behoerden_bot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://behoerden_app:behoerden_password@localhost:5432/behoerden_bot
+      MIGRATION_DATABASE_URL: postgresql://behoerden_app:behoerden_password@localhost:5432/behoerden_bot
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: e2e-placeholder-secret-1234567890abcdef
+    defaults:
+      run:
+        working-directory: web-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          # Explicit: `uses:` steps ignore `defaults.run.working-directory`, so
+          # the action cannot discover packageManager from web-app/package.json.
+          version: 11.20.0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-app/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm prisma generate
+
+      - name: Apply migrations
+        run: pnpm prisma migrate deploy
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-report
+          path: web-app/playwright-report
+          retention-days: 7

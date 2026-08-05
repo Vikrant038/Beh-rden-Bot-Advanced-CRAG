@@ -1,7 +1,6 @@
 .env
 .venv/
 venv/
-data/
 models/
 checkpoints/
 *.faiss
@@ -11,3 +10,5 @@ checkpoints/
 *.jsonl
 __pycache__/
 .DS_Store
+# Freebuff desktop app state (local-only, churns every session)
+.freebuff/

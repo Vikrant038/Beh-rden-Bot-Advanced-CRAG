@@ -3,6 +3,7 @@ FastAPI REST API Server & Server-Sent Events (SSE) Streaming Backend (Behoerden-
 Complies with AGENTS.md §1 & §2, and CODING_STANDARDS.md.
 """
 
+import os
 import uvicorn
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional, Union
@@ -29,10 +30,20 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Behörden-Bot 3.0 API", description="3-Agent ReAct RAG with PostgreSQL", lifespan=lifespan)
 
+# CORS: scoped allowlist instead of "*" (semgrep wildcard-cors). Defaults to
+# local dev origins; set CORS_ORIGINS (comma-separated) to the deployed origin(s).
+# allow_credentials stays False: this API authenticates via Bearer token, not cookies,
+# and credentialed requests with a wildcard origin are rejected by browsers anyway.
+_cors_origins = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ORIGINS", "http://localhost:8501,http://127.0.0.1:8501").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

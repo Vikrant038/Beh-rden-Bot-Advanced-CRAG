@@ -1,0 +1,23 @@
+/**
+ * Guest-mode constants, kept free of any Node-only imports so they can be
+ * referenced from the Edge middleware and client components alike.
+ */
+
+/** HTTP-only cookie that carries the signed device-scoped guest identity. */
+export const GUEST_COOKIE = "behoerden_guest";
+
+/** How long a guest session persists on the device (180 days). */
+export const GUEST_MAX_AGE_SECONDS = 180 * 24 * 60 * 60;
+
+/**
+ * Free-tier cap: a guest may ask at most this many prompts (USER messages
+ * across all their non-deleted conversations) before being asked to sign in.
+ */
+export const GUEST_PROMPT_LIMIT = 5;
+
+/**
+ * Client-facing error code sent by the server when the guest cap is hit.
+ * Must match `ErrorCode.GUEST_PROMPT_LIMIT` in
+ * `src/server/lib/errors/codes.ts`.
+ */
+export const GUEST_LIMIT_REACHED_CODE = "GUEST_PROMPT_LIMIT";

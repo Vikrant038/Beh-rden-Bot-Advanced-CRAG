@@ -1,0 +1,12 @@
+name: "Web App CodeQL configuration"
+
+# Restrict CodeQL analysis to the web-app TypeScript surface so the Python
+# codebase is not scanned by the TypeScript query pack.
+paths:
+  - web-app/src
+paths-ignore:
+  - web-app/.next
+  - web-app/node_modules
+  - web-app/coverage
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
