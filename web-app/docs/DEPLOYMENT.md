@@ -16,6 +16,7 @@
 | **LLM** | **Google AI Studio (Gemini)** | `GEMINI_API_KEY` is the only *required* LLM key (`env.ts`). Free tier is generous. |
 | **LLM (primary)** | **Groq** | `GROQ_API_KEY` free tier (14.4k req/day) powers the default `llama-3.1-8b-instant`. |
 | **LLM (fallback)** | **Hugging Face** | `HF_TOKEN` optional; used for reranking/embeddings fallback. |
+| **Embeddings** | **Cloudflare Workers AI** | `@cf/baai/bge-base-en-v1.5` (768-dim) served by a tiny Worker (`embeddings-worker/`) — $0, serverless, same weights as the local corpus embed (§3). |
 | **File storage** | **None needed yet** | PDF uploads are parsed **in-memory** (4 MiB cap, `ingestPdf`) and stored as chunks in Postgres. Add **Cloudflare R2** (10 GB free, $0 egress) later if you keep raw files. |
 | **Domain** | **Cloudflare Registrar / Porkbun** | ~$10/yr at cost. Free interim: `<project>.vercel.app`. |
 | **Auth** | GitHub + Google OAuth | Free developer accounts. Email magic-link (Resend) optional. |
@@ -81,7 +82,115 @@ value is fine on Neon free).
 
 ---
 
-## 3. Vercel project + environment variables
+## 3. Production embedding architecture (seeded corpus, not re-embed)
+
+> The single most important deployment fact: **production never bulk-embeds the corpus.**
+> The vectors (768-dim, pgvector) live in Postgres tables — `documents`,
+> `document_parent_chunks`, `document_chunks`, `semantic_cache`. You embed the corpus
+> **once, offline**, ship the rows to Neon, and at runtime Vercel only embeds 1 query
+> vector per chat message + a handful per incremental admin add.
+
+### 3.1 Three phases, three embed loads
+
+| Phase | Embed load | Runs where | Free-tier reality |
+|---|---|---|---|
+| **Corpus seed (one-time)** | ~3,000+ requests (full 143-source corpus; the Residence Act alone ≈ 40 batched calls) | **Anywhere offline** — local docker, a dev box, spread over days on a free key, or one Ollama pass | The only heavy lift; happens before go-live, never again |
+| **User query (chat)** | **1 embed per query** | Vercel function | Trivial — years of free-tier quota at real usage |
+| **Incremental admin adds** | Tens of requests per document | Vercel cron drain (resumable ingest queue) | Fits daily caps; big PDFs span multiple ticks |
+
+### 3.2 Seed the corpus into Neon (one-time)
+
+Once migrations are applied on Neon (§2), transfer the vectors with
+`web-app/scripts/seed-corpus.sh` — **no re-embedding**:
+
+```bash
+cd web-app
+NEON_DATABASE_URL="postgresql://behoerden_app:...@ep-xxx-pooler.eu-central-1.aws.neon.tech/behoerden_bot?sslmode=require" \
+  ./scripts/seed-corpus.sh --replace
+```
+
+- Dumps `documents` → `document_parent_chunks` → `document_chunks` (FK order) from the
+  local docker Postgres via the container's own `pg_dump`/`psql`; `--include-cache` also
+  ships `semantic_cache` (and bumps its id sequence).
+- **Deliberately excludes** auth, sessions, conversations, messages, `ingest_jobs` — prod
+  keeps its own.
+- Safety gates: aborts if the target already has corpus rows unless `--replace` is given;
+  connection strings are redacted from all output; counts are verified local → target and
+  a mismatch fails the run.
+- Re-running with `--replace` is always safe (wipe + reload) when the corpus changes.
+
+### 3.3 Query-time embedding (1 per query)
+
+Each chat query embeds once (a single request) to search the seeded vectors — the only embed
+Vercel does at runtime, a handful of requests/day at real usage. With
+`EMBEDDING_PROVIDER=hf`, the `HfEmbeddingClient` POSTs the query (prefixed per §3.5) to
+`HF_INFERENCE_URL` — the deployed Cloudflare embeddings worker (`embeddings-worker/`) —
+which runs `@cf/baai/bge-base-en-v1.5` via Workers AI and returns the 768-dim vector.
+
+### 3.4 Incremental adds (admin → ingest queue → cron drain)
+
+Documents added via the admin UI are **enqueued** as `ingest_jobs`, then drained by
+`/api/cron/process-ingest-jobs` (every 5 min, `vercel.json`) alongside
+`/api/cron/cleanup-cache` (daily 4 am). The queue is **resumable**: a per-job progress
+cursor + mid-tick time-budget check lets a large PDF finish across several cron ticks
+instead of dying on Vercel's 60 s serverless cap, and per-tick pacing stays under the
+provider's rate limits. Design: `docs/status/phase-h-resumable-ingest.md` +
+`../Docs/status/adr-resumable-ingest-queue.md`.
+
+> ⚠️ **Hobby-plan blocker — read this before deploying.** Vercel Hobby permits **daily**
+> crons only; a `*/5 * * * *` entry in `vercel.json` **fails the deployment build** with
+> *"Hobby accounts are limited to daily cron jobs"*. Two ways forward:
+>
+> 1. **Hobby (keep $0):** remove the `process-ingest-jobs` cron from `vercel.json` and
+>    trigger the drain on-demand — the admin upload flow (or a frontend-polled endpoint)
+>    calls the same route after enqueueing. Incremental adds still work; they just drain
+>    on demand instead of by timer.
+> 2. **Pro ($20/mo):** keep the 5-min cron as-is (Pro supports per-minute precision).
+>
+> The corpus-seed model (§3.1) is unaffected either way — runtime embed load is tiny.
+
+### 3.5 Provider decision
+
+The schema pins `vector(768)`, which rules out models like bge-large (1024-dim — would
+require a migration + full re-embed). Options that fit:
+
+| Option | Dim | Fits schema | Runs on Vercel? | Notes |
+|---|---|---|---|---|
+| **Cloudflare Workers AI (chosen)** | `@cf/baai/bge-base-en-v1.5` = 768 | ✅ | ✅ via a tiny Worker (`embeddings-worker/`) | $0 (10k neurons/day free ≈ millions of query embeds). Same BGE weights as the local corpus embed → same vector space. Token-auth'd endpoint. |
+| **Gemini** | 768 (client sets `outputDimensionality: 768`) | ✅ | ✅ natively | Works out of the box with `GEMINI_API_KEY`; the previous default. Free daily quota made a one-time 3,000-request corpus seed take ~10–12 days — fine for queries, painful for the bulk pass. |
+| **HF Inference** | 768 (bge-base) | ✅ | ✅ (Vercel's network is fine; the local HTTP-000 block was machine-specific) | 30k req/month ceiling — workable, but Cloudflare's free tier is higher on the same model. |
+| **Ollama (local)** | nomic-embed-text = 768 | ✅ | ❌ needs a **self-hosted endpoint reachable from Vercel** (small VM/Railway/Fly) | $0/unlimited, best quality, but an always-on box to babysit. |
+
+**Decision: Cloudflare bge-base — the same model on both sides.** The corpus is embedded
+locally with `BAAI/bge-base-en-v1.5` via `web-app/scripts/embed-server.py` (FastAPI +
+sentence-transformers, MPS GPU), and queries are embedded on Vercel by the deployed worker
+running the same weights. Same model = same vector space — the non-negotiable rule for
+pgvector cosine retrieval (a mix, e.g. Ollama corpus + Gemini queries, returns garbage
+with no error).
+
+Two sides, two prefixes (BGE is asymmetric):
+
+- **Corpus side (embed-server):** chunk text embedded **as-is, no prefix**.
+- **Query side (client):** `HfEmbeddingClient.embedQuery` prepends
+  `QUERY_EMBEDDING_PREFIX` — `"Represent this sentence for searching relevant passages: "`.
+  Getting this backwards silently degrades retrieval.
+
+Wiring (Vercel env): `EMBEDDING_PROVIDER=hf`,
+`HF_INFERENCE_URL=https://<worker>.workers.dev`, `HF_TOKEN=<worker EMBED_TOKEN>`,
+`EMBEDDING_MODEL=BAAI/bge-base-en-v1.5`. The worker itself is token-auth'd
+(constant-time compare) — an open `/pipeline/feature-extraction` would be free compute for
+anyone on the internet.
+
+> **Fine-tuned model note:** the repo's fine-tuned BGE (`bge_base_german_visa`, +21.92%
+> MRR@10) **cannot run on Cloudflare** — LoRA adapters are text-generation
+> (Llama/Mistral/Gemma) only, and the ~400 MB ONNX weights exceed Worker asset limits.
+> Serving it in production means a VM + text-embeddings-inference, and the corpus must be
+> re-embedded with that model (same-space rule again). The web-app doesn't use the
+> fine-tuned model today; revisit only if retrieval quality demands it.
+
+---
+
+## 4. Vercel project + environment variables
 
 **Option A (recommended — the repo workflow already deploys via GitHub Actions):**
 
@@ -104,7 +213,11 @@ value is fine on Neon free).
 | `MIGRATION_DATABASE_URL` | Same Neon string |
 | `NEXTAUTH_URL` | `https://<your-domain>` (must match OAuth callback host) |
 | `NEXTAUTH_SECRET` | `openssl rand -base64 32` |
-| `GEMINI_API_KEY` | Google AI Studio key (**required** by `env.ts`) |
+| `EMBEDDING_PROVIDER` | `gemini` (default) or `hf`. **Set `hf` for the Cloudflare path.** |
+| `HF_INFERENCE_URL` | Cloudflare worker URL, e.g. `https://embed-worker.<you>.workers.dev` |
+| `HF_TOKEN` | The worker's `EMBED_TOKEN` secret (set via `wrangler secret put`) |
+| `EMBEDDING_MODEL` | `BAAI/bge-base-en-v1.5` (default; must match the worker's model) |
+| `GEMINI_API_KEY` | Google AI Studio key — only needed while `EMBEDDING_PROVIDER=gemini` |
 | `CRON_SECRET` | Random string; matches the `/api/cron/cleanup-cache` guard |
 
 ### Optional env vars (fill as you create accounts)
@@ -120,7 +233,7 @@ value is fine on Neon free).
 
 ---
 
-## 4. Custom domain (≈$10/yr, optional but recommended)
+## 5. Custom domain (≈$10/yr, optional but recommended)
 
 1. **Buy** at Cloudflare Registrar (`dash.cloudflare.com`) or Porkbun — `.com` ≈ $10/yr;
    `.in`/`.de` are cheaper if your audience is Indian students in Germany.
@@ -133,7 +246,7 @@ value is fine on Neon free).
 
 ---
 
-## 5. Google listing (Search Console + indexing)
+## 6. Google listing (Search Console + indexing)
 
 1. **sitemap + robots** — add `src/app/sitemap.ts` and `src/app/robots.ts`
    (App Router conventions; base URL = your domain). Rebuild & deploy.
@@ -149,30 +262,35 @@ value is fine on Neon free).
 
 ---
 
-## 6. Go-live checklist (final pass)
+## 7. Go-live checklist (final pass)
 
 - [ ] `pnpm typecheck && pnpm lint && pnpm test && pnpm build` green locally
 - [ ] `pnpm prisma migrate deploy` ran against Neon (extension `vector` created)
+- [ ] **Corpus seeded**: `NEON_DATABASE_URL=… ./scripts/seed-corpus.sh --replace` verified (counts OK, no re-embed)
+- [ ] **Cloudflare worker deployed**: `wrangler secret put EMBED_TOKEN` + `wrangler deploy` (§3.5); `EMBEDDING_PROVIDER=hf` + `HF_INFERENCE_URL`/`HF_TOKEN` set in Vercel
 - [ ] All required env vars set in Vercel; `NEXTAUTH_SECRET` generated
 - [ ] GitHub OAuth + Google OAuth callback URLs point at the production host
-- [ ] `/api/cron/cleanup-cache` daily 4am cron registered (Hobby supports 1/day — matches) with `CRON_SECRET` set
+- [ ] Cron plan decided: `cleanup-cache` (daily) fits Hobby; `process-ingest-jobs` (`*/5`) **requires Pro or an on-demand drain on Hobby** — resolve before first deploy, `CRON_SECRET` set
 - [ ] Custom domain + TLS live; `metadataBase`/`APP_URL` updated
 - [ ] Sitemap + robots deployed; Search Console verified + sitemap submitted
 - [ ] Test guest mode → sign in → **data claim** (guest conversations appear under the account)
 - [ ] Test admin document ingest (URL + PDF), source browser, history export
 - [ ] `npm` `pnpm`/Docker/`docker-compose.yml` only for the **Python RAG repo** — not needed for `web-app/`
 
-## 7. Cost summary
+## 8. Cost summary
 
 | Item | Cost |
 |---|---|
 | Vercel Hobby | $0 |
 | Neon Postgres free | $0 |
-| Gemini / Groq / HF / GitHub / Google / Resend | $0 |
+| Gemini / Groq / HF / Cloudflare Workers AI / GitHub / Google / Resend | $0 |
 | Domain | ~$10/year |
 | **Total** | **~$10/year** (or $0 while using the `.vercel.app` subdomain) |
 
-## 8. Later upgrades (when traffic grows)
+> Vercel **Pro ($20/mo)** is only needed for the 5-minute ingest cron (§3.4). On Hobby,
+> remove that cron and drain the ingest queue on-demand — runtime cost stays $0.
+
+## 9. Later upgrades (when traffic grows)
 
 - Bump Neon to paid for PITR backups + more storage; add R2 for raw PDF storage.
 - Add `@vercel/analytics` + Langfuse dashboards; enable preview deployments for PRs.
