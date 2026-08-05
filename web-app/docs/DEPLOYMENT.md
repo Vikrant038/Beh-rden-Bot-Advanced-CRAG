@@ -175,6 +175,12 @@ Two sides, two prefixes (BGE is asymmetric):
   `QUERY_EMBEDDING_PREFIX` — `"Represent this sentence for searching relevant passages: "`.
   Getting this backwards silently degrades retrieval.
 
+**One more same-space requirement — pooling.** The local sentence-transformers model's
+`1_Pooling` config is `pooling_mode_cls_token: true` (CLS). Cloudflare's
+`@cf/baai/bge-base-en-v1.5` **defaults to `mean` pooling**, and the two are documented as
+incompatible — so the worker passes `pooling: "cls"` explicitly (`embeddings-worker/`).
+If you ever change pooling on one side, change it on the other **and re-seed** (`--replace`).
+
 Wiring (Vercel env): `EMBEDDING_PROVIDER=hf`,
 `HF_INFERENCE_URL=https://<worker>.workers.dev`, `HF_TOKEN=<worker EMBED_TOKEN>`,
 `EMBEDDING_MODEL=BAAI/bge-base-en-v1.5`. The worker itself is token-auth'd
