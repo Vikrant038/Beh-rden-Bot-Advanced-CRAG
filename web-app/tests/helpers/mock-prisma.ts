@@ -62,6 +62,7 @@ export interface MockPrisma {
   };
   pipelineRun: {
     create: MockFn;
+    update: MockFn;
     findMany: MockFn;
     findUnique: MockFn;
   };

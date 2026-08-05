@@ -10,7 +10,7 @@ vi.mock("@/server/db", () => ({
     document: { count: vi.fn() },
     semanticCacheEntry: { deleteMany: vi.fn() },
     conversationMemory: { upsert: vi.fn() },
-    pipelineRun: { create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
+    pipelineRun: { create: vi.fn(), update: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     $queryRaw: vi.fn(),
   },
 }));
@@ -75,7 +75,8 @@ function fullTrace(): AgenticRagResponse {
         parentText: "Expanded parent context.",
       },
     ],
-    totalLatencyMs: 2400, toolCalls: [],
+    totalLatencyMs: 2400,
+    toolCalls: [],
     stages: [
       { index: 0, name: "Query disambiguation & guardrail", durationMs: 400, status: "executed" },
       { index: 1, name: "Research agent (ReAct)", durationMs: 1200, status: "executed" },
@@ -126,35 +127,43 @@ describe("admin.testPipeline", () => {
     expect(mockRunAgenticRag).not.toHaveBeenCalled();
   });
 
-  it("returns the full AgenticRagResponse trace without writing conversation memory", async () => {
+  it("queues a RUNNING run, executes the pipeline, and returns { runId }", async () => {
     mockRunAgenticRag.mockResolvedValue(fullTrace());
     prismaMock.pipelineRun?.create.mockResolvedValue({ id: "run-1" } as never);
+    prismaMock.pipelineRun?.update.mockResolvedValue({ id: "run-1" } as never);
     const caller = makeCaller();
 
     const result = await caller.admin.testPipeline({
       prompt: "What documents are required for a German student visa?",
     });
 
-    expect(result.finalAnswer).toContain("valid passport");
-    expect(result.researchSteps).toHaveLength(1);
-    expect(result.sources[0]?.childText).toBe("Matched child snippet.");
-    expect(result.sources[0]?.parentText).toBe("Expanded parent context.");
-    expect(result.guardrail).toEqual({ passed: true, reason: "In-domain" });
-
-    // The NoopMemory adapter must prevent any ConversationMemory write.
-    expect(prismaMock.conversationMemory?.upsert).not.toHaveBeenCalled();
-
-    // A PipelineRun row is persisted so the trace can be re-inspected later.
+    // Background contract: the mutation returns the run id immediately; the
+    // RUNNING row was created first and the worker updated it to SUCCESS.
+    expect(result).toEqual({ runId: "run-1" });
     expect(prismaMock.pipelineRun?.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           prompt: "What documents are required for a German student visa?",
-          status: "SUCCESS",
-          latencyMs: 2400,
-          traceJson: expect.objectContaining({ finalAnswer: expect.any(String) }),
+          status: "RUNNING",
+          latencyMs: 0,
         }),
       }),
     );
+    expect(prismaMock.pipelineRun?.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "run-1" },
+        data: expect.objectContaining({
+          status: "SUCCESS",
+          latencyMs: 2400,
+          traceJson: expect.objectContaining({
+            finalAnswer: expect.stringContaining("valid passport"),
+          }),
+        }),
+      }),
+    );
+
+    // The NoopMemory adapter must prevent any ConversationMemory write.
+    expect(prismaMock.conversationMemory?.upsert).not.toHaveBeenCalled();
 
     // Called with a NoopMemory instance and cache bypassed.
     const [query, options] = mockRunAgenticRag.mock.calls[0] ?? [];
@@ -163,7 +172,7 @@ describe("admin.testPipeline", () => {
     expect(typeof (options as { memory: { addTurn: () => void } }).memory.addTurn).toBe("function");
   });
 
-  it("propagates a guardrail-blocked (out of domain) response", async () => {
+  it("propagates a guardrail-blocked (out of domain) response into the trace", async () => {
     mockRunAgenticRag.mockResolvedValue({
       ...fullTrace(),
       finalAnswer: "**Out of Domain Detected:** ...",
@@ -178,11 +187,18 @@ describe("admin.testPipeline", () => {
       sources: [],
       guardrail: { passed: false, reason: "Out of domain" },
     });
+    prismaMock.pipelineRun?.create.mockResolvedValue({ id: "run-2" } as never);
+    prismaMock.pipelineRun?.update.mockResolvedValue({ id: "run-2" } as never);
     const caller = makeCaller();
 
     const result = await caller.admin.testPipeline({ prompt: "Tell me about cooking pasta" });
-    expect(result.guardrail.passed).toBe(false);
-    expect(result.sources).toHaveLength(0);
+    expect(result).toEqual({ runId: "run-2" });
+
+    const updateData = prismaMock.pipelineRun?.update.mock.calls[0]?.[0] as {
+      data: { traceJson: { guardrail: { passed: boolean }; sources: unknown[] } };
+    };
+    expect(updateData.data.traceJson.guardrail.passed).toBe(false);
+    expect(updateData.data.traceJson.sources).toHaveLength(0);
   });
 
   it("propagates a cache-hit response with a single research step", async () => {
@@ -204,33 +220,44 @@ describe("admin.testPipeline", () => {
         verified_facts: [],
       },
     });
+    prismaMock.pipelineRun?.create.mockResolvedValue({ id: "run-3" } as never);
+    prismaMock.pipelineRun?.update.mockResolvedValue({ id: "run-3" } as never);
     const caller = makeCaller();
 
     const result = await caller.admin.testPipeline({ prompt: "visa fee germany" });
-    expect(result.researchSteps[0]?.action).toBe("Semantic Cache Hit");
+    expect(result).toEqual({ runId: "run-3" });
+    const updateData = prismaMock.pipelineRun?.update.mock.calls[0]?.[0] as {
+      data: { traceJson: { researchSteps: Array<{ action: string }> } };
+    };
+    expect(updateData.data.traceJson.researchSteps[0]?.action).toBe("Semantic Cache Hit");
   });
 
   it("persists only the pipeline run — never a conversation or message row", async () => {
     mockRunAgenticRag.mockResolvedValue(fullTrace());
     prismaMock.pipelineRun?.create.mockResolvedValue({ id: "run-1" } as never);
+    prismaMock.pipelineRun?.update.mockResolvedValue({ id: "run-1" } as never);
     const caller = makeCaller();
     await caller.admin.testPipeline({ prompt: "What is an APS certificate?" });
     expect(prismaMock.pipelineRun?.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.pipelineRun?.update).toHaveBeenCalledTimes(1);
     expect(prismaMock.conversation.create).not.toHaveBeenCalled();
     expect(prismaMock.message.create).not.toHaveBeenCalled();
   });
 
-  it("persists a FAILED run and rethrows when the pipeline throws", async () => {
+  it("records a FAILED run and still returns the runId (background semantics)", async () => {
     mockRunAgenticRag.mockRejectedValue(new Error("LLM provider down"));
     prismaMock.pipelineRun?.create.mockResolvedValue({ id: "run-err" } as never);
+    prismaMock.pipelineRun?.update.mockResolvedValue({ id: "run-err" } as never);
     const caller = makeCaller();
 
-    await expect(caller.admin.testPipeline({ prompt: "Why is my visa delayed?" })).rejects.toThrow(
-      "LLM provider down",
-    );
+    // Unlike the old synchronous contract, the mutation does NOT rethrow — the
+    // failure is recorded on the run row for the client's poller to surface.
+    const result = await caller.admin.testPipeline({ prompt: "Why is my visa delayed?" });
+    expect(result).toEqual({ runId: "run-err" });
 
-    expect(prismaMock.pipelineRun?.create).toHaveBeenCalledWith(
+    expect(prismaMock.pipelineRun?.update).toHaveBeenCalledWith(
       expect.objectContaining({
+        where: { id: "run-err" },
         data: expect.objectContaining({
           status: "FAILED",
           error: "LLM provider down",
@@ -243,49 +270,39 @@ describe("admin.testPipeline", () => {
   it("keeps the plain error message (no stack) when debug mode is off", async () => {
     mockRunAgenticRag.mockRejectedValue(new Error("LLM provider down"));
     prismaMock.pipelineRun?.create.mockResolvedValue({ id: "run-err" } as never);
+    prismaMock.pipelineRun?.update.mockResolvedValue({ id: "run-err" } as never);
     const caller = makeCaller();
 
-    const err = await caller.admin
-      .testPipeline({ prompt: "Why is my visa delayed?" })
-      .catch((error: unknown) => error);
-
-    expect(err).toBeInstanceOf(Error);
-    expect((err as Error).message).toBe("LLM provider down");
-    expect((err as Error).message).not.toContain("Stack:");
-    expect(prismaMock.pipelineRun?.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ error: "LLM provider down" }),
-      }),
-    );
+    await caller.admin.testPipeline({ prompt: "Why is my visa delayed?" });
+    const updateData = prismaMock.pipelineRun?.update.mock.calls[0]?.[0] as {
+      data: { error: string };
+    };
+    expect(updateData.data.error).toBe("LLM provider down");
+    expect(updateData.data.error).not.toContain("Stack:");
   });
 
-  it("debug mode rethrows the full error detail (name, message, cause, stack)", async () => {
+  it("debug mode persists the full error detail (name, message, cause, stack) on the run", async () => {
     const failure = new Error("LLM provider down");
     failure.cause = new Error("groq 429 rate limited");
     mockRunAgenticRag.mockRejectedValue(failure);
     prismaMock.pipelineRun?.create.mockResolvedValue({ id: "run-err" } as never);
+    prismaMock.pipelineRun?.update.mockResolvedValue({ id: "run-err" } as never);
     const caller = makeCaller();
 
-    const err = await caller.admin
-      .testPipeline({ prompt: "Why is my visa delayed?", debug: true })
-      .catch((error: unknown) => error);
+    const result = await caller.admin.testPipeline({
+      prompt: "Why is my visa delayed?",
+      debug: true,
+    });
+    expect(result).toEqual({ runId: "run-err" });
 
-    expect(err).toBeInstanceOf(Error);
-    const message = (err as Error).message;
-    expect(message).toContain("[Error] LLM provider down");
-    expect(message).toContain("Cause: Error: groq 429 rate limited");
-    expect(message).toContain("Stack:");
-    expect(message).toContain("admin-test-pipeline.test.ts");
-
-    // The full detail (including the stack) is also persisted on the run.
-    expect(prismaMock.pipelineRun?.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          status: "FAILED",
-          error: expect.stringContaining("Stack:"),
-        }),
-      }),
-    );
+    // The full detail (including the stack) is persisted on the run row.
+    const updateData = prismaMock.pipelineRun?.update.mock.calls[0]?.[0] as {
+      data: { status: string; error: string };
+    };
+    expect(updateData.data.status).toBe("FAILED");
+    expect(updateData.data.error).toContain("[Error] LLM provider down");
+    expect(updateData.data.error).toContain("Cause: Error: groq 429 rate limited");
+    expect(updateData.data.error).toContain("Stack:");
   });
 
   it("formatDebugError serializes name, message, cause and stack", () => {

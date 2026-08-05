@@ -65,10 +65,17 @@ const storedRun = {
   createdAt: "2026-08-01T10:00:00.000Z",
 };
 
-async function openTester(page: import("@playwright/test").Page) {
-  await setSessionCookie(page.context(), { role: "ADMIN" });
+/**
+ * Base mocks for the background-execution contract: `admin.testPipeline` now
+ * returns `{ runId }` instantly and the client polls `admin.getTestRun` until
+ * the row reaches a terminal state, so the trace is delivered via the poll.
+ */
+type MockRun = Omit<typeof storedRun, "error"> & { error: string | null };
+
+async function mockTesterBasics(page: import("@playwright/test").Page, run: MockRun) {
   await mockTrpc(page, {
-    "admin.testPipeline": () => fullTrace,
+    "admin.testPipeline": () => ({ runId: run.id }),
+    "admin.getTestRun": () => run,
     "admin.listTestRuns": () => noRuns,
     "admin.metrics": () => ({
       totalUsers: 1,
@@ -78,6 +85,11 @@ async function openTester(page: import("@playwright/test").Page) {
       avgLatencyMs: 0,
     }),
   });
+}
+
+async function openTester(page: import("@playwright/test").Page) {
+  await setSessionCookie(page.context(), { role: "ADMIN" });
+  await mockTesterBasics(page, storedRun);
   await page.goto("/admin/pipeline-tester");
   await expect(page.getByRole("heading", { name: "Pipeline tester" })).toBeVisible();
 }
@@ -123,8 +135,9 @@ test("shows the child snippet and expanded parent context", async ({ page }) => 
 
 test("surfaces an out-of-domain guardrail block", async ({ page }) => {
   await setSessionCookie(page.context(), { role: "ADMIN" });
-  await mockTrpc(page, {
-    "admin.testPipeline": () => ({
+  await mockTesterBasics(page, {
+    ...storedRun,
+    traceJson: {
       ...fullTrace,
       userQuery: "Tell me about cooking pasta",
       maskedQuery: "Tell me about cooking pasta",
@@ -146,15 +159,7 @@ test("surfaces an out-of-domain guardrail block", async ({ page }) => {
       },
       sources: [],
       totalLatencyMs: 120,
-    }),
-    "admin.listTestRuns": () => noRuns,
-    "admin.metrics": () => ({
-      totalUsers: 1,
-      totalMessages: 1,
-      queriesToday: 0,
-      cacheHitRate: 0,
-      avgLatencyMs: 0,
-    }),
+    },
   });
   await page.goto("/admin/pipeline-tester");
 
@@ -171,8 +176,9 @@ test("surfaces an out-of-domain guardrail block", async ({ page }) => {
 
 test("marks a cache-hit trace with a badge", async ({ page }) => {
   await setSessionCookie(page.context(), { role: "ADMIN" });
-  await mockTrpc(page, {
-    "admin.testPipeline": () => ({
+  await mockTesterBasics(page, {
+    ...storedRun,
+    traceJson: {
       ...fullTrace,
       finalAnswer: "Served from cache.",
       researchSteps: [
@@ -190,15 +196,7 @@ test("marks a cache-hit trace with a badge", async ({ page }) => {
         verified_facts: [],
       },
       totalLatencyMs: 45,
-    }),
-    "admin.listTestRuns": () => noRuns,
-    "admin.metrics": () => ({
-      totalUsers: 1,
-      totalMessages: 1,
-      queriesToday: 0,
-      cacheHitRate: 0,
-      avgLatencyMs: 0,
-    }),
+    },
   });
   await page.goto("/admin/pipeline-tester");
 
@@ -220,9 +218,9 @@ test("shows the empty state before the first run", async ({ page }) => {
 test("loads a stored trace from the recent-runs list", async ({ page }) => {
   await setSessionCookie(page.context(), { role: "ADMIN" });
   await mockTrpc(page, {
-    "admin.testPipeline": () => fullTrace,
-    "admin.listTestRuns": () => ({ items: [storedRun], nextCursor: null }),
+    "admin.testPipeline": () => ({ runId: storedRun.id }),
     "admin.getTestRun": () => storedRun,
+    "admin.listTestRuns": () => ({ items: [storedRun], nextCursor: null }),
     "admin.metrics": () => ({
       totalUsers: 1,
       totalMessages: 1,
@@ -243,22 +241,14 @@ test("loads a stored trace from the recent-runs list", async ({ page }) => {
 
 test("developer mode surfaces the full pipeline error detail", async ({ page }) => {
   await setSessionCookie(page.context(), { role: "ADMIN" });
-  // The server puts the formatted debug detail (name/message/cause/stack) into
-  // the tRPC error message, so the mock mimics that shape.
-  await mockTrpc(page, {
-    "admin.testPipeline": () => {
-      throw new Error(
-        "[Error] LLM provider down (groq 429)\nCause: Error: rate limited\nStack:\nError: LLM provider down (groq 429)\n    at runResearch (src/server/rag/agents/orchestrator.ts:42:9)",
-      );
-    },
-    "admin.listTestRuns": () => noRuns,
-    "admin.metrics": () => ({
-      totalUsers: 1,
-      totalMessages: 1,
-      queriesToday: 0,
-      cacheHitRate: 0,
-      avgLatencyMs: 0,
-    }),
+  // The server stores the formatted debug detail (name/message/cause/stack) on
+  // the run row, so the mock returns a FAILED run carrying that detail.
+  await mockTesterBasics(page, {
+    ...storedRun,
+    id: "run-err",
+    status: "FAILED",
+    error:
+      "[Error] LLM provider down (groq 429)\nCause: Error: rate limited\nStack:\nError: LLM provider down (groq 429)\n    at runResearch (src/server/rag/agents/orchestrator.ts:42:9)",
   });
   await page.goto("/admin/pipeline-tester");
 
@@ -276,18 +266,11 @@ test("developer mode surfaces the full pipeline error detail", async ({ page }) 
 
 test("without developer mode the raw error message is shown but no stack", async ({ page }) => {
   await setSessionCookie(page.context(), { role: "ADMIN" });
-  await mockTrpc(page, {
-    "admin.testPipeline": () => {
-      throw new Error("LLM provider down");
-    },
-    "admin.listTestRuns": () => noRuns,
-    "admin.metrics": () => ({
-      totalUsers: 1,
-      totalMessages: 1,
-      queriesToday: 0,
-      cacheHitRate: 0,
-      avgLatencyMs: 0,
-    }),
+  await mockTesterBasics(page, {
+    ...storedRun,
+    id: "run-err",
+    status: "FAILED",
+    error: "LLM provider down",
   });
   await page.goto("/admin/pipeline-tester");
 

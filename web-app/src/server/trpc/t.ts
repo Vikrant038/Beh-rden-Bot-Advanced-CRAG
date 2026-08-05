@@ -81,40 +81,6 @@ const isAdmin = t.middleware(({ ctx, next }) => {
 export const protectedProcedure = t.procedure.use(isAuthenticated);
 export const adminProcedure = t.procedure.use(isAuthenticated).use(isAdmin);
 
-const ADMIN_OPERATION_TIMEOUT_MS = 50_000;
-
-/**
- * Timeout guard for long-running admin operations (pipeline tests make 3–5
- * sequential LLM calls). Rejects with INTERNAL_SERVER_ERROR once elapsed time
- * exceeds `ms`, so a hung LLM call fails fast instead of exhausting the
- * serverless function budget.
- *
- * MUST stay below the platform function ceiling (Vercel Hobby/Pro maxDuration
- * = 60s for the tRPC route). If the middleware timer and the platform kill
- * fire together, the client can receive a truncated/non-JSON body, which
- * surfaces as a confusing `Unexpected token ... is not valid JSON` parse
- * error in the tester UI instead of a clean tRPC error. 50s gives the timer a
- * guaranteed head start.
- */
-function withTimeout(ms: number) {
-  return t.middleware(async ({ next }) => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () =>
-          reject(new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Operation timed out" })),
-        ms,
-      );
-    });
-    try {
-      return await Promise.race([next(), timeoutPromise]);
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
-  });
-}
-
-export const adminLongProcedure = t.procedure
-  .use(isAuthenticated)
-  .use(isAdmin)
-  .use(withTimeout(ADMIN_OPERATION_TIMEOUT_MS));
+// Note: no long-running admin procedures exist anymore — `testPipeline` now
+// returns a runId in ~100ms and executes the 15–38s pipeline in the background
+// via `after()`, so the old synchronous 50s timeout middleware was removed.

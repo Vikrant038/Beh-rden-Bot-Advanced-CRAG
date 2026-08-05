@@ -40,6 +40,14 @@ function isTransportError(message: string): boolean {
   );
 }
 
+/**
+ * After this long in RUNNING the background worker has outlived the platform
+ * ceiling (Vercel Hobby maxDuration = 300s), so the run will never reach a
+ * terminal state on its own. Stop polling and show a warning instead.
+ */
+const RUN_STALL_MS = 360_000;
+const POLL_INTERVAL_MS = 2_000;
+
 const EXAMPLES: Array<{ label: string; prompt: string; icon: LucideIcon }> = [
   {
     label: "Compare study costs",
@@ -66,13 +74,17 @@ export default function AdminPipelineTesterPage() {
   const [bypassCache, setBypassCache] = useState(true);
   const [debugMode, setDebugMode] = useState(false);
   // A stored trace being inspected from the recent-runs list. When null the
-  // visualizer shows the freshest run (testPipeline.data).
+  // visualizer shows the freshest completed run (activeRun.data.traceJson).
   const [selectedTrace, setSelectedTrace] = useState<AgenticRagResponse | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  // Id of the background run created by `testPipeline`. The client polls
+  // `getTestRun` until the row reaches a terminal state (SUCCESS/FAILED).
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   const testPipeline = api.admin.testPipeline.useMutation({
     retry: false,
-    onSuccess: () => {
+    onSuccess: (data) => {
+      setActiveRunId(data.runId);
       setSelectedRunId(null);
       setSelectedTrace(null);
       void utils.admin.listTestRuns.invalidate();
@@ -84,6 +96,20 @@ export default function AdminPipelineTesterPage() {
     { id: selectedRunId ?? "" },
     { enabled: Boolean(selectedRunId) },
   );
+  const activeRun = api.admin.getTestRun.useQuery(
+    { id: activeRunId ?? "" },
+    {
+      enabled: Boolean(activeRunId),
+      refetchInterval: (query) => {
+        const data = query.state.data;
+        if (!data || data.status !== "RUNNING") {
+          return false;
+        }
+        const ageMs = Date.now() - new Date(data.createdAt).getTime();
+        return ageMs > RUN_STALL_MS ? false : POLL_INTERVAL_MS;
+      },
+    },
+  );
 
   useEffect(() => {
     if (selectedRun.data) {
@@ -91,16 +117,28 @@ export default function AdminPipelineTesterPage() {
     }
   }, [selectedRun.data]);
 
+  const runStatus = activeRun.data?.status;
+  const isRunning = runStatus === "RUNNING";
+  const runStalled =
+    isRunning &&
+    activeRun.data !== undefined &&
+    Date.now() - new Date(activeRun.data.createdAt).getTime() > RUN_STALL_MS;
+  const runError = runStatus === "FAILED" ? (activeRun.data?.error ?? null) : null;
+  const freshTrace =
+    runStatus === "SUCCESS"
+      ? (activeRun.data?.traceJson as AgenticRagResponse | undefined)
+      : undefined;
+
   const run = () => {
     const trimmed = prompt.trim();
-    if (!trimmed || testPipeline.isPending) {
+    if (!trimmed || testPipeline.isPending || isRunning) {
       return;
     }
     testPipeline.mutate({ prompt: trimmed, bypassCache, debug: debugMode });
   };
 
   const copyTrace = async () => {
-    const trace = selectedTrace ?? testPipeline.data;
+    const trace = selectedTrace ?? freshTrace ?? null;
     if (!trace) {
       return;
     }
@@ -119,9 +157,10 @@ export default function AdminPipelineTesterPage() {
     // Clear the fresh trace immediately so the visualizer doesn't flicker
     // between the old run and the stored one.
     testPipeline.reset();
+    setActiveRunId(null);
   };
 
-  const displayedTrace = selectedTrace ?? testPipeline.data;
+  const displayedTrace = selectedTrace ?? freshTrace ?? null;
 
   return (
     <div className="space-y-6">
@@ -152,11 +191,13 @@ export default function AdminPipelineTesterPage() {
           <button
             type="button"
             onClick={run}
-            disabled={testPipeline.isPending || !prompt.trim()}
+            disabled={testPipeline.isPending || isRunning || !prompt.trim()}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover active:scale-[0.98] disabled:opacity-60"
           >
-            <Play className={`h-4 w-4 ${testPipeline.isPending ? "animate-pulse" : ""}`} />
-            {testPipeline.isPending ? "Running…" : "Run trace"}
+            <Play
+              className={`h-4 w-4 ${testPipeline.isPending || isRunning ? "animate-pulse" : ""}`}
+            />
+            {testPipeline.isPending || isRunning ? "Running…" : "Run trace"}
           </button>
         </div>
 
@@ -236,12 +277,18 @@ export default function AdminPipelineTesterPage() {
         </p>
       </div>
 
-      {testPipeline.isPending ? (
+      {testPipeline.isPending || isRunning ? (
         <div className="glass-card flex items-center gap-3 rounded-2xl p-4">
           <span className="status-pulse h-2.5 w-2.5 rounded-full bg-primary" />
           <p className="text-sm text-muted">
             Running research → analyst → writer (3–5 sequential LLM calls)…
           </p>
+          {runStalled ? (
+            <span className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-1 text-xs text-warning">
+              Run has been in progress over 6 minutes — the background worker may have been killed.
+              Check Recent traces and retry.
+            </span>
+          ) : null}
         </div>
       ) : null}
 
@@ -256,10 +303,10 @@ export default function AdminPipelineTesterPage() {
             </pre>
             {isTransportError(testPipeline.error.message) ? (
               <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
-                This looks like a transport failure: the serverless function was likely cut off
-                mid-response (60s limit) or the network dropped. The run may still have completed
-                server-side — check Recent traces below, then retry. If it recurs, the pipeline
-                itself is running too long for the platform limit.
+                This is a transport or queuing failure: the run request itself is meant to return in
+                ~100ms (the pipeline executes in the background), so this error means the run could
+                not be queued — likely a network drop or a database error. Check Recent traces
+                below, then retry.
               </p>
             ) : null}
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -282,6 +329,32 @@ export default function AdminPipelineTesterPage() {
             code={testPipeline.error.data?.code}
             retry={run}
           />
+        )
+      ) : runError ? (
+        debugMode ? (
+          <div className="glass-card space-y-3 rounded-2xl border-destructive/40 p-5">
+            <p className="font-mono text-xs uppercase tracking-wide text-destructive">
+              Pipeline error — developer mode
+            </p>
+            <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-xl border border-border bg-background p-4 font-mono text-xs leading-relaxed text-foreground">
+              {runError}
+            </pre>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-muted">
+                Full error detail (name, message, cause, stack) recorded on the run — admin only.
+                Copy it into the trace-persistence bug report if the pipeline keeps failing.
+              </p>
+              <button
+                type="button"
+                onClick={run}
+                className="rounded-lg border border-border bg-surface px-4 py-2 text-sm transition hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                Try again
+              </button>
+            </div>
+          </div>
+        ) : (
+          <ErrorState message={runError} retry={run} />
         )
       ) : null}
 
@@ -319,7 +392,11 @@ export default function AdminPipelineTesterPage() {
         </div>
       ) : null}
 
-      {!testPipeline.isPending && !testPipeline.isError && !displayedTrace ? (
+      {!testPipeline.isPending &&
+      !isRunning &&
+      !testPipeline.isError &&
+      !runError &&
+      !displayedTrace ? (
         <EmptyState
           icon={FlaskConical}
           title="No trace yet"
@@ -339,7 +416,11 @@ export default function AdminPipelineTesterPage() {
             {recentRuns.data.items.map((run) => (
               <li key={run.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
                 <p className="min-w-0 flex-1 truncate text-sm">{run.prompt}</p>
-                {run.status === "SUCCESS" ? (
+                {run.status === "RUNNING" ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-primary">
+                    <span className="status-pulse h-2 w-2 rounded-full bg-primary" /> running
+                  </span>
+                ) : run.status === "SUCCESS" ? (
                   <span className="inline-flex items-center gap-1 text-xs text-success">
                     <CheckCircle2 className="h-3 w-3" /> success
                   </span>
@@ -359,7 +440,9 @@ export default function AdminPipelineTesterPage() {
                   type="button"
                   onClick={() => loadRun(run.id)}
                   disabled={run.status !== "SUCCESS" || selectedRun.isFetching}
-                  title={run.status === "SUCCESS" ? undefined : "No trace stored for failed runs"}
+                  title={
+                    run.status === "SUCCESS" ? undefined : "No trace stored for running/failed runs"
+                  }
                   className="rounded-lg border border-border px-2.5 py-1 text-xs transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {selectedRunId === run.id && selectedRun.isFetching ? "Loading…" : "View"}

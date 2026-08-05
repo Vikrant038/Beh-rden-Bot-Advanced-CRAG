@@ -1,12 +1,12 @@
-import { router, adminProcedure, adminLongProcedure } from "@/server/trpc/t";
-import { TRPCError } from "@trpc/server";
+import { router, adminProcedure } from "@/server/trpc/t";
+import { after } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { createLogger } from "@/server/lib/logger";
 import { NotFoundError } from "@/server/lib/errors";
 import { z } from "zod";
-import { runAgenticRag, type AgenticRagResponse } from "@/server/rag/agents/orchestrator";
+import { runAgenticRag } from "@/server/rag/agents/orchestrator";
 import { getHybridRetriever } from "@/server/rag/instance";
 import { disambiguateQuery } from "@/server/rag/disambiguation";
 import { maskPii } from "@/server/pii/masker";
@@ -92,7 +92,7 @@ export interface PipelineRunListItem {
   id: string;
   prompt: string;
   latencyMs: number;
-  status: "SUCCESS" | "FAILED";
+  status: "RUNNING" | "SUCCESS" | "FAILED";
   error: string | null;
   createdAt: Date;
 }
@@ -137,6 +137,90 @@ export function formatDebugError(error: unknown): string {
     ].join("\n");
   }
   return `[UnknownError] ${String(error)}`;
+}
+
+/**
+ * Runs a single glass-box pipeline test in the background and records the
+ * outcome on its PipelineRun row. The HTTP request returns the runId in ~100ms
+ * (see `testPipeline`); this worker — scheduled via `after()` — does the real
+ * 15–38s of LLM work after the response is flushed, so the request never
+ * outlives the serverless function ceiling.
+ *
+ * Exported separately so unit tests can exercise the full SUCCESS/FAILED
+ * persistence contract without driving `after()`.
+ */
+export async function executePipelineTest(
+  runId: string,
+  input: { prompt: string; bypassCache: boolean; debug: boolean },
+): Promise<void> {
+  const startedAt = Date.now();
+  try {
+    // Stage 0A — run the disambiguation check up front (same as the chat
+    // pipeline) so the stored trace renders the disambiguation node in the
+    // visualizer. The pipeline still runs to completion; ambiguity is
+    // recorded, not short-circuited, so the glass-box trace is complete.
+    const { text: maskedQuery } = maskPii(input.prompt);
+    const t0_dis = Date.now();
+    const disambiguation = await disambiguateQuery(maskedQuery);
+    const result = await runAgenticRag(input.prompt, {
+      hybridRetriever: getHybridRetriever(),
+      cache: semanticCache,
+      memory: new NoopMemory(),
+      bypassCache: input.bypassCache,
+      disambiguation: {
+        durationMs: Date.now() - t0_dis,
+        isAmbiguous: disambiguation.isAmbiguous,
+        options: disambiguation.options,
+      },
+    });
+    await prisma.pipelineRun
+      .update({
+        where: { id: runId },
+        data: {
+          traceJson: result as unknown as Prisma.InputJsonValue,
+          latencyMs: result.totalLatencyMs,
+          status: "SUCCESS",
+          error: null,
+        },
+      })
+      .catch((persistError) => {
+        logger.warn(
+          { error: String(persistError) },
+          "[ADMIN] failed to persist successful pipeline run",
+        );
+      });
+    logger.info(
+      { runId, prompt: input.prompt, latencyMs: result.totalLatencyMs },
+      "[ADMIN] pipeline test complete",
+    );
+  } catch (error) {
+    const latencyMs = Date.now() - startedAt;
+    const detail = input.debug
+      ? formatDebugError(error)
+      : error instanceof Error
+        ? error.message
+        : String(error);
+    await prisma.pipelineRun
+      .update({
+        where: { id: runId },
+        data: {
+          traceJson: {},
+          latencyMs,
+          status: "FAILED",
+          error: detail.slice(0, 2000),
+        },
+      })
+      .catch((persistError) => {
+        logger.warn(
+          { error: String(persistError) },
+          "[ADMIN] failed to persist failed pipeline run",
+        );
+      });
+    logger.warn(
+      { runId, prompt: input.prompt, latencyMs, debug: input.debug },
+      "[ADMIN] pipeline test failed",
+    );
+  }
 }
 
 export const adminRouter = router({
@@ -472,91 +556,51 @@ export const adminRouter = router({
       };
     }),
 
-  testPipeline: adminLongProcedure
+  testPipeline: adminProcedure
     .input(
       z.object({
         prompt: z.string().trim().min(5).max(2000),
         bypassCache: z.boolean().default(true),
-        // Developer mode: rethrows failures with the full name/message/cause/stack
-        // so admins can debug the pipeline from the tester UI. Off by default.
+        // Developer mode: failures persist the full name/message/cause/stack
+        // detail on the run row so admins can debug from the tester UI.
         debug: z.boolean().default(false),
       }),
     )
-    .mutation(async ({ input }): Promise<AgenticRagResponse> => {
-      const startedAt = Date.now();
+    .mutation(async ({ input }): Promise<{ runId: string }> => {
+      // The glass-box pipeline makes 4–6 sequential LLM calls (15–38s) — far
+      // past the synchronous function ceiling on Vercel. Instead of blocking
+      // the HTTP request, create a RUNNING row, return its id in ~100ms, and
+      // let `after()` run the pipeline in the background. The client polls
+      // `getTestRun` until the row reaches a terminal state.
+      const run = await prisma.pipelineRun.create({
+        data: {
+          prompt: input.prompt,
+          traceJson: {},
+          latencyMs: 0,
+          status: "RUNNING",
+        },
+      });
+      let scheduled = false;
       try {
-        // Stage 0A — run the disambiguation check up front (same as the chat
-        // pipeline) so the stored trace renders the disambiguation node in the
-        // visualizer. The pipeline still runs to completion; ambiguity is
-        // recorded, not short-circuited, so the glass-box trace is complete.
-        const { text: maskedQuery } = maskPii(input.prompt);
-        const t0_dis = Date.now();
-        const disambiguation = await disambiguateQuery(maskedQuery);
-        const result = await runAgenticRag(input.prompt, {
-          hybridRetriever: getHybridRetriever(),
-          cache: semanticCache,
-          memory: new NoopMemory(),
-          bypassCache: input.bypassCache,
-          disambiguation: {
-            durationMs: Date.now() - t0_dis,
-            isAmbiguous: disambiguation.isAmbiguous,
-            options: disambiguation.options,
-          },
+        // Runs after the response is flushed so the request returns in ~100ms.
+        after(() => {
+          void executePipelineTest(run.id, input);
         });
-        await prisma.pipelineRun
-          .create({
-            data: {
-              prompt: input.prompt,
-              traceJson: result as unknown as Prisma.InputJsonValue,
-              latencyMs: result.totalLatencyMs,
-              status: "SUCCESS",
-            },
-          })
-          .catch((persistError) => {
-            logger.warn(
-              { error: String(persistError) },
-              "[ADMIN] failed to persist successful pipeline run",
-            );
-          });
-        logger.info(
-          { prompt: input.prompt, latencyMs: result.totalLatencyMs },
-          "[ADMIN] pipeline test complete",
-        );
-        return result;
-      } catch (error) {
-        const latencyMs = Date.now() - startedAt;
-        const detail = input.debug
-          ? formatDebugError(error)
-          : error instanceof Error
-            ? error.message
-            : String(error);
-        await prisma.pipelineRun
-          .create({
-            data: {
-              prompt: input.prompt,
-              traceJson: {},
-              latencyMs,
-              status: "FAILED",
-              error: detail.slice(0, 2000),
-            },
-          })
-          .catch((persistError) => {
-            logger.warn(
-              { error: String(persistError) },
-              "[ADMIN] failed to persist failed pipeline run",
-            );
-          });
-        logger.warn(
-          { prompt: input.prompt, latencyMs, debug: input.debug },
-          "[ADMIN] pipeline test failed",
-        );
-        // Developer mode surfaces the full failure (stack + cause) through the
-        // tRPC error message; otherwise keep the plain message as before.
-        if (input.debug) {
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: detail });
-        }
-        throw error;
+        scheduled = true;
+      } catch {
+        // Not inside a Next.js request scope (unit tests / non-Next runtime):
+        // `after()` throws. Run inline so the row still reaches a terminal
+        // state and tests exercise the same persistence contract.
+        logger.warn({ runId: run.id }, "[ADMIN] after() unavailable — running pipeline inline");
       }
+      if (!scheduled) {
+        await executePipelineTest(run.id, input);
+      }
+      logger.info(
+        { runId: run.id, prompt: input.prompt },
+        "[ADMIN] pipeline test queued (background)",
+      );
+      return { runId: run.id };
     }),
 
   listTestRuns: adminProcedure
@@ -602,7 +646,12 @@ export const adminRouter = router({
           id: row.id,
           prompt: row.prompt,
           latencyMs: row.latencyMs,
-          status: row.status === "FAILED" ? ("FAILED" as const) : ("SUCCESS" as const),
+          status:
+            row.status === "RUNNING"
+              ? ("RUNNING" as const)
+              : row.status === "FAILED"
+                ? ("FAILED" as const)
+                : ("SUCCESS" as const),
           error: row.error,
           createdAt: row.createdAt,
         }));
