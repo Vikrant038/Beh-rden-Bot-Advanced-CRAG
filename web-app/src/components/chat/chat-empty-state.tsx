@@ -33,7 +33,7 @@ const SUGGESTED_PROMPTS = [
 
 export const QUICK_PROMPTS = [
   "APS verification timeline",
-  "Blocked account amount for 2026",
+  "Blocked account amount needed for the Germany visa for 2026",
   "Student visa appointment checklist",
 ];
 
