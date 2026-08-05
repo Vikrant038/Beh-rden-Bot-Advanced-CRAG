@@ -208,16 +208,16 @@ function extractBody(html: string): string {
 
 function stripNoiseTags(html: string): string {
   return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
-    .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
-    .replace(/<head[\s\S]*?<\/head>/gi, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*[^>]*>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*[^>]*>/gi, " ")
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript\s*[^>]*>/gi, " ")
+    .replace(/<svg\b[^>]*>[\s\S]*?<\/svg\s*[^>]*>/gi, " ")
+    .replace(/<head\b[^>]*>[\s\S]*?<\/head\s*[^>]*>/gi, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<nav[\s\S]*?<\/nav>/gi, " ")
-    .replace(/<footer[\s\S]*?<\/footer>/gi, " ")
-    .replace(/<header[\s\S]*?<\/header>/gi, " ")
-    .replace(/<aside[\s\S]*?<\/aside>/gi, " ");
+    .replace(/<nav\b[^>]*>[\s\S]*?<\/nav\s*[^>]*>/gi, " ")
+    .replace(/<footer\b[^>]*>[\s\S]*?<\/footer\s*[^>]*>/gi, " ")
+    .replace(/<header\b[^>]*>[\s\S]*?<\/header\s*[^>]*>/gi, " ")
+    .replace(/<aside\b[^>]*>[\s\S]*?<\/aside\s*[^>]*>/gi, " ");
 }
 
 function stripTags(html: string): string {
