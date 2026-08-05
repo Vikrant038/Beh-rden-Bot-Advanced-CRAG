@@ -75,7 +75,7 @@
 | Components | **shadcn/ui** | Headless, accessible, customizable — not a dependency but copied components |
 | Animation | **Framer Motion** | Smooth page transitions, micro-interactions, streaming text animations |
 | Icons | **Lucide React** | Consistent, tree-shakeable, used by shadcn/ui |
-| Fonts | **Inter** (body) + **JetBrains Mono** (code) | Modern, clean, excellent legibility |
+| Fonts | **Source Sans 3** (body) + **Source Serif 4** (display) + **JetBrains Mono** (code) | Professional, authoritative, excellent legibility |
 | Charts | **Recharts** | For admin dashboard metrics visualization |
 
 ### AI / ML Layer
@@ -121,7 +121,7 @@ behoerden-bot-web/
 │   ├── migrations/                   # Auto-generated migrations
 │   └── seed.ts                       # Seed script (sample documents + test user)
 ├── public/
-│   ├── fonts/                        # Inter + JetBrains Mono (self-hosted)
+│   ├── fonts/                        # Source Sans 3 + Source Serif 4 + JetBrains Mono (self-hosted)
 │   └── og-image.png                  # Open Graph social preview image
 ├── src/
 │   ├── app/                          # Next.js App Router pages

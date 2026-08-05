@@ -3,7 +3,9 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  /* Professional pairing: Source Sans 3 (UI/body) + Source Serif 4 (display headings) */
+  --font-sans: "Source Sans 3 Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Source Serif 4 Variable", ui-serif, Georgia, serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
 
   /* Radius scale */
@@ -69,15 +71,17 @@ body {
 /* ─── Semantic type scale ─── */
 
 .type-display {
+  font-family: var(--font-display);
   font-size: clamp(2.75rem, 6vw, 4rem);
   line-height: 1.05;
-  letter-spacing: -0.03em;
-  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-weight: 600;
 }
 .type-title {
+  font-family: var(--font-display);
   font-size: clamp(1.75rem, 3vw, 2.25rem);
   line-height: 1.15;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   font-weight: 600;
 }
 .type-subtitle {

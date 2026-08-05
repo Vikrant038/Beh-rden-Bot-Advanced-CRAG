@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import "@fontsource-variable/inter";
+import "@fontsource-variable/source-sans-3";
+import "@fontsource-variable/source-serif-4";
 import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
 import { Providers } from "@/lib/trpc/provider";

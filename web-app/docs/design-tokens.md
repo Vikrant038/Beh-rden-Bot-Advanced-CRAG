@@ -28,7 +28,7 @@ The application supports Light and Dark modes.
 
 ## Typography Scale
 *Configured in `globals.css` and applied via Tailwind CSS default classes.*
-- **Font Sans:** `"Inter Variable", ui-sans-serif, system-ui, sans-serif`
+- **Font Sans:** `"Source Sans 3 Variable", ui-sans-serif, system-ui, sans-serif`
 - **Font Mono:** `"JetBrains Mono Variable", ui-monospace, monospace`
 - **Text 2xs:** `0.6875rem` (11px)
 
