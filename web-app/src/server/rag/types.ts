@@ -87,6 +87,37 @@ export interface ToolCallTelemetry {
   durationMs: number;
   status: "success" | "failed";
 }
+
+/** Hidden micro-steps that run before Stage 0 (PII masking + cache lookup). */
+export interface PreProcessingTelemetry {
+  /** Wall-clock ms spent redacting PII from the raw query. */
+  piiMaskingDurationMs: number;
+  /** Wall-clock ms spent checking the semantic cache (incl. query embedding). */
+  cacheLookupDurationMs: number;
+  /** True when the semantic cache returned a hit (short-circuit). */
+  cacheHit: boolean;
+}
+
+/** Hidden micro-steps that run after Stage 3 (cache write + memory write). */
+export interface PostProcessingTelemetry {
+  /** Wall-clock ms spent writing the answer into the semantic cache. */
+  cacheWriteDurationMs: number;
+  /** Wall-clock ms spent appending the turn to conversation memory. */
+  memoryWriteDurationMs: number;
+  /** True when a cache entry was actually written (false on bypassCache). */
+  cacheWritten: boolean;
+}
+
+/** Aggregated token + cost usage for a single agent across its LLM calls. */
+export interface AgentCostTelemetry {
+  agent: "research" | "analyst" | "writer";
+  callCount: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  latencyMs: number;
+  costUsd: number;
+}
 /** Hybrid retrieval result (mirrors HybridRetriever.retrieve return type). */
 export interface HybridRetrievalResult {
   chunks: Chunk[];

@@ -17,6 +17,8 @@ export interface ResearchStep {
   thought: string;
   action: string;
   observation: string;
+  /** Wall-clock ms the tool/action behind this step took to execute. */
+  durationMs?: number;
 }
 
 export interface ResearchResult {
@@ -117,6 +119,7 @@ export async function agentResearchReact(
       thought: "Primary query received. Searching vector index for official documentation.",
       action: "tool_vector_search",
       observation: `Retrieved ${chunks.length} relevant chunks from local database.`,
+      durationMs: retrieveDuration,
     });
     for (const chunk of chunks) {
       accumulatedContext.push(chunk.text);
@@ -135,6 +138,7 @@ export async function agentResearchReact(
       thought: "No local vector chunks passed threshold. Initiating web search fallback.",
       action: "tool_web_search",
       observation: "Executing DDG search.",
+      durationMs: retrieveDuration,
     });
     const t0_web = performance.now();
     const webResults = await webSearch(userQuery, 3);
@@ -172,6 +176,7 @@ export async function agentResearchReact(
       thought: "Comparative query detected. Expanding retrieval for secondary dimension.",
       action: "tool_vector_search(sub_query)",
       observation: `Retrieved ${secondary.chunks.length} secondary chunks.`,
+      durationMs: secDuration,
     });
     for (const chunk of secondary.chunks) {
       accumulatedContext.push(chunk.text);
@@ -195,6 +200,7 @@ export async function agentResearchReact(
       thought: "Query involves financial fees. Executing deterministic visa calculator tool.",
       action: "tool_visa_calculator",
       observation: calculation.summary,
+      durationMs: calcDuration,
     });
     accumulatedContext.unshift(`[CRITICAL CALCULATED FINANCIAL SUMMARY]: ${calculation.summary}`);
   }

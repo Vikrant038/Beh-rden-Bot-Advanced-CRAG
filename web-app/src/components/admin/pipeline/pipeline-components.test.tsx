@@ -14,6 +14,11 @@ const step: ResearchStep = {
   observation: "Retrieved 3 relevant chunks.",
 };
 
+const stepWithDuration: ResearchStep = {
+  ...step,
+  durationMs: 42,
+};
+
 describe("StageNode", () => {
   it("renders title, index, and done status", () => {
     render(
@@ -27,6 +32,20 @@ describe("StageNode", () => {
     expect(screen.getByText("12ms")).toBeInTheDocument();
   });
 
+  it("is closed by default — body hidden until the chevron is clicked", () => {
+    render(
+      <ol>
+        <StageNode index={0} title="Stage" status="done">
+          <p>expandable body</p>
+        </StageNode>
+      </ol>,
+    );
+    // Closed by default: the admin trace must not reveal outputs up front.
+    expect(screen.queryByText("expandable body")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("expandable body")).toBeInTheDocument();
+  });
+
   it("shows a running indicator with pulse class", () => {
     const { container } = render(
       <StageNode index={1} title="Running" status="running">
@@ -35,19 +54,6 @@ describe("StageNode", () => {
     );
     expect(container.querySelector(".status-pulse")).not.toBeNull();
     expect(container.querySelector(".animate-spin")).not.toBeNull();
-  });
-
-  it("toggles body on chevron click", () => {
-    render(
-      <ol>
-        <StageNode index={0} title="Stage" status="done">
-          <p>expandable body</p>
-        </StageNode>
-      </ol>,
-    );
-    expect(screen.getByText("expandable body")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button"));
-    expect(screen.queryByText("expandable body")).not.toBeInTheDocument();
   });
 });
 
@@ -58,6 +64,22 @@ describe("ReactStep", () => {
     expect(screen.getByText(/Primary query received/)).toBeInTheDocument();
     expect(screen.getByText(/Retrieved 3 relevant chunks/)).toBeInTheDocument();
     expect(screen.getByText("iteration 1")).toBeInTheDocument();
+  });
+
+  it("renders the tool execution duration badge when present", () => {
+    render(<ReactStep step={stepWithDuration} />);
+    expect(screen.getByText("42ms")).toBeInTheDocument();
+  });
+
+  it("maps web search, visa calculator, and sub-query actions to their icons", () => {
+    const web = render(<ReactStep step={{ ...step, action: "web_search" }} />);
+    expect(web.container.querySelector(".lucide-globe")).not.toBeNull();
+
+    const calc = render(<ReactStep step={{ ...step, action: "visa_calculator" }} />);
+    expect(calc.container.querySelector(".lucide-calculator")).not.toBeNull();
+
+    const sub = render(<ReactStep step={{ ...step, action: "sub_query" }} />);
+    expect(sub.container.querySelector(".lucide-mouse-pointer-click")).not.toBeNull();
   });
 });
 

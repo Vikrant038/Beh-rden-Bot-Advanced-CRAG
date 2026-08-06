@@ -94,7 +94,7 @@ async function openTester(page: import("@playwright/test").Page) {
   await expect(page.getByRole("heading", { name: "Pipeline tester" })).toBeVisible();
 }
 
-test("renders all four stages after running a trace", async ({ page }) => {
+test("renders all pipeline stages after running a trace", async ({ page }) => {
   await openTester(page);
 
   await page.getByLabel("Test pipeline query").fill("What documents are required?");
@@ -103,8 +103,9 @@ test("renders all four stages after running a trace", async ({ page }) => {
   await expect(page.getByText("Pipeline trace")).toBeVisible({ timeout: 10_000 });
 
   await expect(
-    page.getByRole("heading", { name: /Stage 0A\/B — Disambiguation & Guardrail/ }),
+    page.getByRole("heading", { name: /Stage 0A — Query Disambiguation/ }),
   ).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Stage 0B — Domain Guardrail/ })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: /Stage 1A\/B\/C\/D — Query Expansion & Hybrid Retrieval/ }),
   ).toBeVisible();

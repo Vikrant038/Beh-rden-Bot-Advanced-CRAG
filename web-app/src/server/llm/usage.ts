@@ -1,3 +1,4 @@
+import type { AgentCostTelemetry } from "@/server/rag/types";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 /**
@@ -91,6 +92,56 @@ export class LlmUsageCollector {
   record(call: Omit<LlmCallRecord, "stage">): void {
     this.calls.push({ ...call, stage: this.stageLabel });
   }
+}
+
+/**
+ * Aggregates per-call LLM telemetry into per-agent totals for the pipeline
+ * trace. Call records are attributed to an agent by their stage label (set via
+ * `collector.setStage` in the orchestrator). Unattributed calls are skipped.
+ */
+export function aggregateAgentCosts(calls: LlmCallRecord[]): AgentCostTelemetry[] {
+  const byAgent = new Map<AgentCostTelemetry["agent"], AgentCostTelemetry>();
+
+  for (const call of calls) {
+    const agent = agentFromStage(call.stage);
+    if (!agent) {
+      continue;
+    }
+    const current = byAgent.get(agent) ?? {
+      agent,
+      callCount: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      latencyMs: 0,
+      costUsd: 0,
+    };
+    current.callCount += 1;
+    current.promptTokens += call.promptTokens;
+    current.completionTokens += call.completionTokens;
+    current.totalTokens += call.totalTokens;
+    current.latencyMs += call.latencyMs;
+    current.costUsd += call.costUsd;
+    byAgent.set(agent, current);
+  }
+
+  const agents: AgentCostTelemetry["agent"][] = ["research", "analyst", "writer"];
+  return agents.filter((agent) => byAgent.has(agent)).map((agent) => byAgent.get(agent)!);
+}
+
+/** Maps a stage label to its owning agent, or null for unattributed calls. */
+function agentFromStage(stage: string): AgentCostTelemetry["agent"] | null {
+  const lower = stage.toLowerCase();
+  if (lower.includes("research")) {
+    return "research";
+  }
+  if (lower.includes("analyst")) {
+    return "analyst";
+  }
+  if (lower.includes("writer")) {
+    return "writer";
+  }
+  return null;
 }
 
 const collectorStorage = new AsyncLocalStorage<LlmUsageCollector | null>();

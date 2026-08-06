@@ -1,8 +1,18 @@
 "use client";
 
 import { useMemo } from "react";
-import { FileSearch, ShieldCheck, ShieldX, Table2, TerminalSquare } from "lucide-react";
+import {
+  FileSearch,
+  Fingerprint,
+  ShieldCheck,
+  ShieldX,
+  Table2,
+  TerminalSquare,
+  Timer,
+  Zap,
+} from "lucide-react";
 import type { AgenticRagResponse } from "@/server/rag/agents/orchestrator";
+import type { AgentCostTelemetry } from "@/server/rag/types";
 import { Markdown } from "@/components/chat/markdown";
 import { StageNode, type StageStatus } from "@/components/admin/pipeline/stage-node";
 import { ReactStep } from "@/components/admin/pipeline/react-step";
@@ -12,6 +22,26 @@ import { formatUsd } from "@/lib/utils";
 
 interface PipelineVisualizerProps {
   trace: AgenticRagResponse;
+}
+
+function AgentCostBadge({ cost }: { cost: AgentCostTelemetry }) {
+  const label =
+    cost.agent === "research" ? "Research" : cost.agent === "analyst" ? "Analyst" : "Writer";
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-glass-border bg-surface px-3 py-2 text-xs">
+      <span className="font-medium text-foreground">{label}</span>
+      <span className="font-mono text-[10px] text-muted">
+        {cost.callCount} call{cost.callCount === 1 ? "" : "s"}
+      </span>
+      <span className="font-mono text-[10px] text-muted">
+        {cost.promptTokens} in · {cost.completionTokens} out
+      </span>
+      <span className="font-mono text-[10px] text-muted">{cost.latencyMs}ms</span>
+      <span className="ml-auto font-mono text-[10px] text-foreground">
+        ≈ {formatUsd(cost.costUsd)}
+      </span>
+    </div>
+  );
 }
 
 export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
@@ -29,60 +59,96 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
       body: React.ReactNode;
     }> = [
       {
-        title: "Stage 0A/B — Disambiguation & Guardrail",
-        status: guardrailBlocked ? "warning" : "done",
-        durationMs:
-          (trace.disambiguation?.durationMs ?? 0) +
-          (trace.guardrail?.durationMs ?? stageDuration(0)),
+        title: "Pre-Processing — PII Masking & Cache Lookup",
+        status: cacheHit ? "done" : "done",
+        durationMs: trace.preProcessing
+          ? Math.round(
+              (trace.preProcessing.piiMaskingDurationMs ?? 0) +
+                (trace.preProcessing.cacheLookupDurationMs ?? 0),
+            )
+          : undefined,
         body: (
           <div className="space-y-2">
-            {trace.disambiguation && (
-              <div className="flex items-center justify-between rounded-lg bg-surface px-3 py-2 text-xs">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 shrink-0 text-accent" />
-                  <span className="text-muted">Disambiguation check:</span>
-                  <span className="font-medium text-foreground">
-                    {trace.disambiguation.isAmbiguous ? "AMBIGUOUS" : "CLEAR"}
-                  </span>
-                </div>
-                <span className="font-mono text-[10px] text-muted">
-                  {Math.round(trace.disambiguation.durationMs)}ms
-                </span>
-              </div>
-            )}
             <div className="flex items-center justify-between rounded-lg bg-surface px-3 py-2 text-xs">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 shrink-0 text-accent" />
-                <span className="text-muted">Masked query:</span>
-                <code className="min-w-0 flex-1 truncate rounded bg-surface-hover px-1.5 py-0.5 text-foreground">
-                  {trace.maskedQuery}
-                </code>
-              </div>
-            </div>
-            <div
-              className={
-                guardrailBlocked
-                  ? "flex items-center justify-between rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs"
-                  : "flex items-center justify-between rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-xs"
-              }
-            >
-              <div className="flex items-center gap-2">
-                {guardrailBlocked ? (
-                  <ShieldX className="h-4 w-4 shrink-0 text-warning" />
-                ) : (
-                  <ShieldCheck className="h-4 w-4 shrink-0 text-success" />
-                )}
-                <span className="font-medium text-foreground">
-                  Guardrail: {guardrailBlocked ? "BLOCKED" : "PASSED"}
-                </span>
-                {trace.guardrail.reason ? (
-                  <span className="text-muted">— {trace.guardrail.reason}</span>
-                ) : null}
+                <Fingerprint className="h-4 w-4 shrink-0 text-accent" />
+                <span className="text-muted">PII redaction:</span>
+                <span className="font-medium text-foreground">{trace.maskedQuery}</span>
               </div>
               <span className="font-mono text-[10px] text-muted">
-                {Math.round(trace.guardrail?.durationMs ?? stageDuration(0))}ms
+                {trace.preProcessing
+                  ? `${Math.round(trace.preProcessing.piiMaskingDurationMs)}ms`
+                  : "—"}
               </span>
             </div>
+            <div className="flex items-center justify-between rounded-lg bg-surface px-3 py-2 text-xs">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 shrink-0 text-accent" />
+                <span className="text-muted">Semantic cache lookup:</span>
+                <span
+                  className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-medium ${
+                    cacheHit ? "bg-success/10 text-success" : "bg-surface-hover text-muted"
+                  }`}
+                >
+                  {cacheHit ? "HIT" : "MISS"}
+                </span>
+              </div>
+              <span className="font-mono text-[10px] text-muted">
+                {trace.preProcessing
+                  ? `${Math.round(trace.preProcessing.cacheLookupDurationMs)}ms`
+                  : "—"}
+              </span>
+            </div>
+          </div>
+        ),
+      },
+      {
+        title: "Stage 0A — Query Disambiguation",
+        status: guardrailBlocked ? "skipped" : "done",
+        durationMs: trace.disambiguation?.durationMs ?? undefined,
+        body: (
+          <div className="flex items-center justify-between rounded-lg bg-surface px-3 py-2 text-xs">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-accent" />
+              <span className="text-muted">Disambiguation check:</span>
+              <span className="font-medium text-foreground">
+                {trace.disambiguation?.isAmbiguous ? "AMBIGUOUS" : "CLEAR"}
+              </span>
+            </div>
+            <span className="font-mono text-[10px] text-muted">
+              {trace.disambiguation ? `${Math.round(trace.disambiguation.durationMs)}ms` : "—"}
+            </span>
+          </div>
+        ),
+      },
+      {
+        title: "Stage 0B — Domain Guardrail",
+        status: guardrailBlocked ? "warning" : "done",
+        durationMs: trace.guardrail.durationMs ?? stageDuration(0),
+        body: (
+          <div
+            className={
+              guardrailBlocked
+                ? "flex items-center justify-between rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs"
+                : "flex items-center justify-between rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-xs"
+            }
+          >
+            <div className="flex items-center gap-2">
+              {guardrailBlocked ? (
+                <ShieldX className="h-4 w-4 shrink-0 text-warning" />
+              ) : (
+                <ShieldCheck className="h-4 w-4 shrink-0 text-success" />
+              )}
+              <span className="font-medium text-foreground">
+                Guardrail: {guardrailBlocked ? "BLOCKED" : "PASSED"}
+              </span>
+              {trace.guardrail.reason ? (
+                <span className="text-muted">— {trace.guardrail.reason}</span>
+              ) : null}
+            </div>
+            <span className="font-mono text-[10px] text-muted">
+              {Math.round(trace.guardrail.durationMs ?? stageDuration(0))}ms
+            </span>
           </div>
         ),
       },
@@ -100,7 +166,7 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
           : undefined,
         body: (
           <div className="space-y-2">
-            {trace.retrievalTelemetry && (
+            {trace.retrievalTelemetry ? (
               <>
                 <div className="rounded-lg border border-glass-border bg-surface p-3">
                   <div className="mb-2 flex items-center justify-between">
@@ -142,8 +208,15 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
                   <span className="rounded-md bg-surface-hover px-2 py-1 font-mono text-[10px] text-muted">
                     Cross-Encoder: {Math.round(trace.retrievalTelemetry.rerankDurationMs)}ms
                   </span>
+                  <span className="rounded-md bg-surface-hover px-2 py-1 font-mono text-[10px] text-muted">
+                    Sparse engine: {trace.retrievalTelemetry.sparseEngine}
+                  </span>
                   <span
-                    className={`rounded-md px-2 py-1 font-mono text-[10px] font-medium ${trace.retrievalTelemetry.cragFallbackTriggered ? "bg-warning/10 text-warning" : "bg-success/10 text-success"}`}
+                    className={`rounded-md px-2 py-1 font-mono text-[10px] font-medium ${
+                      trace.retrievalTelemetry.cragFallbackTriggered
+                        ? "bg-warning/10 text-warning"
+                        : "bg-success/10 text-success"
+                    }`}
                   >
                     Score: {trace.retrievalTelemetry.bestCrossScore.toFixed(2)} —{" "}
                     {trace.retrievalTelemetry.cragFallbackTriggered
@@ -152,8 +225,7 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
                   </span>
                 </div>
               </>
-            )}
-            {!trace.retrievalTelemetry && (
+            ) : (
               <p className="rounded-lg border border-glass-border bg-surface/60 px-3 py-2 text-xs text-muted">
                 Retrieval telemetry not available for this run.
               </p>
@@ -223,6 +295,11 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
         durationMs: stageDuration(2),
         body: (
           <div className="space-y-2">
+            {trace.agentCosts
+              ?.filter((cost) => cost.agent === "analyst")
+              .map((cost) => (
+                <AgentCostBadge key={cost.agent} cost={cost} />
+              ))}
             <div className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2 text-xs">
               <Table2 className="h-4 w-4 shrink-0 text-accent" />
               <span className="font-medium text-foreground">{trace.analysisMatrix.summary}</span>
@@ -266,13 +343,65 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
         status: guardrailBlocked ? "skipped" : "done",
         durationMs: stageDuration(3),
         body: (
-          <div className="rounded-lg border border-glass-border bg-surface/60 px-3 py-2">
-            <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted">
-              <TerminalSquare className="h-3.5 w-3.5" />
-              Final answer
+          <div className="space-y-2">
+            {trace.agentCosts
+              ?.filter((cost) => cost.agent === "writer")
+              .map((cost) => (
+                <AgentCostBadge key={cost.agent} cost={cost} />
+              ))}
+            <div className="rounded-lg border border-glass-border bg-surface/60 px-3 py-2">
+              <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted">
+                <TerminalSquare className="h-3.5 w-3.5" />
+                Final answer
+              </div>
+              <div className="markdown-body">
+                <Markdown content={trace.finalAnswer} />
+              </div>
             </div>
-            <div className="markdown-body">
-              <Markdown content={trace.finalAnswer} />
+          </div>
+        ),
+      },
+      {
+        title: "Post-Processing — Cache Write & Memory",
+        status: guardrailBlocked || cacheHit ? "skipped" : "done",
+        durationMs: trace.postProcessing
+          ? Math.round(
+              (trace.postProcessing.cacheWriteDurationMs ?? 0) +
+                (trace.postProcessing.memoryWriteDurationMs ?? 0),
+            )
+          : undefined,
+        body: (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between rounded-lg bg-surface px-3 py-2 text-xs">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 shrink-0 text-accent" />
+                <span className="text-muted">Semantic cache write:</span>
+                <span
+                  className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-medium ${
+                    trace.postProcessing?.cacheWritten
+                      ? "bg-success/10 text-success"
+                      : "bg-surface-hover text-muted"
+                  }`}
+                >
+                  {trace.postProcessing?.cacheWritten ? "WRITTEN" : "SKIPPED"}
+                </span>
+              </div>
+              <span className="font-mono text-[10px] text-muted">
+                {trace.postProcessing
+                  ? `${Math.round(trace.postProcessing.cacheWriteDurationMs)}ms`
+                  : "—"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between rounded-lg bg-surface px-3 py-2 text-xs">
+              <div className="flex items-center gap-2">
+                <Timer className="h-4 w-4 shrink-0 text-accent" />
+                <span className="text-muted">Memory append:</span>
+              </div>
+              <span className="font-mono text-[10px] text-muted">
+                {trace.postProcessing
+                  ? `${Math.round(trace.postProcessing.memoryWriteDurationMs)}ms`
+                  : "—"}
+              </span>
             </div>
           </div>
         ),
@@ -280,7 +409,7 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
     ];
 
     if (guardrailBlocked) {
-      stages[1].body = (
+      stages[3].body = (
         <div className="space-y-2">
           <div className="flex items-center gap-1.5 px-1 pt-1 text-xs font-medium text-muted">
             <FileSearch className="h-3.5 w-3.5" />
@@ -291,12 +420,13 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
           </p>
         </div>
       );
-      stages[2].body = null;
-      stages[3].body = null;
+      stages[4].body = null;
+      stages[5].body = null;
+      stages[6].body = null;
     }
 
     return stages;
-  }, [trace, guardrailBlocked]);
+  }, [trace, guardrailBlocked, cacheHit]);
 
   return (
     <div className="glass-card rounded-2xl p-4">

@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, Calculator, Globe, MousePointerClick } from "lucide-react";
+import { Search, Calculator, Globe, MousePointerClick, Timer } from "lucide-react";
 import type { ResearchStep } from "@/server/rag/agents/research";
 
 interface ReactStepProps {
@@ -29,7 +29,16 @@ export function ReactStep({ step }: ReactStepProps) {
           {actionIcon(step.action)}
         </span>
         <p className="font-mono text-xs font-medium text-foreground">{step.action}</p>
-        <span className="ml-auto shrink-0 rounded-full bg-surface-hover px-2 py-0.5 font-mono text-[10px] text-muted">
+        {step.durationMs !== undefined ? (
+          <span
+            className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-surface-hover px-2 py-0.5 font-mono text-[10px] text-muted"
+            title="Tool execution time"
+          >
+            <Timer className="h-3 w-3" />
+            {Math.round(step.durationMs)}ms
+          </span>
+        ) : null}
+        <span className="shrink-0 rounded-full bg-surface-hover px-2 py-0.5 font-mono text-[10px] text-muted">
           iteration {step.iteration}
         </span>
       </div>
@@ -43,7 +52,9 @@ export function ReactStep({ step }: ReactStepProps) {
           <dt className="w-20 shrink-0 font-mono uppercase tracking-wide text-muted">
             Observation
           </dt>
-          <dd className="min-w-0 flex-1 text-foreground/90">{step.observation}</dd>
+          <dd className="min-w-0 flex-1 whitespace-pre-wrap rounded-lg border border-glass-border bg-surface px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground/90">
+            {step.observation}
+          </dd>
         </div>
       </dl>
     </div>

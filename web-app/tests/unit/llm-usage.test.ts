@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   LlmUsageCollector,
+  aggregateAgentCosts,
   estimateLlmCostUsd,
   estimateTokensFromText,
   withLlmUsageCollector,
@@ -110,5 +111,121 @@ describe("estimateTokensFromText", () => {
       Math.ceil(27 / 4),
     );
     expect(estimateTokensFromText("")).toBe(1);
+  });
+});
+
+describe("aggregateAgentCosts", () => {
+  it("groups per-call telemetry into per-agent totals by stage label", () => {
+    const calls = [
+      {
+        stage: "Stage 2 — Analyst (comparison matrix)",
+        provider: "groq" as const,
+        model: "llama-3.1-8b-instant",
+        latencyMs: 500,
+        promptTokens: 900,
+        completionTokens: 220,
+        totalTokens: 1120,
+        costUsd: 0.0000626,
+      },
+      {
+        stage: "Stage 2 — Analyst (comparison matrix)",
+        provider: "groq" as const,
+        model: "llama-3.1-8b-instant",
+        latencyMs: 100,
+        promptTokens: 100,
+        completionTokens: 80,
+        totalTokens: 180,
+        costUsd: 0.00001,
+      },
+      {
+        stage: "Stage 3 — Writer (markdown synthesis)",
+        provider: "groq" as const,
+        model: "llama-3.1-8b-instant",
+        latencyMs: 300,
+        promptTokens: 700,
+        completionTokens: 480,
+        totalTokens: 1180,
+        costUsd: 0.0000734,
+      },
+    ];
+
+    const result = aggregateAgentCosts(calls);
+    expect(result).toHaveLength(2);
+
+    const analyst = result.find((c) => c.agent === "analyst");
+    expect(analyst).toMatchObject({
+      agent: "analyst",
+      callCount: 2,
+      promptTokens: 1000,
+      completionTokens: 300,
+      totalTokens: 1300,
+      latencyMs: 600,
+      costUsd: 0.0000726,
+    });
+
+    const writer = result.find((c) => c.agent === "writer");
+    expect(writer).toMatchObject({
+      agent: "writer",
+      callCount: 1,
+      promptTokens: 700,
+      completionTokens: 480,
+      totalTokens: 1180,
+    });
+  });
+
+  it("returns agents in research → analyst → writer order", () => {
+    const calls = [
+      {
+        stage: "Stage 2 — Analyst (comparison matrix)",
+        provider: "groq" as const,
+        model: "m",
+        latencyMs: 1,
+        promptTokens: 1,
+        completionTokens: 1,
+        totalTokens: 2,
+        costUsd: 0,
+      },
+      {
+        stage: "Stage 1 — Research agent (ReAct)",
+        provider: "groq" as const,
+        model: "m",
+        latencyMs: 1,
+        promptTokens: 1,
+        completionTokens: 1,
+        totalTokens: 2,
+        costUsd: 0,
+      },
+      {
+        stage: "Stage 3 — Writer (markdown synthesis)",
+        provider: "groq" as const,
+        model: "m",
+        latencyMs: 1,
+        promptTokens: 1,
+        completionTokens: 1,
+        totalTokens: 2,
+        costUsd: 0,
+      },
+    ];
+    expect(aggregateAgentCosts(calls).map((c) => c.agent)).toEqual([
+      "research",
+      "analyst",
+      "writer",
+    ]);
+  });
+
+  it("skips unattributed calls and returns an empty array when none match", () => {
+    const calls = [
+      {
+        stage: "Unattributed",
+        provider: "groq" as const,
+        model: "m",
+        latencyMs: 1,
+        promptTokens: 1,
+        completionTokens: 1,
+        totalTokens: 2,
+        costUsd: 0,
+      },
+    ];
+    expect(aggregateAgentCosts(calls)).toEqual([]);
   });
 });

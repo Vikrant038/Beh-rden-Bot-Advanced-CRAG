@@ -11,11 +11,19 @@ import type {
   RetrievalTelemetry,
   ToolCallTelemetry,
   PipelineEvent,
+  PreProcessingTelemetry,
+  PostProcessingTelemetry,
+  AgentCostTelemetry,
 } from "@/server/rag/types";
 import { maskPii } from "@/server/pii/masker";
 import { isQueryOutOfDomain } from "@/server/rag/guardrail";
 import { createLogger } from "@/server/lib/logger";
-import { LlmUsageCollector, withLlmUsageCollector, type LlmCallRecord } from "@/server/llm/usage";
+import {
+  LlmUsageCollector,
+  withLlmUsageCollector,
+  aggregateAgentCosts,
+  type LlmCallRecord,
+} from "@/server/llm/usage";
 
 const logger = createLogger("agentic-rag");
 
@@ -65,6 +73,12 @@ export interface AgenticRagResponse {
   llmCalls: LlmCallRecord[];
   /** Sum of estimated LLM call costs (USD). */
   totalCostUsd: number;
+  /** Per-agent aggregated token + cost usage (research / analyst / writer). */
+  agentCosts?: AgentCostTelemetry[];
+  /** PII masking + semantic cache lookup times (before Stage 0). */
+  preProcessing?: PreProcessingTelemetry;
+  /** Cache write + memory write times (after Stage 3). */
+  postProcessing?: PostProcessingTelemetry;
 }
 
 const OUT_OF_DOMAIN_MESSAGE =
@@ -125,16 +139,26 @@ export async function runAgenticRag(
       onEvent,
     } = options;
 
+    const t_piiStart = Date.now();
     const { text: maskedQuery } = maskPii(userQuery);
+    const piiMaskingDurationMs = Date.now() - t_piiStart;
     const queryVector = await hybridRetriever.embedQuery(maskedQuery);
 
     // Stage 0 — Query disambiguation & guardrail (includes the guardrail LLM call).
     const stage0Start = Date.now();
     collector.setStage("Stage 0 — Query disambiguation & guardrail");
     let cached: CachedResponse | null = null;
+    let cacheLookupDurationMs = 0;
     if (!bypassCache) {
+      const t_cacheStart = Date.now();
       cached = await cache.checkCache(maskedQuery, queryVector);
+      cacheLookupDurationMs = Date.now() - t_cacheStart;
     }
+    const preProcessing: PreProcessingTelemetry = {
+      piiMaskingDurationMs,
+      cacheLookupDurationMs,
+      cacheHit: Boolean(cached),
+    };
     if (cached) {
       await memory.addTurn(userQuery, cached.answer);
       return withStageZero(
@@ -147,6 +171,7 @@ export async function runAgenticRag(
               thought: "Check cache.",
               action: "Semantic Cache Hit",
               observation: "Found matching response in cache.",
+              durationMs: cacheLookupDurationMs,
             },
           ],
           analysisMatrix: {
@@ -163,6 +188,8 @@ export async function runAgenticRag(
           stages: buildStages([Date.now() - stage0Start, 0, 0, 0], 0),
           llmCalls: collector.calls,
           totalCostUsd: collector.totalCostUsd,
+          agentCosts: aggregateAgentCosts(collector.calls),
+          preProcessing,
         },
         maskedQuery,
         { passed: true, reason: "In-domain", durationMs: Date.now() - stage0Start },
@@ -198,6 +225,7 @@ export async function runAgenticRag(
               thought: "Check domain validity of the query.",
               action: "Stage 0A Guardrail",
               observation: "Query rejected as Out of Domain.",
+              durationMs: stage0Duration,
             },
           ],
           analysisMatrix: {
@@ -214,6 +242,8 @@ export async function runAgenticRag(
           stages: buildStages([Date.now() - stage0Start, 0, 0, 0], 0),
           llmCalls: collector.calls,
           totalCostUsd: collector.totalCostUsd,
+          agentCosts: aggregateAgentCosts(collector.calls),
+          preProcessing,
         },
         maskedQuery,
         { passed: false, reason: "Out of domain", durationMs: stage0Duration },
@@ -283,7 +313,10 @@ export async function runAgenticRag(
       durationMs: stage3Duration,
     });
 
+    let cacheWriteDurationMs = 0;
+    let cacheWritten = false;
     if (!bypassCache) {
+      const t_cacheWriteStart = Date.now();
       const parentDocIds = Array.from(
         new Set(
           research.sources
@@ -297,8 +330,18 @@ export async function runAgenticRag(
         { answer: finalAnswer, sources: research.sources },
         parentDocIds,
       );
+      cacheWriteDurationMs = Date.now() - t_cacheWriteStart;
+      cacheWritten = true;
     }
+    const t_memoryStart = Date.now();
     await memory.addTurn(userQuery, finalAnswer);
+    const memoryWriteDurationMs = Date.now() - t_memoryStart;
+
+    const postProcessing: PostProcessingTelemetry = {
+      cacheWriteDurationMs,
+      memoryWriteDurationMs,
+      cacheWritten,
+    };
 
     return withStageZero(
       {
@@ -317,6 +360,9 @@ export async function runAgenticRag(
         ),
         llmCalls: collector.calls,
         totalCostUsd: collector.totalCostUsd,
+        agentCosts: aggregateAgentCosts(collector.calls),
+        preProcessing,
+        postProcessing,
       },
       maskedQuery,
       { passed: true, reason: "In-domain", durationMs: stage0Duration },

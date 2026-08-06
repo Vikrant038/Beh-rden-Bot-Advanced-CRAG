@@ -171,6 +171,42 @@ describe("RAG Pipeline Orchestrators", () => {
     expect(result.analysisMatrix.summary).toBeTruthy();
   });
 
+  it("agentic: surfaces pre/post-processing telemetry and per-agent costs", async () => {
+    const memory = new SummaryBufferMemory("conv-6", 8);
+    const result = await runAgenticRag("Compare blocked account vs scholarship", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    // Pre-processing: PII masking + cache lookup are measured.
+    expect(result.preProcessing).toBeDefined();
+    expect(result.preProcessing?.cacheHit).toBe(false);
+    expect(result.preProcessing?.piiMaskingDurationMs).toBeGreaterThanOrEqual(0);
+    expect(result.preProcessing?.cacheLookupDurationMs).toBeGreaterThanOrEqual(0);
+
+    // Post-processing: cache write + memory append are measured.
+    expect(result.postProcessing).toBeDefined();
+    expect(result.postProcessing?.cacheWritten).toBe(true);
+    expect(result.postProcessing?.cacheWriteDurationMs).toBeGreaterThanOrEqual(0);
+    expect(result.postProcessing?.memoryWriteDurationMs).toBeGreaterThanOrEqual(0);
+
+    // Per-agent cost aggregation matches the summed LLM calls.
+    expect(result.agentCosts).toBeDefined();
+    if (result.agentCosts) {
+      const summedCost = result.agentCosts.reduce((sum, cost) => sum + cost.costUsd, 0);
+      expect(summedCost).toBeCloseTo(result.totalCostUsd, 10);
+      expect(
+        result.agentCosts.reduce((sum, cost) => sum + cost.totalTokens, 0),
+      ).toBeGreaterThanOrEqual(0);
+    }
+
+    // ResearchStep now carries the tool execution duration.
+    for (const step of result.researchSteps) {
+      expect(step.durationMs).toBeGreaterThanOrEqual(0);
+    }
+  });
+
   it("should return cached response when cache hit", async () => {
     vi.mocked(mockCache.checkCache).mockResolvedValueOnce({
       answer: "Cached answer.",
