@@ -12,11 +12,70 @@ export interface EmbeddingClient {
 }
 
 /**
+ * Max inputs cached per embed batch. Query-side batches are tiny (1-8 texts),
+ * but ingest-side batches can be thousands — we never want to cache those
+ * (they are single-use and would blow the LRU out).
+ */
+const EMBED_CACHE_MAX_BATCH = 16;
+const EMBED_CACHE_MAX_ENTRIES = 2048;
+const EMBED_CACHE_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * Bounded in-memory embedding cache keyed by the exact input text batch.
+ *
+ * Why: every embed is a round-trip to the embedding endpoint, and on a cold
+ * Cloudflare Worker the model load alone is 10-20s. The pipeline re-embeds
+ * the same texts repeatedly — the query vector, the expanded sub-queries, and
+ * repeated admin tester prompts all produce identical inputs — so caching the
+ * normalized vectors turns those calls into instant Map hits instead of
+ * re-paying a cold start. Instance-scoped so tests that stub `fetch` on a
+ * fresh client are never contaminated by prior cases.
+ */
+class EmbeddingBatchCache {
+  private readonly cache = new Map<string, { vectors: number[][]; expiresAt: number }>();
+
+  get(texts: string[]): number[][] | undefined {
+    if (texts.length === 0 || texts.length > EMBED_CACHE_MAX_BATCH) {
+      return undefined;
+    }
+    const key = texts.join("\u0000");
+    const entry = this.cache.get(key);
+    if (!entry) {
+      return undefined;
+    }
+    if (entry.expiresAt < Date.now()) {
+      this.cache.delete(key);
+      return undefined;
+    }
+    return entry.vectors;
+  }
+
+  set(texts: string[], vectors: number[][]): void {
+    if (texts.length === 0 || texts.length > EMBED_CACHE_MAX_BATCH) {
+      return;
+    }
+    if (this.cache.size >= EMBED_CACHE_MAX_ENTRIES) {
+      // Drop the oldest entry (Map preserves insertion order).
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.cache.delete(oldestKey);
+      }
+    }
+    this.cache.set(texts.join("\u0000"), {
+      vectors,
+      expiresAt: Date.now() + EMBED_CACHE_TTL_MS,
+    });
+  }
+}
+
+/**
  * Embedding client backed by the Hugging Face Inference API
  * (feature-extraction pipeline). 1024-dim BGE-M3 embeddings (multilingual —
  * matches the corpus space; see the Cloudflare embeddings worker).
  */
 export class HfEmbeddingClient implements EmbeddingClient {
+  private readonly cache = new EmbeddingBatchCache();
+
   constructor(
     private readonly model: string = env.EMBEDDING_MODEL,
     private readonly inferenceUrl: string = env.HF_INFERENCE_URL,
@@ -29,6 +88,12 @@ export class HfEmbeddingClient implements EmbeddingClient {
     }
     if (!this.apiToken) {
       throw new LLMProviderError("HF_TOKEN not configured; cannot embed");
+    }
+
+    const cached = this.cache.get(texts);
+    if (cached) {
+      logger.debug({ count: texts.length }, "[EMBED] cache hit for batch");
+      return cached;
     }
 
     const generation = observeGeneration("embed", {
@@ -75,6 +140,7 @@ export class HfEmbeddingClient implements EmbeddingClient {
     }
 
     const normalized = vectors.map((vector) => normalize(vector));
+    this.cache.set(texts, normalized);
     generation.end({ count: normalized.length, dim: normalized[0]?.length ?? 0 });
     return normalized;
   }

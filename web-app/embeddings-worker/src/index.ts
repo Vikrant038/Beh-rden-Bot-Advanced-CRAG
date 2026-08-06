@@ -27,6 +27,16 @@ export interface Env {
 
 const MODEL = "@cf/baai/bge-m3";
 
+/**
+ * Minimal scheduled-event shape — avoids depending on @cloudflare/workers-types
+ * (not installed in the web-app workspace, whose tsconfig still globs this
+ * file for `pnpm typecheck`).
+ */
+interface ScheduledEventLike {
+  scheduledTime: number;
+  cron: string;
+}
+
 /** Constant-time string equality (prevents timing side channels on the token). */
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) {
@@ -40,6 +50,22 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 export default {
+  /**
+   * Keep the bge-m3 model loaded between real requests. Workers AI evicts
+   * models after a short idle window, so the first query after a gap pays a
+   * 10-20s cold start — which shows up as the "Dense Search (pgvector)"
+   * stage in the admin pipeline tester. A 5-minute cron re-runs the model with
+   * a throwaway input so the warm worker answers real queries in ~100-300ms.
+   * Best-effort: a failed warm-up tick is harmless (the next tick retries).
+   */
+  async scheduled(_event: ScheduledEventLike, env: Env): Promise<void> {
+    try {
+      await env.AI.run(MODEL, { text: "keep-warm" });
+    } catch {
+      // ignore — next scheduled tick retries
+    }
+  },
+
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
@@ -55,7 +81,10 @@ export default {
     // Token auth — reject without a valid bearer token. Constant-time
     // comparison so the comparison itself leaks nothing about the token.
     const auth = request.headers.get("Authorization") ?? "";
-    if (!auth.startsWith("Bearer ") || !timingSafeEqual(auth.slice("Bearer ".length), env.EMBED_TOKEN)) {
+    if (
+      !auth.startsWith("Bearer ") ||
+      !timingSafeEqual(auth.slice("Bearer ".length), env.EMBED_TOKEN)
+    ) {
       return new Response("Unauthorized", { status: 401 });
     }
 
@@ -65,8 +94,15 @@ export default {
     } catch {
       return Response.json({ error: "invalid JSON body" }, { status: 400 });
     }
-    if (!Array.isArray(body.inputs) || body.inputs.length === 0 || !body.inputs.every((t) => typeof t === "string")) {
-      return Response.json({ error: "inputs must be a non-empty array of strings" }, { status: 400 });
+    if (
+      !Array.isArray(body.inputs) ||
+      body.inputs.length === 0 ||
+      !body.inputs.every((t) => typeof t === "string")
+    ) {
+      return Response.json(
+        { error: "inputs must be a non-empty array of strings" },
+        { status: 400 },
+      );
     }
 
     const texts = body.inputs as string[];

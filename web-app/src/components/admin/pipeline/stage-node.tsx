@@ -43,11 +43,36 @@ const STATUS_META: Record<StageStatus, { dot: string; text: string; icon?: React
 
 export function StageNode({ index, title, status, durationMs, children }: StageNodeProps) {
   // Closed by default: the admin pipeline trace reveals each stage's full
-  // output and metric breakdown only on an explicit chevron click, so the
-  // glass-box view stays scannable when every stage is expanded.
+  // output and metric breakdown only on an explicit tap of the header row, so
+  // the glass-box view stays scannable when every stage is expanded.
   const [open, setOpen] = useState(false);
   const meta = STATUS_META[status];
   const hasBody = Boolean(children);
+  const bodyId = `stage-node-${index}-body`;
+
+  // The whole header row toggles (not just the chevron) — a much larger touch
+  // target on phones. The title truncates with min-w-0; the duration, status
+  // icon, and chevron are shrink-0 so they always sit pinned to the far right
+  // beside one another, never wrapping or fighting for space on narrow rows.
+  const row = (
+    <>
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+        <span className="mr-1.5 font-mono text-xs text-muted">{index}.</span>
+        {title}
+      </span>
+      {durationMs !== undefined && status !== "pending" && status !== "skipped" && (
+        <span className="shrink-0 font-mono text-xs text-muted">{durationMs}ms</span>
+      )}
+      <span className={cn("flex shrink-0 items-center gap-1 text-xs font-medium", meta.text)}>
+        {meta.icon ?? null}
+      </span>
+      {hasBody && (
+        <ChevronDown
+          className={cn("h-4 w-4 shrink-0 text-muted transition-transform", open && "rotate-180")}
+        />
+      )}
+    </>
+  );
 
   return (
     <li className="relative flex gap-3">
@@ -61,30 +86,25 @@ export function StageNode({ index, title, status, durationMs, children }: StageN
       </div>
 
       <div className="min-w-0 flex-1 pb-4">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium text-foreground">
-            <span className="mr-1.5 font-mono text-xs text-muted">{index}.</span>
-            {title}
-          </h3>
-          {durationMs !== undefined && status !== "pending" && status !== "skipped" && (
-            <span className="font-mono text-xs text-muted">{durationMs}ms</span>
-          )}
-          {hasBody && (
-            <button
-              type="button"
-              onClick={() => setOpen((value) => !value)}
-              aria-expanded={open}
-              aria-label={open ? `Collapse ${title}` : `Expand ${title}`}
-              className="ml-auto grid h-7 w-7 place-items-center rounded-md text-muted transition hover:bg-surface-hover hover:text-foreground sm:h-6 sm:w-6"
-            >
-              <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
-            </button>
-          )}
-          <span className={cn("ml-auto flex items-center gap-1 text-xs font-medium", meta.text)}>
-            {meta.icon ?? null}
-          </span>
-        </div>
-        {hasBody && open ? <div className="mt-2">{children}</div> : null}
+        {hasBody ? (
+          <button
+            type="button"
+            onClick={() => setOpen((value) => !value)}
+            aria-expanded={open}
+            aria-controls={bodyId}
+            aria-label={open ? `Collapse ${title}` : `Expand ${title}`}
+            className="flex w-full min-w-0 items-center gap-2 rounded-lg py-1 text-left transition hover:bg-surface-hover/60 focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            {row}
+          </button>
+        ) : (
+          <div className="flex w-full min-w-0 items-center gap-2 py-1">{row}</div>
+        )}
+        {hasBody && open ? (
+          <div id={bodyId} className="mt-2">
+            {children}
+          </div>
+        ) : null}
       </div>
     </li>
   );

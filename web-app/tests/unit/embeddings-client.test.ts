@@ -304,4 +304,51 @@ describe("HfEmbeddingClient", () => {
     const requestBody = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
     expect(requestBody.inputs).toEqual([`${QUERY_EMBEDDING_PREFIX}search query`]);
   });
+
+  it("serves repeat batches from the in-memory cache without re-calling the API", async () => {
+    const fetchMock = vi.fn(
+      async (_input: unknown, _init?: RequestInit) =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => [
+            [1, 0, 0],
+            [0, 1, 0],
+          ],
+        }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new HfEmbeddingClient("model", "url", "token");
+
+    const first = await client.embedTexts(["aps", "visa"]);
+    const second = await client.embedTexts(["aps", "visa"]);
+
+    expect(first).toEqual([
+      [1, 0, 0],
+      [0, 1, 0],
+    ]);
+    expect(second).toEqual(first);
+    // One network round-trip for both calls — the second is a Map hit, which is
+    // what keeps a cold embedding endpoint from being re-paid per pipeline stage.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not cache the same text across distinct batches (exact-batch key)", async () => {
+    const fetchMock = vi.fn(
+      async (_input: unknown, _init?: RequestInit) =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => [[1, 0, 0]],
+        }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new HfEmbeddingClient("model", "url", "token");
+
+    await client.embedTexts(["aps"]);
+    await client.embedTexts(["visa"]);
+
+    // Different batch composition → different key → both hit the network.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

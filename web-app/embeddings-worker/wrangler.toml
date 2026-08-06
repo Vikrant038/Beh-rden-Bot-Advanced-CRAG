@@ -26,3 +26,10 @@ compatibility_date = "2024-11-01"
 
 [ai]
 binding = "AI"
+
+# Keep the bge-m3 model warm between queries. Workers AI evicts idle models,
+# and a cold model costs 10-20s on the first request (visible as the slow
+# "Dense Search" stage). Every 5 minutes the scheduled handler re-runs the
+# model with a throwaway input so real queries hit a warm worker.
+[triggers]
+crons = ["*/5 * * * *"]

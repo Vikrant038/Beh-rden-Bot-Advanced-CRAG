@@ -142,15 +142,21 @@ export async function runAgenticRag(
     const t_piiStart = Date.now();
     const { text: maskedQuery } = maskPii(userQuery);
     const piiMaskingDurationMs = Date.now() - t_piiStart;
-    const queryVector = await hybridRetriever.embedQuery(maskedQuery);
 
     // Stage 0 — Query disambiguation & guardrail (includes the guardrail LLM call).
     const stage0Start = Date.now();
     collector.setStage("Stage 0 — Query disambiguation & guardrail");
     let cached: CachedResponse | null = null;
+    let queryVector: number[] | null = null;
     let cacheLookupDurationMs = 0;
+    // The query vector is only needed for the semantic-cache lookup/write, so
+    // skip the embed entirely when the cache is bypassed (the admin pipeline
+    // tester defaults to bypassCache=true). Each embed is a round-trip to the
+    // embedding endpoint — on a cold Cloudflare Worker that's a 10-20s model
+    // load, so skipping it removes a full cold start from every glass-box run.
     if (!bypassCache) {
       const t_cacheStart = Date.now();
+      queryVector = await hybridRetriever.embedQuery(maskedQuery);
       cached = await cache.checkCache(maskedQuery, queryVector);
       cacheLookupDurationMs = Date.now() - t_cacheStart;
     }
@@ -315,7 +321,7 @@ export async function runAgenticRag(
 
     let cacheWriteDurationMs = 0;
     let cacheWritten = false;
-    if (!bypassCache) {
+    if (!bypassCache && queryVector) {
       const t_cacheWriteStart = Date.now();
       const parentDocIds = Array.from(
         new Set(

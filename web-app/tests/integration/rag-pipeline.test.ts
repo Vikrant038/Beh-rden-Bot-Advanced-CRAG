@@ -171,6 +171,24 @@ describe("RAG Pipeline Orchestrators", () => {
     expect(result.analysisMatrix.summary).toBeTruthy();
   });
 
+  it("agentic: skips the query embed entirely when the cache is bypassed", async () => {
+    const memory = new SummaryBufferMemory("conv-7", 8);
+    const result = await runAgenticRag("Compare blocked account vs scholarship", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+      bypassCache: true,
+    });
+
+    // The admin pipeline tester defaults to bypassCache=true — the query
+    // vector is only used for the cache lookup/write, so it must not be
+    // embedded at all. That removes a full embedding round-trip (potentially
+    // a 10-20s cold start) from every glass-box run.
+    expect(mockHybridRetriever.embedQuery).not.toHaveBeenCalled();
+    expect(result.preProcessing?.cacheHit).toBe(false);
+    expect(result.postProcessing?.cacheWritten).toBe(false);
+  });
+
   it("agentic: surfaces pre/post-processing telemetry and per-agent costs", async () => {
     const memory = new SummaryBufferMemory("conv-6", 8);
     const result = await runAgenticRag("Compare blocked account vs scholarship", {
