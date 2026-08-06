@@ -10,7 +10,13 @@ vi.mock("@/server/db", () => ({
     document: { count: vi.fn() },
     semanticCacheEntry: { deleteMany: vi.fn() },
     conversationMemory: { upsert: vi.fn() },
-    pipelineRun: { create: vi.fn(), update: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
+    pipelineRun: {
+      create: vi.fn(),
+      update: vi.fn(),
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      deleteMany: vi.fn(),
+    },
     $queryRaw: vi.fn(),
   },
 }));
@@ -113,6 +119,9 @@ describe("admin.testPipeline", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetHybridRetriever.mockReturnValue({ embedQuery: vi.fn() });
+    // Background worker prunes old runs on completion; default to an empty
+    // history so the prune path is a no-op unless a test supplies rows.
+    prismaMock.pipelineRun?.findMany.mockResolvedValue([] as never);
   });
 
   it("requires the ADMIN role", async () => {

@@ -140,6 +140,32 @@ export function formatDebugError(error: unknown): string {
 }
 
 /**
+ * Keeps only the most recent MAX_PIPELINE_RUNS pipeline-test runs, deleting
+ * older rows so the admin tester never accumulates unbounded traceJson
+ * history. RUNNING rows are always preserved — the tester UI may still be
+ * polling them — so pruning runs after a terminal state is persisted.
+ */
+const MAX_PIPELINE_RUNS = 5;
+
+/**
+ * Deletes pipeline-run history beyond the newest MAX_PIPELINE_RUNS terminal
+ * runs. Best-effort: failures are swallowed (the pipeline itself has already
+ * completed; a prune error must not change its outcome).
+ */
+async function prunePipelineRuns(): Promise<void> {
+  const recent = await prisma.pipelineRun.findMany({
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: MAX_PIPELINE_RUNS,
+    select: { id: true },
+  });
+  const keepIds = recent.map((row) => row.id);
+  if (keepIds.length === 0) return;
+  await prisma.pipelineRun.deleteMany({
+    where: { id: { notIn: keepIds }, status: { not: "RUNNING" } },
+  });
+}
+
+/**
  * Runs a single glass-box pipeline test in the background and records the
  * outcome on its PipelineRun row. The HTTP request returns the runId in ~100ms
  * (see `testPipeline`); this worker — scheduled via `after()` — does the real
@@ -220,6 +246,12 @@ export async function executePipelineTest(
       { runId, prompt: input.prompt, latencyMs, debug: input.debug },
       "[ADMIN] pipeline test failed",
     );
+  } finally {
+    // Keep only the newest MAX_PIPELINE_RUNS terminal runs on disk; older
+    // traceJson blobs are deleted best-effort so the table stays bounded.
+    await prunePipelineRuns().catch((error) => {
+      logger.warn({ error: String(error) }, "[ADMIN] failed to prune old pipeline runs");
+    });
   }
 }
 

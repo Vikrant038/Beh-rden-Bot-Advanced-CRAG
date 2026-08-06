@@ -65,6 +65,7 @@ export interface MockPrisma {
     update: MockFn;
     findMany: MockFn;
     findUnique: MockFn;
+    deleteMany: MockFn;
   };
   $queryRaw: MockFn;
 }
