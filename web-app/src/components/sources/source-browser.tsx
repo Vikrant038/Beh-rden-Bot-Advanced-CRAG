@@ -508,7 +508,8 @@ export function SourceBrowser() {
                       ? [scoredChunks[chunkNavigator.index]]
                       : scoredChunks
                     ).map(({ chunk, score }, mappedIndex) => {
-                      const listIndex = chunkViewMode === "paginated" ? chunkNavigator.index : mappedIndex;
+                      const listIndex =
+                        chunkViewMode === "paginated" ? chunkNavigator.index : mappedIndex;
                       return (
                         <li
                           key={chunk.id}
@@ -568,7 +569,9 @@ export function SourceBrowser() {
                             const nextIndex = chunkNavigator.index - 1;
                             chunkNavigator.clamp(nextIndex);
                             if (chunkViewMode === "list" && scoredChunks[Math.max(0, nextIndex)]) {
-                              const el = document.getElementById(`chunk-item-${scoredChunks[Math.max(0, nextIndex)].chunk.id}`);
+                              const el = document.getElementById(
+                                `chunk-item-${scoredChunks[Math.max(0, nextIndex)].chunk.id}`,
+                              );
                               el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
                             }
                           }}
@@ -583,8 +586,13 @@ export function SourceBrowser() {
                           onClick={() => {
                             const nextIndex = chunkNavigator.index + 1;
                             chunkNavigator.clamp(nextIndex);
-                            if (chunkViewMode === "list" && scoredChunks[Math.min(scoredChunks.length - 1, nextIndex)]) {
-                              const el = document.getElementById(`chunk-item-${scoredChunks[Math.min(scoredChunks.length - 1, nextIndex)].chunk.id}`);
+                            if (
+                              chunkViewMode === "list" &&
+                              scoredChunks[Math.min(scoredChunks.length - 1, nextIndex)]
+                            ) {
+                              const el = document.getElementById(
+                                `chunk-item-${scoredChunks[Math.min(scoredChunks.length - 1, nextIndex)].chunk.id}`,
+                              );
                               el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
                             }
                           }}

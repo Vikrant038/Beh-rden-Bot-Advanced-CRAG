@@ -31,7 +31,9 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
       {
         title: "Stage 0A/B — Disambiguation & Guardrail",
         status: guardrailBlocked ? "warning" : "done",
-        durationMs: (trace.disambiguation?.durationMs ?? 0) + (trace.guardrail?.durationMs ?? stageDuration(0)),
+        durationMs:
+          (trace.disambiguation?.durationMs ?? 0) +
+          (trace.guardrail?.durationMs ?? stageDuration(0)),
         body: (
           <div className="space-y-2">
             {trace.disambiguation && (
@@ -43,7 +45,9 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
                     {trace.disambiguation.isAmbiguous ? "AMBIGUOUS" : "CLEAR"}
                   </span>
                 </div>
-                <span className="font-mono text-[10px] text-muted">{Math.round(trace.disambiguation.durationMs)}ms</span>
+                <span className="font-mono text-[10px] text-muted">
+                  {Math.round(trace.disambiguation.durationMs)}ms
+                </span>
               </div>
             )}
             <div className="flex items-center justify-between rounded-lg bg-surface px-3 py-2 text-xs">
@@ -75,7 +79,9 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
                   <span className="text-muted">— {trace.guardrail.reason}</span>
                 ) : null}
               </div>
-              <span className="font-mono text-[10px] text-muted">{Math.round(trace.guardrail?.durationMs ?? stageDuration(0))}ms</span>
+              <span className="font-mono text-[10px] text-muted">
+                {Math.round(trace.guardrail?.durationMs ?? stageDuration(0))}ms
+              </span>
             </div>
           </div>
         ),
@@ -83,8 +89,14 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
       {
         title: "Stage 1A/B/C/D — Query Expansion & Hybrid Retrieval",
         status: guardrailBlocked ? "skipped" : trace.sources.length > 0 ? "done" : "warning",
-        durationMs: trace.retrievalTelemetry 
-          ? Math.round(trace.retrievalTelemetry.queryExpansionDurationMs + trace.retrievalTelemetry.denseDurationMs + trace.retrievalTelemetry.sparseBm25DurationMs + trace.retrievalTelemetry.rrfFusionDurationMs + trace.retrievalTelemetry.rerankDurationMs)
+        durationMs: trace.retrievalTelemetry
+          ? Math.round(
+              trace.retrievalTelemetry.queryExpansionDurationMs +
+                trace.retrievalTelemetry.denseDurationMs +
+                trace.retrievalTelemetry.sparseBm25DurationMs +
+                trace.retrievalTelemetry.rrfFusionDurationMs +
+                trace.retrievalTelemetry.rerankDurationMs,
+            )
           : undefined,
         body: (
           <div className="space-y-2">
@@ -93,7 +105,9 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
                 <div className="rounded-lg border border-glass-border bg-surface p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-xs font-medium text-foreground">Query Expansion</span>
-                    <span className="font-mono text-[10px] text-muted">{Math.round(trace.retrievalTelemetry.queryExpansionDurationMs)}ms</span>
+                    <span className="font-mono text-[10px] text-muted">
+                      {Math.round(trace.retrievalTelemetry.queryExpansionDurationMs)}ms
+                    </span>
                   </div>
                   <ul className="list-disc pl-4 space-y-1 text-xs text-muted">
                     {trace.retrievalTelemetry.expandedQueries.map((q, i) => (
@@ -101,15 +115,23 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
                     ))}
                   </ul>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-2">
                   <div className="rounded-lg border border-glass-border bg-surface p-3">
-                    <span className="mb-1 block text-xs font-medium text-foreground">Dense Search (pgvector)</span>
-                    <span className="font-mono text-xs text-muted">{Math.round(trace.retrievalTelemetry.denseDurationMs)}ms</span>
+                    <span className="mb-1 block text-xs font-medium text-foreground">
+                      Dense Search (pgvector)
+                    </span>
+                    <span className="font-mono text-xs text-muted">
+                      {Math.round(trace.retrievalTelemetry.denseDurationMs)}ms
+                    </span>
                   </div>
                   <div className="rounded-lg border border-glass-border bg-surface p-3">
-                    <span className="mb-1 block text-xs font-medium text-foreground">Sparse Search (BM25)</span>
-                    <span className="font-mono text-xs text-muted">{Math.round(trace.retrievalTelemetry.sparseBm25DurationMs)}ms</span>
+                    <span className="mb-1 block text-xs font-medium text-foreground">
+                      Sparse Search (BM25)
+                    </span>
+                    <span className="font-mono text-xs text-muted">
+                      {Math.round(trace.retrievalTelemetry.sparseBm25DurationMs)}ms
+                    </span>
                   </div>
                 </div>
 
@@ -120,8 +142,13 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
                   <span className="rounded-md bg-surface-hover px-2 py-1 font-mono text-[10px] text-muted">
                     Cross-Encoder: {Math.round(trace.retrievalTelemetry.rerankDurationMs)}ms
                   </span>
-                  <span className={`rounded-md px-2 py-1 font-mono text-[10px] font-medium ${trace.retrievalTelemetry.cragFallbackTriggered ? "bg-warning/10 text-warning" : "bg-success/10 text-success"}`}>
-                    Score: {trace.retrievalTelemetry.bestCrossScore.toFixed(2)} — {trace.retrievalTelemetry.cragFallbackTriggered ? "FAIL (CRAG Fallback)" : "PASS"}
+                  <span
+                    className={`rounded-md px-2 py-1 font-mono text-[10px] font-medium ${trace.retrievalTelemetry.cragFallbackTriggered ? "bg-warning/10 text-warning" : "bg-success/10 text-success"}`}
+                  >
+                    Score: {trace.retrievalTelemetry.bestCrossScore.toFixed(2)} —{" "}
+                    {trace.retrievalTelemetry.cragFallbackTriggered
+                      ? "FAIL (CRAG Fallback)"
+                      : "PASS"}
                   </span>
                 </div>
               </>
@@ -145,18 +172,25 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
                 <span className="text-xs font-medium text-muted">Tool Calls</span>
                 <div className="space-y-1">
                   {trace.toolCalls.map((call, index) => (
-                    <div key={index} className="flex items-center justify-between rounded-lg border border-glass-border bg-surface px-3 py-2 text-xs">
+                    <div
+                      key={index}
+                      className="flex items-center justify-between rounded-lg border border-glass-border bg-surface px-3 py-2 text-xs"
+                    >
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-medium text-accent">{call.tool}</span>
-                        {call.query && <span className="max-w-xs truncate text-muted">{call.query}</span>}
+                        {call.query && (
+                          <span className="max-w-xs truncate text-muted">{call.query}</span>
+                        )}
                       </div>
-                      <span className="font-mono text-[10px] text-muted">{Math.round(call.durationMs)}ms</span>
+                      <span className="font-mono text-[10px] text-muted">
+                        {Math.round(call.durationMs)}ms
+                      </span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
-            
+
             <div className="space-y-2">
               <span className="text-xs font-medium text-muted">ReAct Steps</span>
               {trace.researchSteps.map((step, index) => (
@@ -176,7 +210,8 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
               </div>
             ) : (
               <p className="rounded-lg border border-glass-border bg-surface/60 px-3 py-2 text-xs text-muted">
-                No local chunks passed the CRAG threshold — the research agent fell back to web search.
+                No local chunks passed the CRAG threshold — the research agent fell back to web
+                search.
               </p>
             )}
           </div>

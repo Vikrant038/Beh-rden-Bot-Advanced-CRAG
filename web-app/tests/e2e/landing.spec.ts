@@ -8,7 +8,7 @@ test.describe("Landing page", () => {
       page.getByRole("heading", { name: "Your AI Guide to German Immigration" }),
     ).toBeVisible();
     await expect(page.getByRole("heading", { name: "3-Agent ReAct" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Hybrid Retrieval" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Bilingual Retrieval" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "CRAG Gate" })).toBeVisible();
 
     const signIn = page.getByRole("link", { name: "Get started" });

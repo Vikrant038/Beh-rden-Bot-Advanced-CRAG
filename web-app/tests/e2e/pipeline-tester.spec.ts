@@ -102,13 +102,18 @@ test("renders all four stages after running a trace", async ({ page }) => {
 
   await expect(page.getByText("Pipeline trace")).toBeVisible({ timeout: 10_000 });
 
-  await expect(page.getByRole("heading", { name: /Stage 0 — Query disambiguation/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Stage 1 — Research agent/ })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /Stage 0A\/B — Disambiguation & Guardrail/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /Stage 1A\/B\/C\/D — Query Expansion & Hybrid Retrieval/ }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Stage 1E — Research Agent/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Stage 2 — Analyst/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Stage 3 — Writer/ })).toBeVisible();
 
   await expect(page.getByText("Guardrail: PASSED")).toBeVisible();
-  await expect(page.getByText("Hybrid Retrieval")).toBeVisible();
+  await expect(page.getByText("Hybrid Retrieval", { exact: true })).toBeVisible();
 
   const sourceCard = page.getByRole("button", { name: /visa-guide\.pdf/i });
   await expect(sourceCard).toBeVisible();

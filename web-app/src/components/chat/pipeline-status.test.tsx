@@ -16,7 +16,15 @@ describe("PipelineStatus", () => {
 
   it("renders all seven stage labels with a polite live region", () => {
     const { container } = render(<PipelineStatus status="dense_retrieval" />);
-    for (const label of ["Disambiguation", "Guardrail", "Query Expansion", "Dense/BM25 Search", "Research Tools", "Analyst", "Writer"]) {
+    for (const label of [
+      "Disambiguation",
+      "Guardrail",
+      "Query Expansion",
+      "Dense/BM25 Search",
+      "Research Tools",
+      "Analyst",
+      "Writer",
+    ]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
     expect(container.querySelector('[aria-live="polite"]')).not.toBeNull();

@@ -8,7 +8,11 @@ const STAGES: Array<{ keys: PipelineStage[]; label: string; primaryKey: string }
   { keys: ["disambiguation"], label: "Disambiguation", primaryKey: "disambiguation" },
   { keys: ["guardrail"], label: "Guardrail", primaryKey: "guardrail" },
   { keys: ["query_expansion"], label: "Query Expansion", primaryKey: "query_expansion" },
-  { keys: ["dense_retrieval", "bm25_retrieval", "rrf_fusion", "rerank", "crag_gate", "retrieving"], label: "Dense/BM25 Search", primaryKey: "dense_retrieval" },
+  {
+    keys: ["dense_retrieval", "bm25_retrieval", "rrf_fusion", "rerank", "crag_gate", "retrieving"],
+    label: "Dense/BM25 Search",
+    primaryKey: "dense_retrieval",
+  },
   { keys: ["research", "tool_calls"], label: "Research Tools", primaryKey: "research" },
   { keys: ["analyst"], label: "Analyst", primaryKey: "analyst" },
   { keys: ["writer"], label: "Writer", primaryKey: "writer" },
