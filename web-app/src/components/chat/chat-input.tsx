@@ -170,6 +170,10 @@ export function ChatInput({
         )}
         <div
           className={cn(
+            // items-end: on multi-line input the controls stay pinned to the
+            // bottom edge; the buttons are h-10 (matching min-h-10 on the
+            // textarea) so on a single-line row the icons sit exactly level
+            // with the text at every breakpoint.
             "flex items-end gap-2 rounded-xl border border-border bg-surface px-2 transition focus-within:border-primary/50 focus-within:shadow-[0_0_0_3px_var(--color-primary)/10]",
             atLimit && "border-warning",
           )}
@@ -192,7 +196,8 @@ export function ChatInput({
             aria-describedby="chat-input-limit"
             className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm outline-none transition-[height] duration-150 placeholder:text-muted disabled:opacity-60"
           />
-          {/* #53 — shrink the four input controls below sm so they don't crowd the textarea */}
+          {/* #53 — input controls sized to match the min-h-10 textarea so the
+              icons stay vertically aligned with the input at every breakpoint */}
           {value && !isStreaming && (
             <button
               type="button"
@@ -201,7 +206,7 @@ export function ChatInput({
                 textareaRef.current?.focus();
               }}
               aria-label="Clear input"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground sm:h-10 sm:w-10"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
             >
               <X className="h-4 w-4" />
             </button>
@@ -212,7 +217,7 @@ export function ChatInput({
               onClick={() => void pasteFromClipboard()}
               aria-label="Paste from clipboard"
               title="Paste from clipboard"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground sm:h-10 sm:w-10"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
             >
               <ClipboardPaste className="h-4 w-4" />
             </button>
@@ -223,7 +228,7 @@ export function ChatInput({
               onClick={onStop}
               aria-label="Stop generating"
               title="Stop generating"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-glass-border bg-surface text-muted transition hover:bg-surface-hover hover:text-foreground sm:h-10 sm:w-10"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-glass-border bg-surface text-muted transition hover:bg-surface-hover hover:text-foreground"
             >
               <Square className="h-3.5 w-3.5 fill-muted-foreground text-muted-foreground" />
             </button>
@@ -233,7 +238,7 @@ export function ChatInput({
               onClick={submit}
               disabled={disabled || !value.trim()}
               aria-label="Send message"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:text-foreground hover:shadow-sm hover:[&_svg]:stroke-[2.5] disabled:pointer-events-none disabled:opacity-40 sm:h-10 sm:w-10"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted transition hover:text-foreground hover:shadow-sm hover:[&_svg]:stroke-[2.5] disabled:pointer-events-none disabled:opacity-40"
             >
               <SendHorizontal className="h-4 w-4" />
             </button>

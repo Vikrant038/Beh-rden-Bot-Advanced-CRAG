@@ -94,6 +94,16 @@ async function openTester(page: import("@playwright/test").Page) {
   await expect(page.getByRole("heading", { name: "Pipeline tester" })).toBeVisible();
 }
 
+/**
+ * StageNodes are closed by default (whole-row toggle buttons labelled
+ * "Expand <title>"). Expand every stage before asserting on body content.
+ */
+async function expandAllStages(page: import("@playwright/test").Page) {
+  while ((await page.getByRole("button", { name: /^Expand / }).count()) > 0) {
+    await page.getByRole("button", { name: /^Expand / }).first().click();
+  }
+}
+
 test("renders all pipeline stages after running a trace", async ({ page }) => {
   await openTester(page);
 
@@ -102,16 +112,21 @@ test("renders all pipeline stages after running a trace", async ({ page }) => {
 
   await expect(page.getByText("Pipeline trace")).toBeVisible({ timeout: 10_000 });
 
+  // Stage titles are whole-row toggle buttons (not headings) since the
+  // closed-by-default accordion change.
   await expect(
-    page.getByRole("heading", { name: /Stage 0A — Query Disambiguation/ }),
+    page.getByRole("button", { name: /Expand Stage 0A — Query Disambiguation/ }),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Stage 0B — Domain Guardrail/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Expand Stage 0B — Domain Guardrail/ })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: /Stage 1A\/B\/C\/D — Query Expansion & Hybrid Retrieval/ }),
+    page.getByRole("button", { name: /Expand Stage 1A\/B\/C\/D — Query Expansion & Hybrid Retrieval/ }),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Stage 1E — Research Agent/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Stage 2 — Analyst/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Stage 3 — Writer/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Expand Stage 1E — Research Agent/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Expand Stage 2 — Analyst/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Expand Stage 3 — Writer/ })).toBeVisible();
+
+  // Bodies are hidden until each stage row is expanded.
+  await expandAllStages(page);
 
   await expect(page.getByText("Guardrail: PASSED")).toBeVisible();
   await expect(page.getByText("Hybrid Retrieval", { exact: true })).toBeVisible();
@@ -129,6 +144,10 @@ test("shows the child snippet and expanded parent context", async ({ page }) => 
 
   await page.getByLabel("Test pipeline query").fill("blocked account requirement");
   await page.getByRole("button", { name: "Run trace" }).click();
+
+  await expect(page.getByText("Pipeline trace")).toBeVisible({ timeout: 10_000 });
+  // The source panel lives inside the closed-by-default Stage 1E body.
+  await expandAllStages(page);
 
   const sourceCard = page.getByRole("button", { name: /visa-guide\.pdf/i });
   await expect(sourceCard).toBeVisible({ timeout: 10_000 });
@@ -172,8 +191,10 @@ test("surfaces an out-of-domain guardrail block", async ({ page }) => {
   await page.getByLabel("Test pipeline query").fill("cooking pasta");
   await page.getByRole("button", { name: "Run trace" }).click();
 
-  await expect(page.getByText("Guardrail: BLOCKED")).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText("out of domain", { exact: true })).toBeVisible();
+  await expect(page.getByText("out of domain", { exact: true })).toBeVisible({ timeout: 10_000 });
+  // Guardrail-blocked bodies are inside the closed-by-default stage rows.
+  await expandAllStages(page);
+  await expect(page.getByText("Guardrail: BLOCKED")).toBeVisible();
   await expect(
     page.getByText("Pipeline short-circuited — downstream agents never ran."),
   ).toBeVisible();
@@ -210,6 +231,8 @@ test("marks a cache-hit trace with a badge", async ({ page }) => {
   await page.getByRole("button", { name: "Run trace" }).click();
 
   await expect(page.getByText("cache hit", { exact: true })).toBeVisible({ timeout: 10_000 });
+  // The cache-hit research step sits inside a closed-by-default stage body.
+  await expandAllStages(page);
   await expect(page.getByText("Semantic Cache Hit")).toBeVisible();
 });
 
@@ -242,6 +265,8 @@ test("loads a stored trace from the recent-runs list", async ({ page }) => {
 
   await expect(page.getByText("Stored trace")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText("Pipeline trace")).toBeVisible();
+  // The final answer renders inside the closed-by-default Stage 3 body.
+  await expandAllStages(page);
   await expect(page.getByText(fullTrace.finalAnswer, { exact: true })).toBeVisible();
 });
 

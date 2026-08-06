@@ -92,7 +92,7 @@ check 47 "min-h-11"                              src/components/chat/chat-interf
 check 48 "bottom-36"                             src/components/chat/chat-interface.tsx
 check 49 "break-words"                           src/components/chat/message-bubble.tsx
 check 51 "min-w-11"                              src/components/chat/message-bubble.tsx
-check 53 "sm:h-10"                               src/components/chat/chat-input.tsx
+check 53 "h-10 w-10"                            src/components/chat/chat-input.tsx
 check 54 "sm:flex-row"                           src/components/chat/chat-input.tsx
 check 55 "min-[400px]"                           src/components/chat/chat-input.tsx
 check 56 "overflow-x-auto"                       src/components/chat/chat-input.tsx

@@ -71,7 +71,7 @@ action is hover-only on touch devices.
 | 48 | Scroll-to-bottom `bottom-36 right-4 sm:bottom-28 sm:right-6` |
 | 49/50 | User/assistant bubbles capped and `break-words` |
 | 51 | `MessageActions` `min-h-11 min-w-11` |
-| 53 | Input controls `h-9 w-9 sm:h-10 sm:w-10` |
+| 53 | Input controls `h-10 w-10` — match the `min-h-10` textarea so the send/paste icons stay level with the input text on every breakpoint |
 | 54 | Disclaimer/counter stack below `sm` |
 | 55 | Mode toggle shrinks below 400px |
 | 56 | Quick-prompt chips `overflow-x-auto` |
@@ -171,5 +171,6 @@ action is hover-only on touch devices.
 - `pnpm lint` — 0 errors
 - `pnpm vitest run --coverage` — **603/603 pass**, coverage **92.88 / 85.36 / 89.81 / 92.96**
   (all ≥ the 85% gate)
-- E2E (Playwright) landing + pipeline-tester specs — 13/13 pass (updated for the
-  renamed "Bilingual Retrieval" feature and granular stage titles)
+- E2E (Playwright) — **25/25 pass** (landing, chat, history, admin, sources, and
+  pipeline-tester specs; the pipeline-tester spec now expands the
+  closed-by-default stage rows before asserting on their bodies)

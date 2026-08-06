@@ -111,8 +111,9 @@ Branch `web-app`. **Pushed and in sync with `origin/web-app`** after this sessio
 - Drift corrections found during the full audit: item #47's follow-up chips live
   in `chat-interface.tsx` (not `chat-input.tsx`); #136's two-pane uses
   `md:grid-cols-[minmax(0,340px)_1fr]` (not `md:grid-cols-2`); #138's touch
-  targets are a global pass (chat-input intentionally follows #53's `h-9 sm:h-10`
-  sizing).
+  targets are a global pass (chat-input follows #53's `h-10 w-10` sizing, which
+  matches the `min-h-10` textarea so the send/paste icons stay level with the
+  text at every breakpoint).
 
 ---
 
@@ -126,7 +127,7 @@ Branch `web-app`. **Pushed and in sync with `origin/web-app`** after this sessio
 | `vitest run --coverage`                       | ✅ 85 % thresholds (92.6/85.03/89.77/92.67) |
 | `scripts/verify-responsive-checklist-full.sh` | ✅ 103/103                                  |
 | `scripts/verify-plan-150.sh`                  | ✅ 147/150 present (3 open: 2.5, 4.2, 7.13) |
-| e2e `landing.spec.ts`                         | ✅ 5/5                                      |
+| e2e (full Playwright suite)                   | ✅ 25/25                                    |
 | `bash -n scripts/seed-corpus.sh`              | ✅                                          |
 
 ---
