@@ -4,6 +4,7 @@ import { conversationRouter } from "@/server/routers/conversation";
 import { sourceRouter } from "@/server/routers/source";
 import { documentRouter } from "@/server/routers/document";
 import { adminRouter } from "@/server/routers/admin";
+import { publicRouter } from "@/server/routers/public";
 
 // Feature routers (Phase C).
 export const appRouter = router({
@@ -12,6 +13,7 @@ export const appRouter = router({
   source: sourceRouter,
   document: documentRouter,
   admin: adminRouter,
+  public: publicRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -7,12 +7,13 @@ import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
   ArrowUp,
-  BarChart3,
   Bot,
-  Database,
   Eye,
   GraduationCap,
+  Languages,
   Menu,
+  Network,
+  Receipt,
   ShieldCheck,
   X,
   Zap,
@@ -22,20 +23,27 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { CountUp } from "@/components/ui/count-up";
 import { ChatMockup } from "@/components/landing/chat-mockup";
 import { ChangelogModal } from "@/components/ui/changelog-modal";
+import { api } from "@/lib/trpc/client";
 
 const NAV_LINKS = [
   { href: "#features", label: "Features" },
   { href: "#how-it-works", label: "How it works" },
-  { href: "#resources", label: "Resources" },
+  { href: "#corpus", label: "The corpus" },
   { href: "#faq", label: "FAQ" },
 ];
 
-const STATS_LIST = [
-  { value: 2000, suffix: "+", label: "questions answered" },
-  { value: 50, suffix: "+", label: "official sources" },
-  { value: 3, suffix: "", label: "agent pipeline" },
-  { value: 99.9, suffix: "%", label: "uptime", decimals: 1 },
-];
+/**
+ * Real, DB-backed trust numbers (public.corpusStats) — no invented claims.
+ * The pipeline and language counts are static facts; sources/chunks/German %
+ * come from the live corpus. `isLoading` shows a neutral placeholder instead
+ * of flashing zeros.
+ */
+function useCorpusStats() {
+  const { data, isLoading, isError } = api.public.corpusStats.useQuery(undefined, {
+    staleTime: 5 * 60_000,
+  });
+  return { stats: data, isLoading, isError };
+}
 
 const FEATURES = [
   {
@@ -45,59 +53,34 @@ const FEATURES = [
     icon: Bot,
   },
   {
-    title: "Hybrid Retrieval",
-    description: "Dense pgvector search fused with BM25 keyword search via reciprocal rank fusion.",
-    icon: Database,
+    title: "Bilingual Retrieval",
+    description:
+      "Every query is expanded into English + German sub-queries, then matched by dense pgvector and Postgres full-text search (GIN-indexed BM25-style scoring) fused via RRF.",
+    icon: Languages,
   },
   {
     title: "CRAG Gate",
     description:
-      "Confidence-gated retrieval that automatically falls back to live web search on weak sources.",
+      "Confidence-gated retrieval that automatically falls back to live web search when sources score below threshold.",
     icon: ShieldCheck,
   },
   {
-    title: "Semantic Cache",
-    description: "Exact and vector-similarity caching returns repeat answers in milliseconds.",
-    icon: Zap,
+    title: "Parent-Child Chunking",
+    description:
+      "Short snippets are matched and expanded to full parent sections, so answers are grounded in complete legal context.",
+    icon: Network,
   },
   {
     title: "PII Masking",
     description:
-      "Names, emails, and passport numbers are redacted before any query reaches an LLM.",
+      "Passport numbers, IBANs, emails, and phones are redacted before any query reaches an LLM.",
     icon: Eye,
   },
   {
-    title: "Observability",
+    title: "Per-Answer Telemetry",
     description:
-      "Full tracing of latency, tokens, fallbacks, and cache behaviour for every answer.",
-    icon: BarChart3,
-  },
-];
-
-const CONTENT_SECTIONS = [
-  {
-    eyebrow: "Guides",
-    title: "End-to-end process walkthroughs",
-    body: "Step-by-step walkthroughs that connect every milestone — from APS verification and uni-assist application through visa submission and blocked-account setup — so nothing falls through the cracks.",
-    cta: "Read the guides",
-  },
-  {
-    eyebrow: "Universities",
-    title: "University & program spotlights",
-    body: "Curated dossiers on leading German institutions: admission seasons, language requirements, tuition-fee status, and the documents each program actually expects.",
-    cta: "Explore spotlights",
-  },
-  {
-    eyebrow: "Finances",
-    title: "Financial planning for your move",
-    body: "Blocked-account thresholds, semester contributions, health-insurance costs, and realistic monthly budgets for major German cities — with the numbers kept current.",
-    cta: "See the numbers",
-  },
-  {
-    eyebrow: "Timelines",
-    title: "Checklists and timelines",
-    body: "Calendar-aware checklists that sequence every deadline: application windows, visa appointments, and enrollment cutoffs mapped to your intended intake.",
-    cta: "Get the checklist",
+      "Stage timings, tokens, and USD cost per LLM call are traced and surfaced for every answer.",
+    icon: Receipt,
   },
 ];
 
@@ -134,27 +117,6 @@ const TOPICS = [
   "Degree Recognition",
 ];
 
-const TESTIMONIALS = [
-  {
-    quote:
-      "I was drowning in conflicting visa advice. The cited answers with official sources made me confident enough to book my APS appointment.",
-    name: "Ananya S.",
-    role: "MSc applicant, TU Munich",
-  },
-  {
-    quote:
-      "The blocked-account and cost breakdowns were the first numbers I trusted after days of googling. It laid out the whole timeline.",
-    name: "Rohan M.",
-    role: "Bachelor's applicant, RWTH Aachen",
-  },
-  {
-    quote:
-      "The disambiguation prompts ask exactly the right clarifying questions. It caught that I meant the German student visa, not the Schengen one.",
-    name: "Priya K.",
-    role: "Masters applicant, FAU Erlangen",
-  },
-];
-
 function StatCard({
   value,
   suffix,
@@ -182,6 +144,7 @@ export default function LandingPage() {
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [changelogOpen, setChangelogOpen] = useState(false);
   const reduceMotion = useReducedMotion();
+  const { stats, isLoading, isError } = useCorpusStats();
 
   useEffect(() => {
     const onScroll = () => {
@@ -317,22 +280,39 @@ export default function LandingPage() {
           </GlassCard>
         </motion.div>
 
-        {/* ─── Trust / stats bar ─── */}
+        {/* ─── Trust / stats bar (real DB numbers) ─── */}
         <motion.section
           {...reveal}
           transition={{ duration: 0.5, delay: 0.1 }}
           className="mx-auto mt-16 grid max-w-4xl grid-cols-2 gap-4 lg:grid-cols-4"
-          aria-label="Trust statistics"
+          aria-label="Live corpus statistics"
         >
-          {STATS_LIST.map((stat) => (
-            <StatCard
-              key={stat.label}
-              value={stat.value}
-              suffix={stat.suffix}
-              label={stat.label}
-              decimals={stat.decimals}
-            />
-          ))}
+          {isLoading ? (
+            <>
+              {[0, 1, 2, 3].map((index) => (
+                <GlassCard key={index} className="p-5 text-center">
+                  <div className="mx-auto h-8 w-16 animate-pulse rounded-md bg-surface-hover" />
+                  <div className="mx-auto mt-3 h-3 w-20 animate-pulse rounded bg-surface-hover" />
+                </GlassCard>
+              ))}
+            </>
+          ) : isError || !stats ? (
+            <GlassCard className="col-span-full p-5 text-center text-sm text-muted">
+              Live corpus stats temporarily unavailable.
+            </GlassCard>
+          ) : (
+            <>
+              <StatCard value={stats?.sources ?? 0} suffix="+" label="official sources" />
+              <StatCard value={stats?.chunks ?? 0} suffix="+" label="indexed chunks" />
+              <StatCard
+                value={stats?.germanChunkPercent ?? 0}
+                suffix="%"
+                label="German-language chunks"
+                decimals={1}
+              />
+              <StatCard value={3} suffix="" label="agent pipeline" />
+            </>
+          )}
         </motion.section>
 
         {/* ─── Live chat demo ─── */}
@@ -355,8 +335,8 @@ export default function LandingPage() {
             </p>
             <ul className="mt-6 space-y-2 text-sm text-muted">
               {[
-                "Hybrid retrieval across 50+ official sources",
-                "Confidence-gated live web fallback (CRAG)",
+                `Hybrid retrieval across ${stats ? `${stats.sources}+` : "115+"} official sources`,
+                "Bilingual query expansion (English + German)",
                 "Sources with relevance scores on every answer",
               ].map((point) => (
                 <li key={point} className="flex items-center gap-2">
@@ -438,40 +418,44 @@ export default function LandingPage() {
           </div>
         </motion.section>
 
-        {/* ─── Testimonials ─── */}
-        <motion.section {...reveal} transition={{ duration: 0.5 }} className="mt-24">
-          <h2 className="text-2xl font-semibold sm:text-3xl">Trusted by applicants</h2>
+        {/* ─── The corpus (real sources, no invented claims) ─── */}
+        <motion.section
+          {...reveal}
+          transition={{ duration: 0.5 }}
+          id="corpus"
+          className="mt-24 scroll-mt-24"
+        >
+          <h2 className="text-2xl font-semibold sm:text-3xl">Built on a real legal corpus</h2>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
-            Students planning their German move use Behörden-Bot to cut through the noise.
+            Every answer is grounded in indexed official documents — federal laws, BAMF brochures,
+            and Goethe/telc/TestDaF exam handbooks. These are the largest documents in the knowledge
+            base right now:
           </p>
-          <div className="mt-10 grid gap-4 text-left md:grid-cols-3">
-            {TESTIMONIALS.map((testimonial) => (
-              <GlassCard
-                key={testimonial.name}
-                className="flex h-full flex-col p-6 transition hover:-translate-y-0.5 hover:shadow-glass"
-              >
-                <div className="flex gap-0.5 text-warning" aria-label="5 out of 5 stars">
-                  {Array.from({ length: 5 }).map((_, index) => (
-                    <span key={index} aria-hidden="true">
-                      ★
-                    </span>
-                  ))}
-                </div>
-                <p className="mt-3 flex-1 text-sm leading-relaxed text-muted">
-                  “{testimonial.quote}”
-                </p>
-                <div className="mt-4 flex items-center gap-2">
-                  <span className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                    {testimonial.name.charAt(0)}
+          <div className="mt-10 grid gap-4 text-left sm:grid-cols-2 lg:grid-cols-3">
+            {(stats?.topSources ?? []).map((source, index) => (
+              <GlassCard key={source.title} className="p-5">
+                <div className="flex items-start gap-3">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
+                    {index + 1}
                   </span>
-                  <div>
-                    <p className="text-sm font-medium">{testimonial.name}</p>
-                    <p className="text-xs text-muted">{testimonial.role}</p>
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-medium" title={source.title}>
+                      {source.title}
+                    </h3>
+                    <p className="mt-1 text-xs text-muted">
+                      {source.chunkCount.toLocaleString()} indexed chunks
+                    </p>
                   </div>
                 </div>
               </GlassCard>
             ))}
           </div>
+          {!isLoading && (stats?.sources ?? 0) > 0 && (
+            <p className="mt-6 text-xs text-muted">
+              {stats?.sources} sources · {stats?.parentChunks?.toLocaleString()} parent sections ·
+              {stats?.chunks?.toLocaleString()} chunks · indexed as 1024-dim bge-m3 vectors.
+            </p>
+          )}
         </motion.section>
 
         {/* ─── Supported topics ─── */}
@@ -490,42 +474,6 @@ export default function LandingPage() {
               >
                 {topic}
               </a>
-            ))}
-          </div>
-        </motion.section>
-
-        {/* ─── Resources ─── */}
-        <motion.section
-          {...reveal}
-          transition={{ duration: 0.5 }}
-          id="resources"
-          className="mt-24 scroll-mt-24"
-        >
-          <h2 className="text-2xl font-semibold sm:text-3xl">Guides, resources & timelines</h2>
-          <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
-            In-depth editorial content for every stage of the journey — from your first APS
-            appointment to your first semester.
-          </p>
-
-          <div className="mt-10 grid gap-4 text-left sm:grid-cols-2">
-            {CONTENT_SECTIONS.map((section) => (
-              <GlassCard
-                key={section.eyebrow}
-                className="flex flex-col p-6 transition hover:-translate-y-0.5 hover:shadow-glass"
-              >
-                <p className="text-xs font-semibold uppercase tracking-wider text-accent">
-                  {section.eyebrow}
-                </p>
-                <h3 className="mt-2 font-semibold">{section.title}</h3>
-                <p className="mt-2 flex-1 text-sm text-muted">{section.body}</p>
-                <Link
-                  href="/login"
-                  className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary transition hover:text-primary-hover"
-                >
-                  {section.cta}
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              </GlassCard>
             ))}
           </div>
         </motion.section>

@@ -21,15 +21,20 @@ export function ChatMockup() {
       className="overflow-hidden rounded-2xl border border-glass-border bg-glass shadow-glass backdrop-blur"
       aria-hidden="true"
     >
+      {" "}
       <div className="flex items-center justify-between border-b border-glass-border px-4 py-3">
         <div className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-destructive/70" />
           <span className="h-2.5 w-2.5 rounded-full bg-warning/70" />
           <span className="h-2.5 w-2.5 rounded-full bg-success/70" />
         </div>
-        <span className="text-xs text-muted">Behörden-Bot</span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-md border border-glass-border px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-muted">
+            Sample
+          </span>
+          <span className="text-xs text-muted">Behörden-Bot</span>
+        </div>
       </div>
-
       <div className="flex flex-col gap-3 px-4 py-5">
         <motion.div
           initial={reduceMotion ? false : { opacity: 0, y: 8 }}
@@ -56,8 +61,8 @@ export function ChatMockup() {
               completed application form.
             </p>
             <div className="mt-2.5 flex flex-wrap gap-1.5">
-              <MockSource name="German Missions in India" />
-              <MockSource name="Make it in Germany" />
+              <MockSource name="[Visa] Auswärtiges Amt – Visa Service (EN)" />
+              <MockSource name="[Visa] Make it in Germany – Visa & Residence Overview (EN)" />
             </div>
             <div className="mt-2 flex items-center gap-1 text-[10px] text-muted">
               <Check className="h-3 w-3 text-success" />
