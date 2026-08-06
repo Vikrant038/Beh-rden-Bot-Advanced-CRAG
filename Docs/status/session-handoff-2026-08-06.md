@@ -32,6 +32,12 @@ Branch `web-app`. **Pushed and in sync with `origin/web-app`** after this sessio
   keeps the newest 5 rows, `deleteMany` the rest (best-effort, failure swallowed).
 - RUNNING rows are never deleted while the tester UI may still be polling them.
 - Unit tests: newest-5 keep/delete contract + prune-failure-is-swallowed.
+- Rebase note: the pushed branch now sits on top of `6738871` (pipeline tester
+  pre/post-processing, per-agent costs, **closed accordions**). The remote's
+  closed-by-default StageNode design won over this session's open-by-default
+  accordions; the non-conflicting responsive wins (action-label truncation,
+  touch-sized chevron) were kept. A new `pipeline-visualizer` test suite covers
+  the remote-added pre/post-processing + telemetry branches.
 
 ### 4. Coverage gate closure (85 % everywhere)
 - `vitest.config.mts` raised thresholds to 85 % (statements/branches/functions/lines)
@@ -40,7 +46,7 @@ Branch `web-app`. **Pushed and in sync with `origin/web-app`** after this sessio
   denominator dropped branches below the gate; closed it with new unit tests:
   `src/app/page.test.tsx` (page.tsx now 100 %), `src/app/login/login-content.test.tsx`,
   `src/components/ui/theme-toggle.test.tsx`.
-- Final: **592 tests, 92.5 % stmts / 85.0 % branch / 89.4 % funcs / 92.6 % lines** — gate green.
+- Final (post-rebase): **596 tests, 92.8 % stmts / 85.1 % branch / 89.7 % funcs / 92.9 % lines** — gate green.
 
 ### 5. Responsive mobile UI upgrade (committed as `41457f6`)
 - 44 px touch targets, safe-area insets, `overflow-x: clip`, no tap-highlight,
@@ -63,8 +69,8 @@ Branch `web-app`. **Pushed and in sync with `origin/web-app`** after this sessio
 |-------|--------|
 | `pnpm typecheck` | ✅ |
 | `pnpm lint` | ✅ |
-| `pnpm test` (vitest) | ✅ 592 tests |
-| `vitest run --coverage` | ✅ 85 % thresholds (92.5/85.0/89.4/92.6) |
+| `pnpm test` (vitest) | ✅ 596 tests |
+| `vitest run --coverage` | ✅ 85 % thresholds (92.8/85.1/89.7/92.9) |
 | e2e `landing.spec.ts` | ✅ 5/5 |
 | `bash -n scripts/seed-corpus.sh` | ✅ |
 
