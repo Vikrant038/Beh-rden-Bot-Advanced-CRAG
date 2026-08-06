@@ -63,14 +63,49 @@ Branch `web-app`. **Pushed and in sync with `origin/web-app`** after this sessio
 
 ---
 
+## Follow-up session (same day) — fixes from live QA
+
+### 7. Pipeline trace rows: whole-row tap + chevron pinned far-right
+- `StageNode` header is now a single `<button>` when a body exists — tapping
+  anywhere on the row (title, duration, tick, chevron) toggles open/close.
+  The chevron + status tick are both `shrink-0` and sit pinned far-right next
+  to each other (no more two-`ml-auto` fight that misaligned rows on phones).
+  Stage titles truncate with `min-w-0 flex-1`. Keyboard accessible
+  (`aria-expanded` + `aria-controls`). Matches checklist item #102.
+
+### 8. Dense search 14 812 ms — root cause is the embed round-trip, not pgvector
+- Measured locally: pgvector query = **117 ms** (seq scan, 23 934 rows, HNSW index
+  present); local bge-m3 embed batch = **0.13 s**. The 14.8 s "Dense Search" stage is
+  the **Cloudflare worker cold start** (`@cf/baai/bge-m3` model load, 10–20 s) — a
+  remote embed round-trip, not the database.
+- **Fix 1 (biggest):** `runAgenticRag` no longer embeds the query when
+  `bypassCache: true` (the admin tester's default) — the vector was only needed for
+  cache lookup/write, so every glass-box run previously paid a wasted cold embed.
+- **Fix 2:** `HfEmbeddingClient` gained a bounded in-memory batch cache
+  (exact-text key, 1 h TTL, ≤2048 entries, ≤16 texts/batch) — repeated queries and
+  expanded sub-queries are instant Map hits.
+- **Fix 3:** the embeddings worker now self-warms via a 5-minute cron
+  (`[triggers] crons = ["*/5 * * * *"]`) so real queries hit a warm model.
+- Tests: embed cache hit/miss contract + orchestrator bypass-embed skip.
+
+### 9. Responsive checklist verified against source (67/67 sampled)
+- Added `web-app/scripts/verify-responsive-checklist.sh` — greps each checklist
+  claim's distinctive token in its cited file (all four phases, 67 checks).
+  **All pass.** Two drift corrections: item #47's follow-up chips live in
+  `chat-interface.tsx` (not `chat-input.tsx`), and item #102's whole-row toggle
+  is real again after this session's StageNode fix.
+
+---
+
 ## Validation (all green)
 
 | Check | Result |
 |-------|--------|
 | `pnpm typecheck` | ✅ |
 | `pnpm lint` | ✅ |
-| `pnpm test` (vitest) | ✅ 596 tests |
-| `vitest run --coverage` | ✅ 85 % thresholds (92.8/85.1/89.7/92.9) |
+| `pnpm test` (vitest) | ✅ 599 tests |
+| `vitest run --coverage` | ✅ 85 % thresholds (92.6/85.03/89.77/92.67) |
+| `scripts/verify-responsive-checklist.sh` | ✅ 67/67 |
 | e2e `landing.spec.ts` | ✅ 5/5 |
 | `bash -n scripts/seed-corpus.sh` | ✅ |
 
@@ -85,5 +120,8 @@ Branch `web-app`. **Pushed and in sync with `origin/web-app`** after this sessio
    `web-app/docs/security/semgrep-backlog.md`.
 3. **Resumable ingest queue** — enqueue+202 ships; per-batch resume + mid-job budget
    check is the documented next step (no new infra).
-4. **Embeddings worker cold starts** — remaining dense latency is dominated by the
-   Cloudflare worker cold start (~10–20 s first call). Not addressed this session.
+4. **Embeddings worker cold starts** — addressed this session: the worker now
+   self-warms via a 5-minute cron and repeated texts hit an in-memory embed
+   cache; the tester's bypass-cache path skips the embed entirely. Deploy the
+   updated worker (`npx wrangler deploy` in `embeddings-worker/`) to get the
+   keep-warm cron live.

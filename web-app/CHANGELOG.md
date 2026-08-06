@@ -6,6 +6,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning:
 
 ## [Unreleased]
 
+### Changed
+
+- **Pipeline trace stages are now fully tappable:** the entire StageNode header
+  row toggles open/close (not just the chevron), the chevron is pinned to the
+  far-right beside the status tick (both `shrink-0`, so they never fight for
+  space), and long stage titles truncate instead of wrapping — fixing the
+  misaligned rows on narrow phone screens. Keyboard accessible with
+  `aria-expanded` + `aria-controls`.
+
+- **Dense-search latency:** the agentic orchestrator no longer embeds the query
+  when the semantic cache is bypassed (the admin pipeline tester's default) —
+  the vector was only needed for the cache lookup/write, so every glass-box run
+  previously paid a full embedding round-trip for nothing. On a cold Cloudflare
+  Worker that was a 10–20s model load showing up as the "Dense Search
+  (pgvector)" stage. The HfEmbeddingClient also gained a bounded in-memory
+  batch cache (exact-text key, 1h TTL, ≤2048 entries) so repeated queries and
+  expanded sub-queries are instant Map hits, and the embeddings worker now
+  self-warms the bge-m3 model via a 5-minute cron so the first real query
+  doesn't pay the cold start.
+
 ### Added
 
 - **Session-aware landing-page CTAs:** the landing page now checks the session
