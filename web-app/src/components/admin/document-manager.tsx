@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  LayoutGrid,
-  List,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -165,7 +163,11 @@ function DocumentPreviewModal({
               ? [items[chunkNavigator.index]]
               : items
             ).map((chunk) => (
-              <div key={chunk.id} id={`modal-chunk-${chunk.id}`} className="rounded-xl border border-border bg-background p-3">
+              <div
+                key={chunk.id}
+                id={`modal-chunk-${chunk.id}`}
+                className="rounded-xl border border-border bg-background p-3"
+              >
                 <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed">
                   {chunk.text}
                 </p>
@@ -186,7 +188,9 @@ function DocumentPreviewModal({
                   const nextIndex = chunkNavigator.index - 1;
                   chunkNavigator.clamp(nextIndex);
                   if (chunkViewMode === "list" && items[Math.max(0, nextIndex)]) {
-                    const el = window.document.getElementById(`modal-chunk-${items[Math.max(0, nextIndex)].id}`);
+                    const el = window.document.getElementById(
+                      `modal-chunk-${items[Math.max(0, nextIndex)].id}`,
+                    );
                     el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
                   }
                 }}
@@ -202,7 +206,9 @@ function DocumentPreviewModal({
                   const nextIndex = chunkNavigator.index + 1;
                   chunkNavigator.clamp(nextIndex);
                   if (chunkViewMode === "list" && items[Math.min(items.length - 1, nextIndex)]) {
-                    const el = window.document.getElementById(`modal-chunk-${items[Math.min(items.length - 1, nextIndex)].id}`);
+                    const el = window.document.getElementById(
+                      `modal-chunk-${items[Math.min(items.length - 1, nextIndex)].id}`,
+                    );
                     el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
                   }
                 }}

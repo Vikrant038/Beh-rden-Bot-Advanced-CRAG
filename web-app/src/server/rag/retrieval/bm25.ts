@@ -18,8 +18,11 @@ export function defaultTokenizer(text: string): string[] {
 /**
  * Okapi BM25 sparse ranker, ported from `rank_bm25.BM25Okapi`
  * (used by `src/advanced_retrieval.py`). Stateless index built over a
- * chunk corpus; Re-built per request for small corpora; term-frequency maps are
- * pre-computed at construction time for O(query_length) per-document scoring.
+ * chunk corpus; the index is memoized per corpus instance by the hybrid
+ * retriever (WeakMap keyed on the cached corpus array), so it is built once
+ * per corpus lifetime rather than per request. Term-frequency maps are
+ * pre-computed at construction time for O(query_length) per-document scoring;
+ * the average-IDF baseline is memoized too (see `averageIdfCache`).
  */
 export class BM25Okapi {
   private readonly docFrequencies = new Map<string, number>();
@@ -27,6 +30,7 @@ export class BM25Okapi {
   private readonly avgDocLength: number;
   private readonly idfCache = new Map<string, number>();
   private readonly termFrequencies: Map<string, number>[];
+  private averageIdfCache: number | null = null;
 
   constructor(
     private readonly documents: string[][],
@@ -71,15 +75,26 @@ export class BM25Okapi {
     return idf;
   }
 
+  /**
+   * Mean IDF across the vocabulary, computed once on first use. Scoring a
+   * corpus calls this once per document, so computing it inline made scoring
+   * O(documents × vocabulary) — 23.9k docs × 26k terms × 5 sub-queries was
+   * ~3.1B iterations (147s of a 388s trace).
+   */
   private getAverageIdf(): number {
+    if (this.averageIdfCache !== null) {
+      return this.averageIdfCache;
+    }
     if (this.docFrequencies.size === 0) {
+      this.averageIdfCache = 0;
       return 0;
     }
     let sum = 0;
     for (const term of this.docFrequencies.keys()) {
       sum += this.getIdf(term);
     }
-    return sum / this.docFrequencies.size;
+    this.averageIdfCache = sum / this.docFrequencies.size;
+    return this.averageIdfCache;
   }
 
   getScore(query: string[], docIndex: number): number {
@@ -88,7 +103,6 @@ export class BM25Okapi {
     }
     const docLength = this.docLengths[docIndex];
     const tfMap = this.termFrequencies[docIndex];
-    const averageIdf = this.getAverageIdf();
 
     let score = 0;
     for (const term of query) {
@@ -103,7 +117,7 @@ export class BM25Okapi {
     }
 
     if (score === 0 && query.length > 0) {
-      score = this.epsilon * averageIdf;
+      score = this.epsilon * this.getAverageIdf();
     }
     return score;
   }

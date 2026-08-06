@@ -50,6 +50,9 @@ export class HfReranker implements Reranker {
           inputs: pairs,
           options: { wait_for_model: true },
         }),
+        // `wait_for_model` makes the provider hold the socket open through a
+        // cold start; on timeout the catch below degrades to fallbackRerank.
+        signal: AbortSignal.timeout(15_000),
       });
 
       if (!response.ok) {

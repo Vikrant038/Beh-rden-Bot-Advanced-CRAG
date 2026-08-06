@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowDown, BookOpen, Copy, MessageCircle, Plus, Trash2, Zap } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { useChat, STREAMING_ID } from "@/hooks/use-chat";
-import type { ChatMode, PipelineStage } from "@/lib/chat/types";
+import type { ChatMode } from "@/lib/chat/types";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import { PipelineStatus } from "@/components/chat/pipeline-status";
 import { ChatInput } from "@/components/chat/chat-input";
@@ -49,25 +49,6 @@ const DEFAULT_FOLLOW_UPS = [
   "What are the next steps after getting admission?",
   "How do I get health insurance for Germany?",
 ];
-
-const PIPELINE_STAGES: PipelineStage[] = [
-  "guardrail",
-  "retrieving",
-  "research",
-  "analyst",
-  "writer",
-];
-
-function pipelineProgress(status: PipelineStage): number {
-  if (status === "done") {
-    return 100;
-  }
-  const index = PIPELINE_STAGES.indexOf(status);
-  if (index < 0) {
-    return 0;
-  }
-  return ((index + 1) / PIPELINE_STAGES.length) * 100;
-}
 
 function dayLabel(iso: string): string {
   const date = new Date(iso);
@@ -216,7 +197,6 @@ export function ChatInterface({
   const lastUserContent =
     [...messages].reverse().find((message) => message.role === "USER")?.content ?? "";
   const followUps = lastAssistant && !isStreaming ? followUpsFor(lastUserContent) : [];
-  const progress = pipelineProgress(status);
 
   const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -474,7 +454,6 @@ export function ChatInterface({
           onSubmit={(query) => void sendMessage(query, mode)}
           onStop={stop}
           isStreaming={isStreaming}
-          progress={progress}
           mode={mode}
           onModeChange={setMode}
           suggestions={QUICK_PROMPTS}

@@ -92,3 +92,71 @@ already short-circuits whole answers) and is optional infra, not code.
 - Cross-lingual semantic-cache hits stay rare (≥0.97 threshold is tight across languages) — harmless.
 - If latency still matters after this, the next lever is the **LLM call chain** (parallel
   Analyst/Writer, skip disambiguation for specific queries, or true token streaming), not embeddings.
+
+## 7. Addendum — BM25 O(vocab) scoring fix (2026-08-06)
+
+> **Status:** Implemented and verified. Full suite **414/414 pass**, `typecheck`, `format:check`,
+> `lint` clean. Bench marked at production scale against the live corpus.
+> **Touches:** `src/server/rag/retrieval/bm25.ts` + dead-code cleanup in `chat-input.tsx`,
+> `chat-interface.tsx`, `document-manager.tsx`, `hybrid.ts`; bounded HF timeouts in
+> `embeddings/client.ts`, `llm/client.ts`, `reranker.ts`; `after()` promise return in
+> `routers/admin.ts`. Bench scripts: `scratch/corpus-stats.mts`, `scratch/bm25-bench.mts`.
+
+### 7.1 The bug (measured)
+
+A real production trace showed **Sparse Search (BM25) at 147,757 ms** for the 5 bilingual
+sub-queries — 38% of a 388 s run. Root cause: `BM25Okapi.getScore()` called
+`getAverageIdf()` on **every document**, and that helper re-walked the **entire vocabulary**
+(26,158 distinct terms) each call. With 23,934 chunks × 5 sub-queries:
+
+```
+23,934 docs × 26,158 terms × 5 sub-queries ≈ 3.1B iterations
+```
+
+The average-IDF value is only used for the `epsilon` baseline (default `0`), so it was pure
+waste on every score computation. Everything else in the retrieve path — dense pgvector,
+RRF, cross-encoder — was already fast; this single O(docs × vocab) hotspot dominated.
+
+### 7.2 The fix
+
+`getAverageIdf()` is now **memoized** — computed lazily on first use and cached in
+`averageIdfCache`, instead of re-walking the vocabulary on every scored document. Per-document
+scoring drops from O(vocabulary) to O(query_length). The BM25 index itself is unchanged — the
+WeakMap-per-corpus caching and the 60 s corpus TTL already ensured the index is built once per
+corpus lifetime.
+
+### 7.3 Measured result (production corpus, real Postgres)
+
+`scratch/bm25-bench.mts` loads all 23,934 chunks, builds the index, and runs the exact 5
+sub-queries from the APS trace:
+
+| Step | Before | After |
+|---|---|---|
+| Index build (23,934 docs) | — | **73 ms** |
+| 5 sub-query sparse search | **147,757 ms** | **32 ms** |
+
+~**4,600×** faster. Sparse is no longer the pipeline bottleneck; the dominant remaining cost is
+the sequential LLM call chain (see §6).
+
+### 7.4 Related hardening shipped with this batch
+
+- **Bounded HF timeouts** — `embeddings/client.ts`, `llm/client.ts`, `reranker.ts` now race each
+  `fetch` against `AbortSignal.timeout(...)` (20 s / 20 s / 15 s; LLM combines the caller's
+  signal via `AbortSignal.any`). `wait_for_model` holds the socket open through cold starts,
+  so without a deadline a stalled provider blocked the whole pipeline.
+- **`after()` promise returned** — `routers/admin.ts` now returns the `executePipelineTest`
+  promise from `after()`, so Next.js hands it to the platform `waitUntil` and keeps the
+  invocation alive (a floating `void` left rows stuck in `RUNNING`).
+- **SSE chat route `maxDuration` 60 → 300** — matches the tRPC route (Vercel Hobby ceiling).
+  With BM25 fixed, retrieval is ~100 ms, but a cold embeddings-worker start (each embed call
+  bounded at 20 s) can still push a run past 60 s; at 60 s the platform killed the stream
+  mid-flight, which is the "nothing prints in chat" symptom on Vercel.
+- **Dead-code cleanup** — removed unused `progress` prop chain (`chat-input.tsx` /
+  `chat-interface.tsx`) and unused `LayoutGrid`/`List`/`HybridRetrievalResult` imports that the
+  production build flagged.
+
+> **Next hotspot (if latency still matters):** embedding round-trips to the Cloudflare worker
+> during cold starts — `hybrid_retrieval` spent ~200 s embedding in the original trace. The new
+> 20 s timeout bounds each call and the agentic tool wrapper degrades to web search on failure,
+> but a warm-worker/cached-model strategy (or lowering `wait_for_model` reliance) would cut that
+> further. See §6.

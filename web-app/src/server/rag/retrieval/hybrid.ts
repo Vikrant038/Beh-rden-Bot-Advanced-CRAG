@@ -1,4 +1,4 @@
-import type { Chunk, HybridRetrievalResult, HybridRetrievalResultWithTelemetry } from "@/server/rag/types";
+import type { Chunk, HybridRetrievalResultWithTelemetry } from "@/server/rag/types";
 import {
   CRAG_THRESHOLD,
   DEFAULT_MIN_SIMILARITY,

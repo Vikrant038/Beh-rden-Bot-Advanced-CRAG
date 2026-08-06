@@ -24,7 +24,6 @@ interface ChatInputProps {
   onStop: () => void;
   isStreaming: boolean;
   disabled?: boolean;
-  progress?: number;
   mode?: ChatMode;
   onModeChange?: (mode: ChatMode) => void;
   suggestions?: string[];
@@ -42,7 +41,6 @@ export function ChatInput({
   onStop,
   isStreaming,
   disabled,
-  progress = 0,
   mode = "agentic",
   onModeChange,
   suggestions = [],

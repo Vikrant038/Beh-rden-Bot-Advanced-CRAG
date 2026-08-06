@@ -46,6 +46,9 @@ export class HfEmbeddingClient implements EmbeddingClient {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ inputs: texts, options: { wait_for_model: true } }),
+        // `wait_for_model` makes the provider hold the socket open through a
+        // cold start, so without a deadline this await is unbounded.
+        signal: AbortSignal.timeout(20_000),
       });
     } catch (error) {
       logger.warn({ error: String(error) }, "[EMBED] HF API fetch failed");

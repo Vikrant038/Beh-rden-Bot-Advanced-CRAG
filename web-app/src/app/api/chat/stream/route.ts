@@ -16,8 +16,11 @@ export const runtime = "nodejs";
 // The agentic pipeline makes 3–5 sequential LLM calls and can run well past
 // the platform default; without an explicit ceiling the function is killed
 // mid-stream and the client sees a truncated SSE connection instead of a
-// graceful error event. 60s matches the tRPC route (Hobby max).
-export const maxDuration = 60;
+// graceful error event. Set to the Vercel Hobby ceiling (300s) to match the
+// tRPC route — with the BM25 fix the retrieval stages are ~100ms, but a cold
+// embeddings-worker start (bounded at 20s per call) can still push the run
+// past 60s.
+export const maxDuration = 300;
 
 const streamRequestSchema = z.object({
   conversationId: z.string().min(1),

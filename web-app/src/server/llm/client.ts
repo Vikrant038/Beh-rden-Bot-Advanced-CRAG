@@ -101,6 +101,11 @@ async function callHfRaw(
     parameters: { max_new_tokens: maxTokens, temperature },
   };
 
+  // Bound the request: without a deadline a stalled provider blocks the whole
+  // pipeline. Combined with the caller's signal so cancellation still wins.
+  const timeoutSignal = AbortSignal.timeout(20_000);
+  const effectiveSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+
   const response = await fetch(`${env.HF_LLM_URL}/models/${encodeURIComponent(model)}`, {
     method: "POST",
     headers: {
@@ -108,7 +113,7 @@ async function callHfRaw(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
-    signal,
+    signal: effectiveSignal,
   });
 
   if (!response.ok) {

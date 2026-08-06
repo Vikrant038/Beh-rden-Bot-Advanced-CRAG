@@ -583,9 +583,12 @@ export const adminRouter = router({
       let scheduled = false;
       try {
         // Runs after the response is flushed so the request returns in ~100ms.
-        after(() => {
-          void executePipelineTest(run.id, input);
-        });
+        // The promise MUST be returned: Next.js hands it to the platform's
+        // `waitUntil`, which is what keeps the invocation alive. A floating
+        // `void executePipelineTest(...)` returns undefined, so the platform
+        // sees no pending work and may freeze the container mid-run — leaving
+        // the row stuck in RUNNING forever.
+        after(() => executePipelineTest(run.id, input));
         scheduled = true;
       } catch {
         // Not inside a Next.js request scope (unit tests / non-Next runtime):
