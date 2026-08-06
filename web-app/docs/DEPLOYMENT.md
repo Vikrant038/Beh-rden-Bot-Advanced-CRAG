@@ -119,6 +119,12 @@ NEON_DATABASE_URL="postgresql://behoerden_app:...@ep-xxx-pooler.eu-central-1.aws
 - Handles the `document_chunks.id` + `document_parent_chunks.id` sequences: `pg_dump
   --data-only` emits `setval` calls, and `--include-cache` bumps `semantic_cache_id_seq`
   after loading.
+- **Recreates the FTS GIN index** (`document_chunks_text_fts_idx`, migration
+  `20260806000001`) on the target as step 5/6: the dump is data-only, so a fresh seed
+  needs the index re-created for the Postgres sparse-search path
+  (`vectorQueries.sparseSearch`) to work. Guarded with a `pg_indexes` check inside a
+  `DO` block — plain `CREATE INDEX IF NOT EXISTS` would error when the target role is
+  not the table owner, even when the index already exists.
 - Safety gates: aborts if the target already has corpus rows unless `--replace` is given;
   connection strings are redacted from all output; counts are verified local → target and
   a mismatch fails the run.

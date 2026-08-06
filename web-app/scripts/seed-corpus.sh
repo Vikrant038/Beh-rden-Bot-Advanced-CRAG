@@ -65,7 +65,7 @@ dump_table() { # $1 = table name; appends a data-only dump to $DUMP
 DUMP="$(mktemp /tmp/corpus-dump.XXXXXX.sql)"
 trap 'rm -f "$DUMP"' EXIT
 
-echo "=== 1/5 dumping corpus from local docker Postgres (${LOCAL_USER}@${LOCAL_DB}) ==="
+echo "=== 1/6 dumping corpus from local docker Postgres (${LOCAL_USER}@${LOCAL_DB}) ==="
 # Three pg_dump invocations in FK dependency order: documents → parents → children.
 : > "$DUMP"
 dump_table "documents"
@@ -80,7 +80,7 @@ if ! grep -q '^COPY ' "$DUMP"; then
 fi
 echo "dumped $(grep -c '^COPY ' "$DUMP") table(s)"
 
-echo "=== 2/5 checking target schema ==="
+echo "=== 2/6 checking target schema ==="
 if ! psql_target -t -A -c "SELECT to_regclass('public.documents') IS NOT NULL;" | grep -q 't'; then
   echo "ERROR: target has no 'documents' table — run 'prisma migrate deploy' against the target first" >&2
   exit 1
@@ -98,21 +98,43 @@ if [[ "$TARGET_DOCS" != "0" ]] && [[ "$REPLACE" != "1" ]]; then
 fi
 
 if [[ "$REPLACE" == "1" ]] && [[ "$TARGET_DOCS" != "0" ]]; then
-  echo "=== 3/5 wiping target corpus tables (DELETE, children → parents → documents) ==="
+  echo "=== 3/6 wiping target corpus tables (DELETE, children → parents → documents) ==="
   psql_target -c "DELETE FROM document_chunks; DELETE FROM document_parent_chunks; DELETE FROM documents;"
   if [[ "$INCLUDE_CACHE" == "1" ]]; then
     psql_target -c "DELETE FROM semantic_cache;"
   fi
 fi
 
-echo "=== 4/5 loading dump into target ==="
+echo "=== 4/6 loading dump into target ==="
 docker exec -i "$CID" psql "$NEON_DATABASE_URL" -v ON_ERROR_STOP=1 < "$DUMP" 2> >(redact >&2)
 if [[ "$INCLUDE_CACHE" == "1" ]]; then
   # semantic_cache.id is an Int autoincrement; bump the sequence past restored rows.
   psql_target -c "SELECT setval('semantic_cache_id_seq', (SELECT COALESCE(max(id), 1) FROM semantic_cache));" > /dev/null
 fi
 
-echo "=== 5/5 verifying counts (local → target) ==="
+echo "=== 5/6 ensuring Postgres FTS GIN index on target ==="
+# Sparse retrieval runs inside Postgres (vectorQueries.sparseSearch) via the
+# document_chunks_text_fts_idx GIN index from migration 20260806000001. The dump
+# above is data-only, so the index must exist on the target for the FTS path to
+# work after a fresh seed. Guard with pg_indexes inside a DO block instead of
+# plain CREATE INDEX IF NOT EXISTS — Postgres checks table ownership *before*
+# the existence short-circuit, which errors when the target role is not the
+# table owner even though the index is already there.
+psql_target -c "DO \$\$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_indexes
+    WHERE schemaname = 'public' AND tablename = 'document_chunks'
+      AND indexname = 'document_chunks_text_fts_idx'
+  ) THEN
+    CREATE INDEX document_chunks_text_fts_idx
+      ON document_chunks USING GIN (to_tsvector('simple', text));
+  END IF;
+END
+\$\$" > /dev/null
+echo "document_chunks_text_fts_idx present (FTS sparse path intact)"
+
+echo "=== 6/6 verifying counts (local → target) ==="
 ok=1
 for t in documents document_parent_chunks document_chunks semantic_cache; do
   [[ "$INCLUDE_CACHE" != "1" && "$t" == "semantic_cache" ]] && continue
