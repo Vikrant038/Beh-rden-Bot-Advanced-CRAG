@@ -20,14 +20,8 @@ describe("QueryExpander (bilingual, deterministic 2+2)", () => {
 
   it("returns the original query plus exactly 2 EN and 2 DE alternatives", async () => {
     mockedCallLLMJson.mockResolvedValue({
-      english: [
-        "What is the blocked account amount?",
-        "student visa fees",
-      ],
-      german: [
-        "Sperrkonto Anforderungen für Studenten",
-        "Visumgebühren für Studierende",
-      ],
+      english: ["What is the blocked account amount?", "student visa fees"],
+      german: ["Sperrkonto Anforderungen für Studenten", "Visumgebühren für Studierende"],
     });
     const result = await generateSubQueries("blocked account for German student visa", 5);
     expect(result).toHaveLength(5);
@@ -62,7 +56,11 @@ describe("QueryExpander (bilingual, deterministic 2+2)", () => {
       german: ["gültige deutsche alternative"],
     });
     const result = await generateSubQueries("short query", 5);
-    expect(result).toEqual(["short query", "valid english alternative", "gültige deutsche alternative"]);
+    expect(result).toEqual([
+      "short query",
+      "valid english alternative",
+      "gültige deutsche alternative",
+    ]);
   });
 
   it("keeps sub-queries within the character budget", async () => {

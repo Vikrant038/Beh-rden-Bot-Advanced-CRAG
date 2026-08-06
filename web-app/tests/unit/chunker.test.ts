@@ -97,7 +97,9 @@ describe("chunkParentChild", () => {
     const blocks = chunkParentChild(LONG_DOC);
     expect(blocks.length).toBeGreaterThan(1);
     for (const block of blocks) {
-      expect(block.parent.text.length).toBeLessThanOrEqual(PARENT_CHUNK_SIZE + PARENT_CHUNK_OVERLAP);
+      expect(block.parent.text.length).toBeLessThanOrEqual(
+        PARENT_CHUNK_SIZE + PARENT_CHUNK_OVERLAP,
+      );
     }
   });
 

@@ -85,10 +85,7 @@ describe("LlmUsageCollector", () => {
 describe("estimateLlmCostUsd", () => {
   it("prices groq llama-3.1-8b-instant at $0.05/M in and $0.08/M out", () => {
     // 1000 prompt tokens * 0.05/1M + 1000 completion * 0.08/1M
-    expect(estimateLlmCostUsd("groq", "llama-3.1-8b-instant", 1000, 1000)).toBeCloseTo(
-      0.00013,
-      10,
-    );
+    expect(estimateLlmCostUsd("groq", "llama-3.1-8b-instant", 1000, 1000)).toBeCloseTo(0.00013, 10);
   });
 
   it("uses the default groq price for unknown models", () => {
@@ -107,9 +104,7 @@ describe("estimateLlmCostUsd", () => {
 
 describe("estimateTokensFromText", () => {
   it("estimates ~4 chars per token with a minimum of 1", () => {
-    expect(estimateTokensFromText("hello world this is a test")).toBe(
-      Math.ceil(27 / 4),
-    );
+    expect(estimateTokensFromText("hello world this is a test")).toBe(Math.ceil(27 / 4));
     expect(estimateTokensFromText("")).toBe(1);
   });
 });

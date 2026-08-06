@@ -13,11 +13,12 @@ export default defineConfig({
     },
     coverage: {
       provider: "v8",
-      reporter: ["text", "html"],
+      reporter: ["text", "html", "json-summary"],
       thresholds: {
-        lines: 80,
-        functions: 80,
-        statements: 80,
+        lines: 85,
+        functions: 85,
+        statements: 85,
+        branches: 85,
       },
     },
     // M4: React component tests (.tsx) need a DOM; split into a dedicated

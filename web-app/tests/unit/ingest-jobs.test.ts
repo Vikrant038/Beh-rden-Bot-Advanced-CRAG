@@ -276,7 +276,7 @@ describe("processIngestJobs (cron worker)", () => {
       resumeFrom: 5,
       isBudgetExhausted: expect.any(Function),
     });
-    
+
     expect(prismaMock.ingestJob.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "job-progress" },
@@ -353,9 +353,7 @@ describe("drainPendingJobs (Hobby on-demand drain)", () => {
     prismaMock.document.updateMany.mockResolvedValue({ count: 1 });
     prismaMock.ingestJob.deleteMany.mockResolvedValue({ count: 0 });
     // First count = pending check (1), second = remaining after the tick (0).
-    prismaMock.ingestJob.count
-      .mockResolvedValueOnce(1)
-      .mockResolvedValueOnce(0);
+    prismaMock.ingestJob.count.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
 
     const result = await drainPendingJobs({ maxJobs: 1, timeBudgetMs: 10_000 });
     expect(result).toEqual({ drained: true, processed: 1, remaining: 0 });

@@ -7,6 +7,8 @@ vi.mock("@/server/db", () => ({
     document: {
       findUnique: vi.fn(),
       delete: vi.fn(),
+      findMany: vi.fn(),
+      deleteMany: vi.fn(),
     },
     documentChunk: {},
     semanticCacheEntry: {},
@@ -46,7 +48,12 @@ import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { assertSafeUrl } from "@/server/lib/security/url-validator";
 
 const prismaMock = prisma as unknown as {
-  document: { findUnique: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
+  document: {
+    findUnique: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    findMany: ReturnType<typeof vi.fn>;
+    deleteMany: ReturnType<typeof vi.fn>;
+  };
 };
 const mockedDrainPendingJobs = vi.mocked(drainPendingJobs);
 const mockedEnqueueUrl = vi.mocked(enqueueUrlJob);
@@ -177,5 +184,33 @@ describe("document router", () => {
     expect(mockedDrainPendingJobs).toHaveBeenCalledWith({ maxJobs: 3, timeBudgetMs: 20_000 });
     expect(stats.queued).toBe(3);
     expect(stats.running).toBe(1);
+  });
+
+  it("deleteMany: bulk-deletes owned documents and invalidates caches", async () => {
+    prismaMock.document.findMany.mockResolvedValue([
+      { id: "d1", chunkCount: 5 },
+      { id: "d2", chunkCount: 3 },
+    ] as never);
+    prismaMock.document.deleteMany.mockResolvedValue({ count: 2 } as never);
+    mockedInvalidate.mockResolvedValue(0);
+
+    const caller = makeCaller();
+    const result = await caller.document.deleteMany({ ids: ["d1", "d2", "d-missing"] });
+    expect(result.deletedCount).toBe(2);
+    expect(result.deletedChunks).toBe(8);
+    expect(mockedInvalidate).toHaveBeenCalledTimes(2);
+    expect(prismaMock.document.deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ["d1", "d2"] } },
+    });
+  });
+
+  it("deleteMany: no-ops when none of the requested documents exist", async () => {
+    prismaMock.document.findMany.mockResolvedValue([] as never);
+    const caller = makeCaller();
+    const result = await caller.document.deleteMany({ ids: ["ghost"] });
+    expect(result.deletedCount).toBe(0);
+    expect(result.deletedChunks).toBe(0);
+    expect(prismaMock.document.deleteMany).not.toHaveBeenCalled();
+    expect(mockedInvalidate).not.toHaveBeenCalled();
   });
 });

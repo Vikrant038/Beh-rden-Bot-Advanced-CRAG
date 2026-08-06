@@ -25,12 +25,24 @@ vi.mock("@/server/rag/retrieval/dense", async () => {
   };
 });
 
+vi.mock("@/server/rag/retrieval/bm25", async () => {
+  const actual = await vi.importActual<typeof import("@/server/rag/retrieval/bm25")>(
+    "@/server/rag/retrieval/bm25",
+  );
+  return {
+    ...actual,
+    buildBm25: vi.fn(actual.buildBm25),
+  };
+});
+
 import { prisma } from "@/server/db";
 import { denseRetrieve } from "@/server/rag/retrieval/dense";
+import { buildBm25 } from "@/server/rag/retrieval/bm25";
 
 const mockedQueryRaw = vi.mocked(prisma.$queryRaw);
 const mockedFindMany = vi.mocked(prisma.documentChunk.findMany);
 const mockedDenseRetrieve = vi.mocked(denseRetrieve);
+const mockedBuildBm25 = vi.mocked(buildBm25);
 
 const mockEmbeddingClient: EmbeddingClient = {
   embedQuery: vi.fn(async (query: string) => {
@@ -149,5 +161,42 @@ describe("HybridRetriever (pgvector + BM25 + RRF)", () => {
     const result = await retriever.retrieve("blocked account visa", ["blocked account visa"]);
     expect(result.telemetry.sparseEngine).toBe("bm25_inproc");
     expect(result.chunks.length).toBeGreaterThan(0);
+  });
+
+  it("reuses the memoized BM25 index across repeated fallback calls", async () => {
+    mockedQueryRaw.mockRejectedValue(new Error("relation does not exist"));
+    // A fresh array reference guarantees a cold WeakMap cache for this test.
+    const freshCorpus = corpus.map((chunk) => ({ ...chunk }));
+    const corpusProvider = { loadChunks: vi.fn(async () => freshCorpus) };
+    const localRetriever = new HybridRetriever({
+      embeddingClient: mockEmbeddingClient,
+      reranker: mockReranker,
+      corpusProvider,
+    });
+
+    await localRetriever.retrieve("blocked account visa", ["blocked account visa"]);
+    await localRetriever.retrieve("APS certificate", ["APS certificate"]);
+
+    // The WeakMap is keyed on the corpus reference, so the second fallback
+    // call reuses the built index instead of rebuilding it.
+    expect(mockedBuildBm25).toHaveBeenCalledTimes(1);
+  });
+
+  it("triggers the CRAG web-fallback verdict when nothing survives reranking", async () => {
+    const emptyReranker: Reranker = {
+      rerank: vi.fn(async () => []),
+    };
+    const localRetriever = new HybridRetriever({
+      embeddingClient: mockEmbeddingClient,
+      reranker: emptyReranker,
+      corpusProvider: { loadChunks: vi.fn(async () => corpus) },
+    });
+
+    const result = await localRetriever.retrieve("blocked account visa", ["blocked account visa"]);
+    // No reranked chunk => crossScore falls back to 0 => gate fails => web search.
+    expect(result.bestCrossScore).toBe(0);
+    expect(result.needsWebFallback).toBe(true);
+    expect(result.pathUsed).toBe("CRAG_CONFIDENCE_GATE_WEB_FALLBACK");
+    expect(result.telemetry.cragFallbackTriggered).toBe(true);
   });
 });

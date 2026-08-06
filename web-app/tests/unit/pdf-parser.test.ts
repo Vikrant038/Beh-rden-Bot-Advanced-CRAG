@@ -29,7 +29,8 @@ function pdfJsDoc(pageTexts: string[]) {
     numPages: pageTexts.length,
     getPage: (n: number) =>
       Promise.resolve({
-        getTextContent: () => Promise.resolve({ items: pageTexts[n - 1].split(" ").map((str) => ({ str })) }),
+        getTextContent: () =>
+          Promise.resolve({ items: pageTexts[n - 1].split(" ").map((str) => ({ str })) }),
       }),
     destroy: () => Promise.resolve(),
   };

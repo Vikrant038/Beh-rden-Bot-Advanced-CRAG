@@ -128,14 +128,11 @@ describe("tracing", () => {
   it("runWithTraceGen yields all items and ends the span", async () => {
     envState.keys = true;
     const items: number[] = [];
-    for await (const value of runWithTraceGen(
-      { name: "gen-trace" },
-      async function* () {
-        yield 1;
-        yield 2;
-        yield 3;
-      },
-    )) {
+    for await (const value of runWithTraceGen({ name: "gen-trace" }, async function* () {
+      yield 1;
+      yield 2;
+      yield 3;
+    })) {
       items.push(value);
     }
     expect(items).toEqual([1, 2, 3]);

@@ -112,7 +112,7 @@ if [[ "$INCLUDE_CACHE" == "1" ]]; then
   psql_target -c "SELECT setval('semantic_cache_id_seq', (SELECT COALESCE(max(id), 1) FROM semantic_cache));" > /dev/null
 fi
 
-echo "=== 5/6 ensuring Postgres FTS GIN index on target ==="
+echo "=== 5/6 ensuring search indexes on target (FTS GIN + pgvector HNSW) ==="
 # Sparse retrieval runs inside Postgres (vectorQueries.sparseSearch) via the
 # document_chunks_text_fts_idx GIN index from migration 20260806000001. The dump
 # above is data-only, so the index must exist on the target for the FTS path to
@@ -133,6 +133,26 @@ BEGIN
 END
 \$\$" > /dev/null
 echo "document_chunks_text_fts_idx present (FTS sparse path intact)"
+
+# Dense retrieval runs inside Postgres via the <=> operator against the
+# document_chunks_embedding_idx HNSW index (migration 20260805000002). The dump
+# above is data-only, so the index must exist on the target for the dense path
+# to stay fast — without it pgvector falls back to an exact sequential scan
+# over every 1024-dim vector, which is the multi-second dense latency class.
+# Guarded the same way as the FTS index (pg_indexes check, not IF NOT EXISTS).
+psql_target -c "DO \$\$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_indexes
+    WHERE schemaname = 'public' AND tablename = 'document_chunks'
+      AND indexname = 'document_chunks_embedding_idx'
+  ) THEN
+    CREATE INDEX document_chunks_embedding_idx
+      ON document_chunks USING hnsw (embedding vector_cosine_ops);
+  END IF;
+END
+\$\$" > /dev/null
+echo "document_chunks_embedding_idx present (dense pgvector path intact)"
 
 echo "=== 6/6 verifying counts (local → target) ==="
 ok=1

@@ -60,6 +60,58 @@ describe("WebSearchTool", () => {
     await webSearch("query", 100);
     expect(mockedSearch.mock.calls[0][1]).toBeDefined();
   });
+
+  it("should clamp maxResults upward when below 1", async () => {
+    mockedSearch.mockResolvedValue({
+      noResults: false,
+      vqd: "",
+      results: [
+        {
+          title: "Only result",
+          url: "https://example.com",
+          description: "d",
+          rawDescription: "raw",
+          hostname: "example.com",
+          icon: "",
+        },
+        {
+          title: "Second",
+          url: "https://example.com/2",
+          description: "d2",
+          rawDescription: "raw2",
+          hostname: "example.com",
+          icon: "",
+        },
+      ],
+    } as never);
+    // clampedMax = Math.max(1, 0) => 1 — the slice keeps only one result.
+    const results = await webSearch("query", 0);
+    expect(results).toHaveLength(1);
+  });
+
+  it("should default missing title/url/description fields from DDG results", async () => {
+    mockedSearch.mockResolvedValue({
+      noResults: false,
+      vqd: "abc",
+      results: [
+        {
+          title: "",
+          url: "",
+          description: "",
+          rawDescription: "raw snippet",
+          hostname: "daad.de",
+          icon: "icon",
+        },
+      ],
+    } as never);
+
+    const results = await webSearch("study in germany", 3);
+    expect(results[0]).toEqual({
+      title: "Web Result",
+      url: "#",
+      snippet: "raw snippet",
+    });
+  });
 });
 
 describe("formatWebResultsForPrompt", () => {

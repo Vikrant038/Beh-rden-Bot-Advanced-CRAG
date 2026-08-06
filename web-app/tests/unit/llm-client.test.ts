@@ -44,10 +44,7 @@ describe("LLM client", () => {
     });
 
     const { callLLM } = await import("@/server/llm/client");
-    const {
-      LlmUsageCollector,
-      withLlmUsageCollector,
-    } = await import("@/server/llm/usage");
+    const { LlmUsageCollector, withLlmUsageCollector } = await import("@/server/llm/usage");
     const collector = new LlmUsageCollector();
 
     await withLlmUsageCollector(collector, async () => {

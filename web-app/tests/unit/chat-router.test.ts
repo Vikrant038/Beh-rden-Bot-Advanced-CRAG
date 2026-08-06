@@ -18,6 +18,10 @@ vi.mock("@/server/db", () => ({
       delete: vi.fn(),
       count: vi.fn(),
     },
+    messageFeedback: {
+      upsert: vi.fn(),
+      deleteMany: vi.fn(),
+    },
     user: {
       create: vi.fn(),
     },
@@ -29,7 +33,10 @@ import type { MockPrisma } from "../helpers/mock-prisma";
 import { GuestLimitReachedError } from "@/server/lib/errors";
 import { GUEST_PROMPT_LIMIT } from "@/lib/guest";
 
-const prismaMock = prisma as unknown as MockPrisma;
+const prismaMock = prisma as unknown as MockPrisma & {
+  message: { upsert: ReturnType<typeof vi.fn> };
+  messageFeedback: { upsert: ReturnType<typeof vi.fn> };
+};
 
 function makeCaller() {
   return appRouter.createCaller({
@@ -158,7 +165,10 @@ describe("chat router", () => {
       title: "My chat",
     } as never);
     prismaMock.message.findFirst
-      .mockResolvedValueOnce({ id: "assistant-9", createdAt: new Date("2026-01-02T00:00:00Z") } as never)
+      .mockResolvedValueOnce({
+        id: "assistant-9",
+        createdAt: new Date("2026-01-02T00:00:00Z"),
+      } as never)
       .mockResolvedValueOnce({
         id: "user-8",
         content: "Tell me about blocked accounts",
@@ -183,5 +193,86 @@ describe("chat router", () => {
 
     const caller = makeCaller();
     await expect(caller.chat.regenerate({ conversationId: "conv-1" })).rejects.toThrow();
+  });
+
+  it("regenerate: fails when no user message precedes the assistant reply", async () => {
+    prismaMock.conversation.findUnique.mockResolvedValue({
+      id: "conv-1",
+      userId: "user-1",
+      title: "My chat",
+    } as never);
+    prismaMock.message.findFirst
+      .mockResolvedValueOnce({
+        id: "assistant-9",
+        createdAt: new Date("2026-01-02T00:00:00Z"),
+      } as never)
+      .mockResolvedValueOnce(null as never);
+
+    const caller = makeCaller();
+    await expect(caller.chat.regenerate({ conversationId: "conv-1" })).rejects.toThrow();
+  });
+
+  it("sendMessage: lets a guest below the cap persist a message", async () => {
+    prismaMock.user.create.mockResolvedValue({ id: "guest-1" } as never);
+    prismaMock.conversation.findUnique.mockResolvedValue({
+      id: "conv-1",
+      userId: "guest-1",
+      title: "My chat",
+    } as never);
+    prismaMock.message.count.mockResolvedValue(1);
+    prismaMock.message.create.mockResolvedValue({ id: "msg-1" } as never);
+
+    const caller = makeGuestCaller();
+    const result = await caller.chat.sendMessage({
+      conversationId: "conv-1",
+      query: "hi",
+      mode: "agentic",
+    });
+    expect(result.messageId).toBe("msg-1");
+  });
+
+  it("feedback: upserts an UP rating on an owned message", async () => {
+    prismaMock.message.findUnique.mockResolvedValue({
+      id: "msg-1",
+      conversation: { userId: "user-1" },
+    } as never);
+    prismaMock.messageFeedback.upsert.mockResolvedValue({ rating: "UP" } as never);
+
+    const caller = makeCaller();
+    const result = await caller.chat.feedback({ messageId: "msg-1", rating: "UP" });
+    expect(result.rating).toBe("UP");
+    expect(prismaMock.messageFeedback.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          messageId_userId: { messageId: "msg-1", userId: "user-1" },
+        },
+        create: expect.objectContaining({ rating: "UP" }),
+      }),
+    );
+  });
+
+  it("feedback: removes feedback when rating is null", async () => {
+    prismaMock.message.findUnique.mockResolvedValue({
+      id: "msg-1",
+      conversation: { userId: "user-1" },
+    } as never);
+    prismaMock.messageFeedback.deleteMany.mockResolvedValue({ count: 1 } as never);
+
+    const caller = makeCaller();
+    const result = await caller.chat.feedback({ messageId: "msg-1", rating: null });
+    expect(result.rating).toBeNull();
+    expect(prismaMock.messageFeedback.deleteMany).toHaveBeenCalledWith({
+      where: { messageId: "msg-1", userId: "user-1" },
+    });
+  });
+
+  it("feedback: rejects feedback on a message the user does not own", async () => {
+    prismaMock.message.findUnique.mockResolvedValue({
+      id: "msg-1",
+      conversation: { userId: "someone-else" },
+    } as never);
+
+    const caller = makeCaller();
+    await expect(caller.chat.feedback({ messageId: "msg-1", rating: "UP" })).rejects.toThrow();
   });
 });

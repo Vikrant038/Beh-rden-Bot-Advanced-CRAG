@@ -8,7 +8,7 @@ import { z } from "zod";
  * environment variables". Returns undefined when the value is unusable so
  * `.default()` applies.
  */
-function normalizeUrl(raw: unknown): string | undefined {
+export function normalizeUrl(raw: unknown): string | undefined {
   if (typeof raw !== "string") return undefined;
   const trimmed = raw.trim();
   if (trimmed === "") return undefined;

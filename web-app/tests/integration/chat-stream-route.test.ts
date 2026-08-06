@@ -43,7 +43,9 @@ function buildRequest(overrides: Record<string, unknown> = {}): Request {
   });
 }
 
-function streamEvents(...events: Array<Record<string, unknown>>): AsyncGenerator<Record<string, unknown>> {
+function streamEvents(
+  ...events: Array<Record<string, unknown>>
+): AsyncGenerator<Record<string, unknown>> {
   return (async function* () {
     for (const event of events) {
       yield event;
@@ -58,11 +60,13 @@ describe("POST /api/chat/stream", () => {
     mockReadGuestId.mockReturnValue(null);
     mockRateCheck.mockResolvedValue({ success: true, reset: 0 });
     mockMessageCount.mockResolvedValue(0);
-    mockRunChatStream.mockImplementation(() => streamEvents(
-      { type: "status", stage: "guardrail" },
-      { type: "token", content: "Hello world" },
-      { type: "done", messageId: "m1", sources: [], metadata: {} },
-    ));
+    mockRunChatStream.mockImplementation(() =>
+      streamEvents(
+        { type: "status", stage: "guardrail" },
+        { type: "token", content: "Hello world" },
+        { type: "done", messageId: "m1", sources: [], metadata: {} },
+      ),
+    );
   });
 
   it("returns 401 when the request is unauthenticated", async () => {
@@ -95,9 +99,7 @@ describe("POST /api/chat/stream", () => {
 
     const response = await POST(buildRequest());
     expect(response.status).toBe(200);
-    expect(mockRunChatStream).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: "guest-1" }),
-    );
+    expect(mockRunChatStream).toHaveBeenCalledWith(expect.objectContaining({ userId: "guest-1" }));
   });
 
   it("does not enforce the guest cap for signed-in users", async () => {
@@ -129,8 +131,12 @@ describe("POST /api/chat/stream", () => {
 
     const body = await response.text();
     expect(body).toContain(`data: ${JSON.stringify({ type: "status", stage: "guardrail" })}\n\n`);
-    expect(body).toContain(`data: ${JSON.stringify({ type: "token", content: "Hello world" })}\n\n`);
-    expect(body).toContain(`data: ${JSON.stringify({ type: "done", messageId: "m1", sources: [], metadata: {} })}\n\n`);
+    expect(body).toContain(
+      `data: ${JSON.stringify({ type: "token", content: "Hello world" })}\n\n`,
+    );
+    expect(body).toContain(
+      `data: ${JSON.stringify({ type: "done", messageId: "m1", sources: [], metadata: {} })}\n\n`,
+    );
   });
 
   it("passes the session user id, default mode, and query to the pipeline", async () => {

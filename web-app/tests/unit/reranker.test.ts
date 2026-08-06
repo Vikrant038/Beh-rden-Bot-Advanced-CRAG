@@ -99,4 +99,107 @@ describe("HfReranker", () => {
     expect(result[1].id).toBe("low");
     expect(result[0].crossScore ?? 0).toBeGreaterThan(result[1].crossScore ?? 0);
   });
+
+  it("accepts a flat numeric array of scores", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => [0.2, 0.8],
+        }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const reranker = new HfReranker("model", "https://rerank.api", "token");
+    const chunks = [makeChunk({ id: "low" }), makeChunk({ id: "high" })];
+    const result = await reranker.rerank("query", chunks, 5);
+    // sigmoid(0.8) ≈ 0.69 > sigmoid(0.2) ≈ 0.55
+    expect(result[0].id).toBe("high");
+  });
+
+  it("accepts object entries with a numeric score field", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => [[{ score: 0.1 }, { score: 0.5 }], [{ score: 0.9 }]],
+        }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const reranker = new HfReranker("model", "https://rerank.api", "token");
+    const chunks = [makeChunk({ id: "a" }), makeChunk({ id: "b" })];
+    const result = await reranker.rerank("query", chunks, 5);
+    expect(result[0].id).toBe("b");
+  });
+
+  it("accepts a response with a top-level scores array", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({ scores: [0.05, 0.95] }),
+        }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const reranker = new HfReranker("model", "https://rerank.api", "token");
+    const chunks = [makeChunk({ id: "a" }), makeChunk({ id: "b" })];
+    const result = await reranker.rerank("query", chunks, 5);
+    expect(result[0].id).toBe("b");
+  });
+
+  it("falls back to original ranking when the response is malformed", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({ unexpected: true }),
+        }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const reranker = new HfReranker("model", "https://rerank.api", "token");
+    const chunks = [makeChunk({ id: "a", similarityScore: 0.9 }), makeChunk({ id: "b" })];
+    const result = await reranker.rerank("query", chunks, 5);
+    expect(result[0].id).toBe("a");
+    expect(result[0].crossScore).toBeCloseTo(0.9, 5);
+  });
+
+  it("falls back when the API fetch throws (network error)", async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const reranker = new HfReranker("model", "https://rerank.api", "token");
+    const chunks = [
+      makeChunk({ id: "a", similarityScore: 0.9 }),
+      makeChunk({ id: "b", similarityScore: 0.5 }),
+    ];
+    const result = await reranker.rerank("query", chunks, 5);
+    expect(result[0].id).toBe("a");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("honors topK in the fallback path by slicing the reranked list", async () => {
+    const reranker = new HfReranker("model", "https://rerank.api", "");
+    const chunks = Array.from({ length: 5 }, (_v, i) =>
+      makeChunk({ id: `c${i}`, similarityScore: 1 - i * 0.1 }),
+    );
+    const result = await reranker.rerank("query", chunks, 3);
+    expect(result).toHaveLength(3);
+    expect(result.map((c) => c.id)).toEqual(["c0", "c1", "c2"]);
+  });
+
+  it("uses an existing crossScore when present over similarityScore in fallback", async () => {
+    const reranker = new HfReranker("model", "https://rerank.api", "");
+    const chunks = [
+      // crossScore (0.92) wins over similarityScore (0.4) for the same chunk.
+      makeChunk({ id: "a", crossScore: 0.92, similarityScore: 0.4 }),
+      makeChunk({ id: "b", crossScore: 0.5, similarityScore: 0.95 }),
+    ];
+    const result = await reranker.rerank("query", chunks, 5);
+    expect(result[0].id).toBe("a");
+    expect(result[0].crossScore).toBeCloseTo(0.92, 5);
+  });
 });

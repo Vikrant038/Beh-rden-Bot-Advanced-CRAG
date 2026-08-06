@@ -82,9 +82,9 @@ describe("scrapeWebPage", () => {
 
   it("rejects on non-2xx HTTP status", async () => {
     mockFetchResponse("Server Error", 500);
-    await expect(
-      scrapeWebPage("https://example.com/500", { backoffMs: 1 }),
-    ).rejects.toThrow(ExternalApiError);
+    await expect(scrapeWebPage("https://example.com/500", { backoffMs: 1 })).rejects.toThrow(
+      ExternalApiError,
+    );
   });
 
   it("rejects when fetch itself fails", async () => {
@@ -153,9 +153,9 @@ describe("scrapeWebPage", () => {
 
   it("does not retry a non-retryable 404", async () => {
     mockFetchResponse("Not Found", 404);
-    await expect(
-      scrapeWebPage("https://example.com/missing", { backoffMs: 1 }),
-    ).rejects.toThrow(ExternalApiError);
+    await expect(scrapeWebPage("https://example.com/missing", { backoffMs: 1 })).rejects.toThrow(
+      ExternalApiError,
+    );
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 
@@ -243,13 +243,16 @@ describe("extractMainContent", () => {
   });
 
   it("falls back to body when no main/article", () => {
-    const html = "<html><head><title>T</title></head><body><p>Plain body text here.</p></body></html>";
+    const html =
+      "<html><head><title>T</title></head><body><p>Plain body text here.</p></body></html>";
     const { text } = extractMainContent(html);
     expect(text).toContain("Plain body text here.");
   });
 
   it("decodes HTML entities", () => {
-    const { text } = extractMainContent("<html><body><p>M&uuml;nchen &amp; Berlin</p></body></html>");
+    const { text } = extractMainContent(
+      "<html><body><p>M&uuml;nchen &amp; Berlin</p></body></html>",
+    );
     expect(text).toContain("München & Berlin");
   });
 

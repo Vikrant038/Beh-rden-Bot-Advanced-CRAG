@@ -6,7 +6,11 @@ vi.mock("@/server/tracing", () => ({
 }));
 
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { GeminiEmbeddingClient, HfEmbeddingClient, GEMINI_BATCH_LIMIT } from "@/server/embeddings/client";
+import {
+  GeminiEmbeddingClient,
+  HfEmbeddingClient,
+  GEMINI_BATCH_LIMIT,
+} from "@/server/embeddings/client";
 import { QUERY_EMBEDDING_PREFIX } from "@/server/rag/types";
 
 /**
@@ -18,7 +22,9 @@ function mockGeminiFetch(): { fetchMock: ReturnType<typeof vi.fn>; bodies: strin
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const body = typeof init?.body === "string" ? init.body : String(input);
     bodies.push(body);
-    const parsed = JSON.parse(body) as { requests?: Array<{ content: { parts: Array<{ text: string }> } }> };
+    const parsed = JSON.parse(body) as {
+      requests?: Array<{ content: { parts: Array<{ text: string }> } }>;
+    };
     const count = parsed.requests?.length ?? 1;
     // First component encodes the index so we can verify order preservation;
     // the client L2-normalizes, so use a second component to keep it unique.
@@ -84,6 +90,87 @@ describe("GeminiEmbeddingClient", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("retries once on a rate-limit error and succeeds", async () => {
+    const bodies: string[] = [];
+    let calls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(typeof init?.body === "string" ? init.body : String(input));
+      calls += 1;
+      if (calls === 1) {
+        // Simulate the GoogleGenerativeAI SDK surfacing a 429 resource-exhausted
+        // response as a thrown error from the HTTP layer.
+        throw new Error("429 RESOURCE_EXHAUSTED: rate limit");
+      }
+      const parsed = JSON.parse(typeof init?.body === "string" ? init.body : "{}") as {
+        requests?: Array<{ content: { parts: Array<{ text: string }> } }>;
+      };
+      const count = parsed.requests?.length ?? 1;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          embeddings: Array.from({ length: count }, (_v, i) => ({ values: [i + 1, 1, 0] })),
+        }),
+        text: async () => "",
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new GeminiEmbeddingClient("test-key");
+
+    const vectors = await client.embedTexts(["a", "b"]);
+    expect(calls).toBe(2);
+    expect(vectors).toHaveLength(2);
+  });
+
+  it("gives up after max attempts on a persistent rate limit", async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new Error("429 Too Many Requests");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new GeminiEmbeddingClient("test-key");
+
+    await expect(client.embedTexts(["x"])).rejects.toThrow(/429 Too Many Requests/);
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("does not retry non-retryable errors", async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new Error("400 BAD REQUEST: invalid model");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new GeminiEmbeddingClient("test-key");
+
+    await expect(client.embedTexts(["x"])).rejects.toThrow(/400 BAD REQUEST/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("wraps provider failures in a clear LLMProviderError", async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new Error("network exploded");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new GeminiEmbeddingClient("test-key");
+
+    await expect(client.embedTexts(["x"])).rejects.toThrow(/Gemini Embedding API error/);
+    await expect(client.embedTexts(["x"])).rejects.toThrow(/network exploded/);
+  });
+
+  it("rejects an invalid response shape from Gemini", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({}),
+          text: async () => "",
+        }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new GeminiEmbeddingClient("test-key");
+
+    await expect(client.embedTexts(["x"])).rejects.toThrow(/Invalid response from Gemini API/);
+  });
+
   it("exports a sane batch limit", () => {
     expect(GEMINI_BATCH_LIMIT).toBeGreaterThan(0);
     expect(GEMINI_BATCH_LIMIT).toBeLessThanOrEqual(100);
@@ -112,15 +199,18 @@ describe("HfEmbeddingClient", () => {
   });
 
   it("makes an API call and returns embeddings on success", async () => {
-    const fetchMock = vi.fn(async (_input: unknown, _init?: RequestInit) => ({
-      ok: true,
-      status: 200,
-      json: async () => [[1, 0, 0]],
-    } as Response));
+    const fetchMock = vi.fn(
+      async (_input: unknown, _init?: RequestInit) =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => [[1, 0, 0]],
+        }) as Response,
+    );
     vi.stubGlobal("fetch", fetchMock);
     const client = new HfEmbeddingClient("model", "https://hf.api", "token");
     const vectors = await client.embedTexts(["hello"]);
-    
+
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(vectors).toEqual([[1, 0, 0]]);
     const callUrl = fetchMock.mock.calls[0][0];
@@ -128,27 +218,88 @@ describe("HfEmbeddingClient", () => {
   });
 
   it("throws an error on non-200 API response", async () => {
-    const fetchMock = vi.fn(async () => ({
-      ok: false,
-      status: 503,
-      text: async () => "Service Unavailable",
-    } as Response));
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: false,
+          status: 503,
+          text: async () => "Service Unavailable",
+        }) as Response,
+    );
     vi.stubGlobal("fetch", fetchMock);
     const client = new HfEmbeddingClient("model", "url", "token");
-    
+
     await expect(client.embedTexts(["hello"])).rejects.toThrow(/Embedding API error 503/);
   });
 
+  it("wraps network failures with a connection hint", async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new HfEmbeddingClient("model", "https://hf.api", "token");
+
+    await expect(client.embedTexts(["hello"])).rejects.toThrow(/Hugging Face API is unreachable/);
+  });
+
+  it("throws when the API returns a malformed response body", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({ not: "vectors" }),
+        }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new HfEmbeddingClient("model", "url", "token");
+
+    await expect(client.embedTexts(["hello"])).rejects.toThrow(/malformed response/);
+  });
+
+  it("throws when the vector count does not match the input count", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => [[1, 0, 0]],
+        }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new HfEmbeddingClient("model", "url", "token");
+
+    await expect(client.embedTexts(["a", "b"])).rejects.toThrow(/malformed response/);
+  });
+
+  it("returns a zero vector unchanged by normalization", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => [[0, 0, 0]],
+        }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new HfEmbeddingClient("model", "url", "token");
+
+    await expect(client.embedTexts(["zero"])).resolves.toEqual([[0, 0, 0]]);
+  });
+
   it("embedQuery prefixes the text and calls embedTexts", async () => {
-    const fetchMock = vi.fn(async (_input: unknown, _init?: RequestInit) => ({
-      ok: true,
-      status: 200,
-      json: async () => [[1, 0, 0]],
-    } as Response));
+    const fetchMock = vi.fn(
+      async (_input: unknown, _init?: RequestInit) =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => [[1, 0, 0]],
+        }) as Response,
+    );
     vi.stubGlobal("fetch", fetchMock);
     const client = new HfEmbeddingClient("model", "url", "token");
     const vector = await client.embedQuery("search query");
-    
+
     expect(vector).toEqual([1, 0, 0]);
     const requestBody = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
     expect(requestBody.inputs).toEqual([`${QUERY_EMBEDDING_PREFIX}search query`]);
