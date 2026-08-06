@@ -61,8 +61,11 @@ export default {
   async scheduled(_event: ScheduledEventLike, env: Env): Promise<void> {
     try {
       await env.AI.run(MODEL, { text: "keep-warm" });
-    } catch {
-      // ignore — next scheduled tick retries
+    } catch (error) {
+      // Best-effort: a failed tick must not crash the worker, but log it so a
+      // silently broken keep-warm (wrong input shape, model evicted forever)
+      // is diagnosable from wrangler logs instead of looking healthy.
+      console.warn(`[keep-warm] bge-m3 warm-up failed: ${String(error)}`);
     }
   },
 

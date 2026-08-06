@@ -93,7 +93,7 @@ export function StageNode({ index, title, status, durationMs, children }: StageN
             aria-expanded={open}
             aria-controls={bodyId}
             aria-label={open ? `Collapse ${title}` : `Expand ${title}`}
-            className="flex w-full min-w-0 items-center gap-2 rounded-lg py-1 text-left transition hover:bg-surface-hover/60 focus-visible:ring-2 focus-visible:ring-primary"
+            className="flex min-h-11 w-full min-w-0 items-center gap-2 rounded-lg py-1 text-left transition hover:bg-surface-hover/60 focus-visible:ring-2 focus-visible:ring-primary md:min-h-9"
           >
             {row}
           </button>

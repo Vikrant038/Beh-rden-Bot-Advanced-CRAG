@@ -10,6 +10,7 @@ import {
   GeminiEmbeddingClient,
   HfEmbeddingClient,
   GEMINI_BATCH_LIMIT,
+  EmbeddingBatchCache,
 } from "@/server/embeddings/client";
 import { QUERY_EMBEDDING_PREFIX } from "@/server/rag/types";
 
@@ -350,5 +351,77 @@ describe("HfEmbeddingClient", () => {
 
     // Different batch composition → different key → both hit the network.
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("never serves an expired cache entry (TTL honored on read)", async () => {
+    const fetchMock = vi.fn(
+      async (_input: unknown, _init?: RequestInit) =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => [[1, 0, 0]],
+        }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new HfEmbeddingClient("model", "url", "token");
+
+    // First embed caches the batch at the real clock.
+    await client.embedTexts(["expiring"]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Advance the clock past the 1h TTL and re-embed the identical batch.
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 2 * 60 * 60 * 1000);
+    await client.embedTexts(["expiring"]);
+    nowSpy.mockRestore();
+
+    // Expired entry → network round-trip again, not a stale cache hit.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("EmbeddingBatchCache", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns nothing for empty batches and never stores them", () => {
+    const cache = new EmbeddingBatchCache();
+    expect(cache.get([])).toBeUndefined();
+    cache.set([], []);
+    expect(cache.size).toBe(0);
+  });
+
+  it("honors the batch-size cap (no caching of ingest-scale batches)", () => {
+    const cache = new EmbeddingBatchCache();
+    const big = Array.from({ length: 100 }, (_v, i) => `chunk ${i}`);
+    expect(cache.get(big)).toBeUndefined();
+    cache.set(big, []);
+    expect(cache.size).toBe(0);
+  });
+
+  it("evicts the oldest entry when at cap and sweeps expired entries on write", () => {
+    const now = Date.now();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(now);
+    const cache = new EmbeddingBatchCache(2);
+
+    cache.set(["a"], [[1]]);
+    cache.set(["b"], [[2]]);
+    expect(cache.size).toBe(2);
+
+    // Adding a third entry past the cap drops the oldest ("a").
+    cache.set(["c"], [[3]]);
+    expect(cache.size).toBe(2);
+    expect(cache.get(["a"])).toBeUndefined();
+    expect(cache.get(["b"])).toEqual([[2]]);
+    expect(cache.get(["c"])).toEqual([[3]]);
+
+    // Now let "b" and "c" expire; a write at cap sweeps them before eviction.
+    nowSpy.mockReturnValue(now + 2 * 60 * 60 * 1000);
+    cache.set(["d"], [[4]]);
+    expect(cache.size).toBe(1);
+    expect(cache.get(["b"])).toBeUndefined();
+    expect(cache.get(["c"])).toBeUndefined();
+    expect(cache.get(["d"])).toEqual([[4]]);
+    nowSpy.mockRestore();
   });
 });

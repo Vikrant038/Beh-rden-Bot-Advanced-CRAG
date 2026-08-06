@@ -30,9 +30,19 @@ const EMBED_CACHE_TTL_MS = 60 * 60 * 1000;
  * normalized vectors turns those calls into instant Map hits instead of
  * re-paying a cold start. Instance-scoped so tests that stub `fetch` on a
  * fresh client are never contaminated by prior cases.
+ *
+ * Exported (as a type) so the expiry/sweep behavior is unit-testable with a
+ * small cap; production uses the module-level defaults.
  */
-class EmbeddingBatchCache {
+export class EmbeddingBatchCache {
   private readonly cache = new Map<string, { vectors: number[][]; expiresAt: number }>();
+
+  constructor(private readonly maxEntries: number = EMBED_CACHE_MAX_ENTRIES) {}
+
+  /** Test/diagnostic hook: number of live entries. */
+  get size(): number {
+    return this.cache.size;
+  }
 
   get(texts: string[]): number[][] | undefined {
     if (texts.length === 0 || texts.length > EMBED_CACHE_MAX_BATCH) {
@@ -54,8 +64,20 @@ class EmbeddingBatchCache {
     if (texts.length === 0 || texts.length > EMBED_CACHE_MAX_BATCH) {
       return;
     }
-    if (this.cache.size >= EMBED_CACHE_MAX_ENTRIES) {
-      // Drop the oldest entry (Map preserves insertion order).
+    // Opportunistically reclaim expired entries on writes so the cache never
+    // pins dead vectors when unique texts keep flowing (get() also prunes the
+    // key it touched, but that alone leaves untouched expired entries behind).
+    if (this.cache.size >= this.maxEntries) {
+      const now = Date.now();
+      for (const [key, entry] of this.cache) {
+        if (entry.expiresAt < now) {
+          this.cache.delete(key);
+        }
+      }
+    }
+    if (this.cache.size >= this.maxEntries) {
+      // Still at cap after the sweep — drop the oldest entry (Map preserves
+      // insertion order) to make room.
       const oldestKey = this.cache.keys().next().value;
       if (oldestKey !== undefined) {
         this.cache.delete(oldestKey);
