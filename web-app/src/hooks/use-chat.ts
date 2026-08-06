@@ -101,7 +101,11 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     isError,
   } = api.conversation.getById.useQuery(
     { id: conversationId ?? "" },
-    { enabled: Boolean(conversationId) },
+    {
+      enabled: Boolean(conversationId),
+      staleTime: 1000 * 60 * 5, // 5 minute stale-time cache for instant switching
+      placeholderData: (previousData) => previousData,
+    },
   );
 
   useEffect(() => {

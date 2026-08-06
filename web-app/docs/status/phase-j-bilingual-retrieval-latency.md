@@ -160,3 +160,75 @@ the sequential LLM call chain (see §6).
 > 20 s timeout bounds each call and the agentic tool wrapper degrades to web search on failure,
 > but a warm-worker/cached-model strategy (or lowering `wait_for_model` reliance) would cut that
 > further. See §6.
+
+## 8. Addendum — corpus transfer eliminated via Postgres FTS (2026-08-06)
+
+> **Status:** Implemented and verified. Full suite **422/422 pass**, `typecheck`, `format:check`,
+> `lint` clean. Migration `20260806000001` applied locally (additive GIN index, no data change).
+> **Touches:** `src/server/db/vector-queries.ts` (`sparseSearch` + EN/DE stopword list),
+> `src/server/rag/retrieval/hybrid.ts` (FTS-first sparse with BM25 fallback, corpus-load timer),
+> `src/server/rag/retrieval/corpus.ts` (TTL 60 s → 1 h, batch 1000 → 5000),
+> `src/components/sidebar/conversation-item.tsx` (hover/focus prefetch),
+> telemetry types (`server/rag/types.ts`, `lib/chat/types.ts`).
+
+### 8.1 Why (measured trace gap)
+
+After §7 the sparse search itself was ~32 ms, but a 13.7 s production trace still hid **~8.9 s of
+unaccounted time** inside `hybrid_retrieval`: the first line of `retrieve()`,
+`corpusProvider.loadChunks()`, transferred the **entire 23,934-chunk / 3.5 MB corpus** from
+Postgres in **25 sequential round-trips** (batch 1000), then rebuilt the in-process BM25 index
+over it. Local it measured 161 ms; on Vercel with a remote DB it dominates the turn. Worse, the
+corpus TTL was 60 s and the BM25 index is a WeakMap keyed on the corpus array identity, so every
+cache expiry rebuilt the index too.
+
+### 8.2 The fix — sparse search moves into Postgres
+
+- **`vectorQueries.sparseSearch`** — ranked lexical retrieval with `to_tsvector('simple', text) @@
+  tsquery` + `ts_rank`, backed by a new **GIN index** (`20260806000001_add_document_chunks_fts_index`).
+  The `'simple'` config does no stemming — same lexical behavior as the in-process BM25 tokenizer
+  on the bilingual corpus. Returns only top-K, so the **server never loads the corpus at all** on
+  the FTS path.
+- **EN+DE stopword filter** — a naive OR-joined tsquery is dominated by function words (`is | the |
+  for` matches nearly every English sentence), which ranks long generic docs above targeted ones —
+  the opposite of BM25's IDF. The built-in filter drops ~180 common EN/DE function words so FTS
+  ranking approximates BM25's term-overlap behavior (see §8.4 for the measured parity).
+- **BM25 stays as a runtime fallback** — if `sparseSearch` throws (e.g. a fresh DB missing the
+  index), `retrieve()` falls back to the in-process BM25 over the cached corpus, so a missing
+  migration degrades gracefully instead of breaking retrieval.
+- **Corpus provider hardened** — TTL raised 60 s → **1 h** (the corpus only changes on ingest, and
+  ingest calls `invalidate()` explicitly) and batch size 1000 → 5000 (5 round-trips instead of
+  25) for the fallback path.
+- **Telemetry** — `RetrievalTelemetry` gains `corpusLoadDurationMs` (0 on the FTS path) and
+  `sparseEngine` (`pg_fts` | `bm25_inproc`), so the trace shows exactly where time goes.
+- **Sidebar prefetch** — `ConversationItem` now calls `conversation.getById.prefetch` on
+  hover/focus, so switching chats is a cache hit instead of a cold round-trip (staleTime is 5 min).
+
+### 8.3 Measured result (production corpus, real Postgres)
+
+`scratch/fts-recall2.mts` runs the exact 5 bilingual sub-queries against both engines:
+
+| Step | Before | After |
+|---|---|---|
+| Sparse search, 5 sub-queries (FTS) | — | **66 ms** |
+| Corpus transfer (3.5 MB / 23,934 chunks) | ~25 round-trips | **0 (not loaded)** |
+| BM25 fallback (unchanged path) | 32 ms | 27 ms |
+
+### 8.4 Retrieval parity (BM25 vs FTS, top-200)
+
+| Query | BM25 top-15 in FTS top-200 | Top-200 overlap |
+|---|---|---|
+| APS certificate (EN) | 15/15 | 107/200 |
+| APS-Zertifizierung (DE) | 10/15 | 77/200 |
+| Blocked account 2026 (EN) | 15/15 | 135/200 |
+| Sperrkonto (DE) | 13/15 | 90/200 |
+| Goethe B2 (DE) | 15/15 | 45/200 |
+
+Strong recall parity: all or most of BM25's top-15 appear within FTS's top-200 for every query,
+with the fused ranking re-ordered by the cross-encoder and CRAG gate afterwards — so downstream
+behavior (rerank → gate → web fallback) is preserved while the 3.5 MB transfer disappears.
+
+### 8.5 Deployment note
+
+Apply `20260806000001` to Neon (`prisma migrate deploy`) alongside the existing corpus seed; it is
+**additive** (CREATE INDEX IF NOT EXISTS) and needs no re-embedding or data migration. If it is
+missing, retrieval still works via the BM25 fallback.

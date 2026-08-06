@@ -83,14 +83,17 @@ describe("HybridRetriever (pgvector + BM25 + RRF)", () => {
         text: chunk.text,
       })) as never,
     );
+    // The Postgres FTS sparse path (vectorQueries.sparseSearch) is what the
+    // hybrid retriever calls now; it reads rows shaped for ts_rank.
     mockedQueryRaw.mockResolvedValue([
       {
         id: 1,
+        parentId: null,
         documentId: "doc-a",
         sourceName: "doc-a",
         sourceUrl: "https://a.example",
         text: corpus[0].text,
-        sim: 0.95,
+        rank: 0.9,
       },
     ] as never);
     mockedDenseRetrieve.mockResolvedValue([corpus[0]]);
@@ -122,10 +125,7 @@ describe("HybridRetriever (pgvector + BM25 + RRF)", () => {
   });
 
   it("embeds all sub-queries in one batched request (not per-query calls)", async () => {
-    await retriever.retrieve("blocked account visa", [
-      "blocked account visa",
-      "Sperrkonto Visum",
-    ]);
+    await retriever.retrieve("blocked account visa", ["blocked account visa", "Sperrkonto Visum"]);
 
     expect(mockEmbeddingClient.embedTexts).toHaveBeenCalledTimes(1);
     expect(mockEmbeddingClient.embedTexts).toHaveBeenCalledWith([
@@ -134,5 +134,20 @@ describe("HybridRetriever (pgvector + BM25 + RRF)", () => {
     ]);
     expect(mockEmbeddingClient.embedQuery).not.toHaveBeenCalled();
     expect(mockedDenseRetrieve).toHaveBeenCalledTimes(2);
+  });
+
+  it("runs sparse search in Postgres (FTS) without loading the full corpus", async () => {
+    const result = await retriever.retrieve("blocked account visa", ["blocked account visa"]);
+    // FTS path: corpus provider never loaded, telemetry says pg_fts, no corpus cost.
+    expect(mockedQueryRaw).toHaveBeenCalled();
+    expect(result.telemetry.sparseEngine).toBe("pg_fts");
+    expect(result.telemetry.corpusLoadDurationMs).toBe(0);
+  });
+
+  it("falls back to in-process BM25 when Postgres FTS errors", async () => {
+    mockedQueryRaw.mockRejectedValueOnce(new Error("relation does not exist"));
+    const result = await retriever.retrieve("blocked account visa", ["blocked account visa"]);
+    expect(result.telemetry.sparseEngine).toBe("bm25_inproc");
+    expect(result.chunks.length).toBeGreaterThan(0);
   });
 });

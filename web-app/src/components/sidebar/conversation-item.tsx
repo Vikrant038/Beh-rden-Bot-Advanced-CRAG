@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Pencil, Pin, PinOff, Trash2, X } from "lucide-react";
 import { api } from "@/lib/trpc/client";
 import type { ConversationSummary } from "@/lib/chat/types";
@@ -45,6 +45,13 @@ export function ConversationItem({
     onNavigate?.();
     router.push(`/chat/${conversation.id}`);
   };
+
+  // Warm the conversation body (messages + sources) while the user hovers or
+  // tabs to the item, so switching chats is a cache hit instead of a cold
+  // round-trip. Prefetch is idempotent and silently no-ops when already cached.
+  const prefetchConversation = useCallback(() => {
+    void utils.conversation.getById.prefetch({ id: conversation.id });
+  }, [utils, conversation.id]);
 
   const saveRename = () => {
     const title = draft.trim();
@@ -130,7 +137,13 @@ export function ConversationItem({
         pinned && "bg-primary/5",
       )}
     >
-      <button type="button" onClick={navigate} className="min-w-0 flex-1 text-left">
+      <button
+        type="button"
+        onClick={navigate}
+        onMouseEnter={prefetchConversation}
+        onFocus={prefetchConversation}
+        className="min-w-0 flex-1 text-left"
+      >
         <p className="truncate text-sm">
           {conversation.title ?? "Untitled conversation"}
           {pinned ? <span className="ml-1 text-accent">•</span> : null}

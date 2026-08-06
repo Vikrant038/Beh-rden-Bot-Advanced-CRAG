@@ -138,13 +138,17 @@ export function ChatInterface({
   // reload never re-sends (or re-creates) anything.
   const initialSentRef = useRef(false);
   useEffect(() => {
-    if (initialSentRef.current || !initialQuery || isLoading || notFound) {
+    if (initialSentRef.current || !initialQuery || notFound) {
       return;
     }
     initialSentRef.current = true;
     void sendMessage(initialQuery, mode);
-    router.replace(`/chat/${conversationId}`, { scroll: false });
-  }, [initialQuery, isLoading, notFound, sendMessage, mode, router, conversationId]);
+    // Use window.history.replaceState to cleanly strip query params without triggering
+    // Next.js App Router layout re-renders or screen flashes.
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", `/chat/${conversationId}`);
+    }
+  }, [initialQuery, notFound, sendMessage, mode, conversationId]);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [guestLimitOpen, setGuestLimitOpen] = useState(false);
   const reduceMotion = useReducedMotion();

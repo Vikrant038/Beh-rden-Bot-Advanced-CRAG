@@ -265,7 +265,16 @@ export async function runAgenticRag(
     const stage3Start = Date.now();
     onEvent?.({ type: "agent_start", agent: "writer", timestamp: stage3Start });
     collector.setStage("Stage 3 — Writer (markdown synthesis)");
-    const finalAnswer = await agentWriterSynthesis(maskedQuery, research, analysis);
+    // Stream writer deltas only when someone is listening (chat SSE). The
+    // glass-box tester passes no `onEvent`, so it keeps the buffered call.
+    const finalAnswer = await agentWriterSynthesis(
+      maskedQuery,
+      research,
+      analysis,
+      onEvent
+        ? (delta) => onEvent({ type: "token", content: delta, timestamp: Date.now() })
+        : undefined,
+    );
     const stage3Duration = Date.now() - stage3Start;
     onEvent?.({
       type: "agent_end",

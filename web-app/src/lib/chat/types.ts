@@ -113,6 +113,10 @@ export interface RetrievalTelemetry {
   rerankDurationMs: number;
   bestCrossScore: number;
   cragFallbackTriggered: boolean;
+  /** Time to transfer the corpus from Postgres — 0 on the FTS path. */
+  corpusLoadDurationMs: number;
+  /** Sparse engine used: Postgres FTS (default) or in-process BM25 fallback. */
+  sparseEngine: "pg_fts" | "bm25_inproc";
 }
 
 /** Telemetry for an individual tool call during Research Agent execution. */

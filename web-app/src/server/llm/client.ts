@@ -335,6 +335,7 @@ export async function* callLLMStream(
 
   const client = getGroqClient();
   if (client) {
+    let emitted = false;
     try {
       const stream = await client.chat.completions.create(
         {
@@ -349,11 +350,18 @@ export async function* callLLMStream(
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta?.content;
         if (delta) {
+          emitted = true;
           yield delta;
         }
       }
       return;
     } catch (error) {
+      // Only the pre-first-token failure is safely recoverable. Falling back
+      // after deltas were emitted would re-yield the whole answer on top of the
+      // partial one, so surface the error and let the caller decide.
+      if (emitted) {
+        throw error;
+      }
       logger.warn(
         { error: String(error) },
         "Groq streaming failed; falling back to non-streamed call",

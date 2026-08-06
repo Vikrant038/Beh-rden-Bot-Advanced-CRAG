@@ -260,6 +260,10 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
     isCached: boolean;
   };
 
+  // True once the writer has streamed its answer live, so the finished string
+  // must not be replayed as tokens afterwards.
+  let streamedAnswer = false;
+
   try {
     if (mode === "standard") {
       yield { type: "status", stage: "retrieving" };
@@ -300,7 +304,12 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
 
       // Stream granular telemetry (stage_start/stage_end, agent_start/end,
       // retrieval_telemetry, tool_call) as it is produced, then await the result.
+      // Writer `token` events are the live answer; note that we saw them so the
+      // finished string is not replayed a second time below.
       for await (const event of eventQueue) {
+        if (event.type === "token") {
+          streamedAnswer = true;
+        }
         yield event as unknown as ChatStreamEvent;
       }
       const agenticResult = await agenticPromise;
@@ -353,7 +362,11 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
     mode,
   });
 
-  yield* streamTokens(result.answer, signal);
+  // A cache hit or a writer fallback yields no live tokens, so the answer still
+  // has to be revealed here. When the writer streamed, it is already on screen.
+  if (!streamedAnswer) {
+    yield* streamTokens(result.answer, signal);
+  }
   yield {
     type: "done",
     messageId: persisted.id,

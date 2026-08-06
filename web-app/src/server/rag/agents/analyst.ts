@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { callLLMJson } from "@/server/llm/json";
-import { callLLM } from "@/server/llm/client";
+import { callLLM, callLLMStream } from "@/server/llm/client";
 import type { LlmMessage } from "@/server/llm/client";
+import { LLMProviderError } from "@/server/llm/errors";
 import type { ResearchResult } from "@/server/rag/agents/research";
 import { createLogger } from "@/server/lib/logger";
 
@@ -66,13 +67,18 @@ export async function agentAnalystEvaluation(
 }
 
 /**
- * Streaming variant for the writer agent — calls the LLM once for the final
- * markdown so the analyst matrix is fully materialized first.
+ * Agent 3: Writer — streams the final markdown from the provider.
+ *
+ * `onToken` receives each delta as it arrives so the SSE client can render the
+ * answer progressively; the full string is still returned so persistence,
+ * caching and memory keep working on a complete answer. Without `onToken` this
+ * is an ordinary buffered call.
  */
 export async function agentWriterSynthesis(
   userQuery: string,
   researchData: ResearchResult,
   analysisMatrix: AnalystMatrix,
+  onToken?: (delta: string) => void,
 ): Promise<string> {
   logger.info("[AGENT 3] Writer agent synthesizing executive response");
 
@@ -89,11 +95,30 @@ export async function agentWriterSynthesis(
     `3. Include an 'Actionable Next Steps' section.\n` +
     `4. Base your answer SOLELY on the provided ANALYST and RESEARCH context. If the context lacks information to answer the query, state that the information is unavailable.`;
 
+  const messages: LlmMessage[] = [{ role: "user", content: prompt }];
+  const options = { maxTokens: 1000, temperature: 0.3 };
+  let streamed = "";
+
   try {
-    const messages: LlmMessage[] = [{ role: "user", content: prompt }];
-    return (await callLLM(messages, { maxTokens: 1000, temperature: 0.3 })).trim();
+    if (!onToken) {
+      return (await callLLM(messages, options)).trim();
+    }
+    for await (const delta of callLLMStream(messages, options)) {
+      streamed += delta;
+      onToken(delta);
+    }
+    if (!streamed.trim()) {
+      throw new LLMProviderError("Writer stream produced no content");
+    }
+    return streamed.trim();
   } catch (error) {
     logger.warn({ error: String(error) }, "[WRITER] synthesis failed; returning analyst summary");
+    // Deltas already emitted are on the user's screen, so the returned answer
+    // must match them — swapping in the analyst summary here would persist text
+    // that differs from what was rendered. Keep the partial instead.
+    if (streamed.trim()) {
+      return streamed.trim();
+    }
     return `## Summary\n\n${analysisMatrix.summary}\n\n### Details\n\n${analysisMatrix.structured_table}`;
   }
 }

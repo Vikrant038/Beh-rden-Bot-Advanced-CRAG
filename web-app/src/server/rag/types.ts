@@ -72,6 +72,10 @@ export interface RetrievalTelemetry {
   rerankDurationMs: number;
   bestCrossScore: number;
   cragFallbackTriggered: boolean;
+  /** Time to transfer the corpus from Postgres — 0 on the FTS path. */
+  corpusLoadDurationMs: number;
+  /** Sparse engine used: Postgres FTS (default) or in-process BM25 fallback. */
+  sparseEngine: "pg_fts" | "bm25_inproc";
 }
 
 /** Telemetry for an individual tool call during Research Agent execution. */
@@ -114,6 +118,10 @@ export type PipelineEvent =
   | { type: "guardrail"; passed: boolean; reason?: string; timestamp: number }
   | { type: "retrieval_telemetry"; telemetry: RetrievalTelemetry; timestamp: number }
   | { type: "tool_call"; telemetry: ToolCallTelemetry; timestamp: number }
+  // Live writer output: one delta as it arrives from the provider. Chat relays
+  // these straight to the SSE client; the glass-box tester ignores them (the
+  // finished answer is on the result object).
+  | { type: "token"; content: string; timestamp: number }
   | { type: "agent_start"; agent: "research" | "analyst" | "writer"; timestamp: number }
   | {
       type: "agent_end";

@@ -19,6 +19,7 @@ import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/lib/guest";
  */
 export default function NewChatPage() {
   const router = useRouter();
+  const utils = api.useUtils();
   const createMutation = api.conversation.create.useMutation();
   const [mode, setMode] = useState<ChatMode>("agentic");
 
@@ -30,8 +31,21 @@ export default function NewChatPage() {
     }
     try {
       const conversation = await createMutation.mutateAsync({ mode: chatMode });
-      // Hand the first message (and its mode) to the fresh conversation via the
-      // URL so a reload never re-creates a conversation.
+
+      // Pre-seed cache so ChatInterface getById query resolves in 0ms without waiting for a database roundtrip
+      utils.conversation.getById.setData(
+        { id: conversation.id },
+        {
+          id: conversation.id,
+          mode: chatMode === "agentic" ? "AGENTIC" : "STANDARD",
+          title: query.slice(0, 50),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          messages: [],
+        },
+      );
+
+      // Hand the first message (and its mode) to the fresh conversation via the URL
       router.replace(
         `/chat/${conversation.id}?q=${encodeURIComponent(query.trim())}&m=${chatMode}`,
       );
