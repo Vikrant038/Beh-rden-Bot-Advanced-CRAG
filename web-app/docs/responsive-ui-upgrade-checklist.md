@@ -1,8 +1,12 @@
 # Responsive UI Upgrade — Implementation Log
 
-> **Status:** Implemented (Aug 2026). All 150 checklist items from the responsive
-> upgrade plan have been applied across the app. This file logs what changed and
-> where; it mirrors the severity-keyed checklist so the work is auditable.
+> **Status:** Implemented (Aug 2026). The items logged below are applied and
+> verified. This log documents **103 rows (~109 item numbers)**; the rest of the
+> 150-item plan is covered by the global passes (P0 safety nets, type-scale,
+> touch targets) referenced in the rows. An automated audit (`scripts/verify-plan-150.sh`)
+> checks all 150 plan sections against the code: **147/150 verified**, 3 gaps
+> tracked as follow-ups (message-bubble entrance animation, testimonials section,
+> history stats header).
 
 **Ground rules applied everywhere:** `overflow-x: hidden` on `html, body`;
 every breakpoint pair degrades gracefully (`base → sm → md → lg`); no primary
@@ -155,11 +159,17 @@ action is hover-only on touch devices.
 
 ---
 
-## Verification
+## Verification (2026-08-06, full audit)
 
+- **Logged-row audit** — `scripts/verify-responsive-checklist-full.sh`: **103/103 rows pass**
+  (greps each row's cited file for its distinctive class/token).
+- **Plan audit** — `scripts/verify-plan-150.sh`: all **150 plan sections** checked
+  against code (file existence + key feature token) → **147/150 pass**; 3 genuine
+  gaps: `2.5` testimonials (landing, P2), `4.2` message entrance animations (P1),
+  `7.13` history stats header (P2).
 - `pnpm typecheck` — clean
 - `pnpm lint` — 0 errors
-- `pnpm prettier --check "src/**/*.{ts,tsx}"` — clean
-- `pnpm vitest run` — 422/422 pass
+- `pnpm vitest run --coverage` — **603/603 pass**, coverage **92.88 / 85.36 / 89.81 / 92.96**
+  (all ≥ the 85% gate)
 - E2E (Playwright) landing + pipeline-tester specs — 13/13 pass (updated for the
   renamed "Bilingual Retrieval" feature and granular stage titles)
