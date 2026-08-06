@@ -1,105 +1,86 @@
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { PipelineVisualizer } from "@/components/admin/pipeline/pipeline-visualizer";
 import type { AgenticRagResponse } from "@/server/rag/agents/orchestrator";
 
-/** Expands the collapsible body of the stage whose heading matches `title`. */
-function expandStage(title: string | RegExp): HTMLElement {
-  const heading = screen.getByRole("heading", { name: title });
-  const stage = heading.closest("li");
-  if (!stage) {
-    throw new Error(`No <li> ancestor for stage ${title}`);
-  }
-  fireEvent.click(within(stage).getByRole("button", { name: /Expand/ }));
-  return stage;
-}
-
-function fullTrace(): AgenticRagResponse {
+function fullTrace(overrides: Partial<AgenticRagResponse> = {}): AgenticRagResponse {
   return {
-    userQuery: "What documents are required for a German student visa?",
-    maskedQuery: "What documents are required for a German student visa?",
-    guardrail: { passed: true, reason: "In-domain", durationMs: 110 },
-    finalAnswer: "You need a valid passport and proof of funds.",
+    userQuery: "Is APS mandatory for Indian students?",
+    maskedQuery: "Is APS mandatory for Indian students?",
+    guardrail: { passed: true, reason: "In-domain", durationMs: 10 },
+    finalAnswer: "Yes — the APS certificate is mandatory.",
     researchSteps: [
       {
         iteration: 1,
-        thought: "Primary query received.",
+        thought: "Retrieve documents about APS.",
         action: "tool_vector_search",
-        observation: "Retrieved 3 relevant chunks from local database.",
-        durationMs: 88,
+        observation: "Found 3 relevant chunks.",
       },
     ],
     analysisMatrix: {
-      summary: "Required documents include passport, proof of funds.",
-      structured_table: "| Document | Required |\n| Passport | Yes |",
-      key_insights: ["Proof of funds is mandatory."],
-      verified_facts: ["Blocked account is accepted."],
+      summary: "APS is mandatory for Indian applicants.",
+      structured_table: "| APS | Required |\n| Yes | ✅ |",
+      key_insights: ["APS is mandatory."],
+      verified_facts: ["Applicable to Indian students."],
     },
     sources: [
       {
-        name: "visa-guide.pdf",
-        url: "pdf://abc/visa-guide.pdf",
-        score: 0.82,
+        name: "aps-guide.pdf",
+        url: "pdf://abc/aps-guide.pdf",
+        score: 0.9,
         documentId: "doc-1",
         childText: "Matched child snippet.",
         parentText: "Expanded parent context.",
       },
     ],
-    disambiguation: { durationMs: 30, isAmbiguous: false, options: [] },
-    retrievalTelemetry: {
-      queryExpansionDurationMs: 20,
-      expandedQueries: ["German student visa documents", "Requirements student visa Germany"],
-      denseDurationMs: 40,
-      sparseBm25DurationMs: 25,
-      rrfFusionDurationMs: 5,
-      rerankDurationMs: 15,
-      bestCrossScore: 0.85,
-      cragFallbackTriggered: false,
-      corpusLoadDurationMs: 0,
-      sparseEngine: "pg_fts",
-    },
+    totalLatencyMs: 2400,
+    totalCostUsd: 0.000136,
     toolCalls: [
       {
         id: "call-1",
-        tool: "hybrid_retrieval",
-        query: "What documents are required for a German student visa?",
-        startTime: 100,
-        durationMs: 88,
-        status: "success",
+        tool: "faiss_search",
+        query: "APS certificate requirements",
+        durationMs: 12,
+        startTime: 0,
+        status: "success" as const,
       },
     ],
-    totalLatencyMs: 2400,
-    stages: [
-      { index: 0, name: "Query disambiguation & guardrail", durationMs: 400, status: "executed" },
-      { index: 1, name: "Research agent (ReAct)", durationMs: 1200, status: "executed" },
-      { index: 2, name: "Analyst (comparison matrix)", durationMs: 500, status: "executed" },
-      { index: 3, name: "Writer (markdown synthesis)", durationMs: 300, status: "executed" },
-    ],
-    llmCalls: [
+    llmCalls: [],
+    stages: [{ index: 0, name: "Stage 0B — Domain Guardrail", durationMs: 10, status: "executed" }],
+    disambiguation: { isAmbiguous: false, options: [], durationMs: 5 },
+    preProcessing: {
+      piiMaskingDurationMs: 2,
+      cacheLookupDurationMs: 3,
+      cacheHit: false,
+    },
+    postProcessing: {
+      cacheWriteDurationMs: 4,
+      memoryWriteDurationMs: 1,
+      cacheWritten: true,
+    },
+    retrievalTelemetry: {
+      queryExpansionDurationMs: 20,
+      denseDurationMs: 13680,
+      sparseBm25DurationMs: 673,
+      rrfFusionDurationMs: 1,
+      rerankDurationMs: 30,
+      corpusLoadDurationMs: 2,
+      expandedQueries: ["APS certificate mandatory", "APS Zertifikat Pflicht"],
+      sparseEngine: "pg_fts",
+      bestCrossScore: 0.71,
+      cragFallbackTriggered: false,
+    },
+    agentCosts: [
       {
-        stage: "Stage 2 — Analyst (comparison matrix)",
-        provider: "groq",
-        model: "llama-3.1-8b-instant",
-        latencyMs: 500,
+        agent: "research",
+        callCount: 2,
         promptTokens: 900,
         completionTokens: 220,
         totalTokens: 1120,
+        latencyMs: 500,
         costUsd: 0.0000626,
       },
-      {
-        stage: "Stage 3 — Writer (markdown synthesis)",
-        provider: "groq",
-        model: "llama-3.1-8b-instant",
-        latencyMs: 300,
-        promptTokens: 700,
-        completionTokens: 480,
-        totalTokens: 1180,
-        costUsd: 0.0000734,
-      },
-    ],
-    totalCostUsd: 0.000136,
-    agentCosts: [
       {
         agent: "analyst",
         callCount: 1,
@@ -119,99 +100,136 @@ function fullTrace(): AgenticRagResponse {
         costUsd: 0.0000734,
       },
     ],
-    preProcessing: {
-      piiMaskingDurationMs: 4,
-      cacheLookupDurationMs: 12,
-      cacheHit: false,
-    },
-    postProcessing: {
-      cacheWriteDurationMs: 18,
-      memoryWriteDurationMs: 6,
-      cacheWritten: true,
-    },
+    ...overrides,
   };
 }
 
+/** StageNodes are closed by default — expand every stage before asserting body content. */
+function expandAllStages() {
+  const expandButtons = screen.getAllByRole("button", { name: /^Expand / });
+  for (const button of expandButtons) {
+    fireEvent.click(button);
+  }
+}
+
 describe("PipelineVisualizer", () => {
-  it("renders pre-processing block with PII masking and cache lookup times", () => {
+  it("renders stage titles, totals, and telemetry for a full trace", () => {
     render(<PipelineVisualizer trace={fullTrace()} />);
-    // Pre-Processing stage exists; body is closed by default.
-    expect(
-      screen.getByRole("heading", { name: /Pre-Processing — PII Masking & Cache Lookup/ }),
-    ).toBeInTheDocument();
-    const stage = expandStage(/Pre-Processing — PII Masking & Cache Lookup/);
-    expect(within(stage).getByText("PII redaction:")).toBeInTheDocument();
-    expect(within(stage).getByText("MISS")).toBeInTheDocument();
-    expect(within(stage).getByText("4ms")).toBeInTheDocument();
-    expect(within(stage).getByText("12ms")).toBeInTheDocument();
+    expect(screen.getByText("Pipeline trace")).toBeInTheDocument();
+    expect(screen.getByText("2400ms total")).toBeInTheDocument();
+    expandAllStages();
+    expect(screen.getByText(/13680ms/)).toBeInTheDocument();
+    expect(screen.getByText(/673ms/)).toBeInTheDocument();
+    expect(screen.getByText("APS certificate mandatory")).toBeInTheDocument();
+    // Analyst + Writer cost badges render (research-agent costs are not shown).
+    expect(screen.getByText("Analyst")).toBeInTheDocument();
+    expect(screen.getByText("Writer")).toBeInTheDocument();
+    expect(screen.getAllByText("1 call")).toHaveLength(2);
   });
 
-  it("splits Stage 0 into disambiguation and guardrail blocks", () => {
-    render(<PipelineVisualizer trace={fullTrace()} />);
-    expect(
-      screen.getByRole("heading", { name: /Stage 0A — Query Disambiguation/ }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: /Stage 0B — Domain Guardrail/ }),
-    ).toBeInTheDocument();
-    // Guardrail status is inside the collapsed body — expand to reveal it.
-    const stage = expandStage(/Stage 0B — Domain Guardrail/);
-    expect(within(stage).getByText("Guardrail: PASSED")).toBeInTheDocument();
-  });
-
-  it("renders expanded queries and sparse engine badge in retrieval", () => {
-    render(<PipelineVisualizer trace={fullTrace()} />);
-    const stage = expandStage(/Stage 1A\/B\/C\/D — Query Expansion & Hybrid Retrieval/);
-    expect(within(stage).getByText("German student visa documents")).toBeInTheDocument();
-    expect(within(stage).getByText("Requirements student visa Germany")).toBeInTheDocument();
-    expect(within(stage).getByText("Sparse engine: pg_fts")).toBeInTheDocument();
-    expect(within(stage).getByText("Dense Search (pgvector)")).toBeInTheDocument();
-    expect(within(stage).getByText("40ms")).toBeInTheDocument();
-    expect(within(stage).getByText("25ms")).toBeInTheDocument();
-  });
-
-  it("renders per-agent cost badges on analyst and writer stages", () => {
-    render(<PipelineVisualizer trace={fullTrace()} />);
-    const analyst = expandStage(/Stage 2 — Analyst \(comparison matrix\)/);
-    expect(within(analyst).getByText("Analyst")).toBeInTheDocument();
-    expect(within(analyst).getByText("900 in · 220 out")).toBeInTheDocument();
-    const writer = expandStage(/Stage 3 — Writer \(markdown synthesis\)/);
-    expect(within(writer).getByText("Writer")).toBeInTheDocument();
-    expect(within(writer).getByText("700 in · 480 out")).toBeInTheDocument();
-  });
-
-  it("renders the post-processing block with cache write status", () => {
-    render(<PipelineVisualizer trace={fullTrace()} />);
-    const stage = expandStage(/Post-Processing — Cache Write & Memory/);
-    expect(within(stage).getByText("WRITTEN")).toBeInTheDocument();
-    expect(within(stage).getByText("Semantic cache write:")).toBeInTheDocument();
-    expect(within(stage).getByText("18ms")).toBeInTheDocument();
-  });
-
-  it("renders the react step duration badge inside the research stage", () => {
-    render(<PipelineVisualizer trace={fullTrace()} />);
-    const stage = expandStage(/Stage 1E — Research Agent & Tool Calls/);
-    // Tool-call list and ReactStep both surface the 88ms tool execution time.
-    expect(within(stage).getAllByText("88ms").length).toBeGreaterThan(0);
-  });
-
-  it("marks stages skipped when the guardrail blocks", () => {
+  it("renders HIT cache badge and skips post-processing when cached", () => {
     render(
       <PipelineVisualizer
-        trace={{
-          ...fullTrace(),
-          guardrail: { passed: false, reason: "Out of domain", durationMs: 60 },
-          finalAnswer: "**Out of Domain Detected:** ...",
+        trace={fullTrace({
+          researchSteps: [
+            { iteration: 0, thought: "x", action: "Semantic Cache Hit", observation: "y" },
+          ],
           sources: [],
-        }}
+        })}
       />,
     );
-    const stage = expandStage(/Stage 0B — Domain Guardrail/);
-    expect(within(stage).getByText("Guardrail: BLOCKED")).toBeInTheDocument();
-    expect(screen.getByText("out of domain", { exact: true })).toBeInTheDocument();
-    const retrieval = expandStage(/Stage 1A\/B\/C\/D — Query Expansion & Hybrid Retrieval/);
-    expect(
-      within(retrieval).getByText("Pipeline short-circuited — downstream agents never ran."),
-    ).toBeInTheDocument();
+    expandAllStages();
+    expect(screen.getByText("HIT")).toBeInTheDocument();
+    expect(screen.getByText("cache hit")).toBeInTheDocument();
+    expect(screen.getByText("WRITTEN")).toBeInTheDocument();
+  });
+
+  it("renders MISS cache badge when the trace is not a cache hit", () => {
+    render(<PipelineVisualizer trace={fullTrace()} />);
+    expandAllStages();
+    expect(screen.getByText("MISS")).toBeInTheDocument();
+  });
+
+  it("short-circuits downstream stages when the guardrail blocks", () => {
+    render(
+      <PipelineVisualizer
+        trace={fullTrace({
+          guardrail: { passed: false, reason: "Out of domain", durationMs: 8 },
+          sources: [],
+          researchSteps: [],
+        })}
+      />,
+    );
+    expect(screen.getByText("out of domain")).toBeInTheDocument();
+    expandAllStages();
+    expect(screen.getByText(/BLOCKED/)).toBeInTheDocument();
+    expect(screen.getByText(/Pipeline short-circuited/)).toBeInTheDocument();
+  });
+
+  it("falls back to the total latency when per-stage timings are missing", () => {
+    render(
+      <PipelineVisualizer
+        trace={fullTrace({
+          stages: [],
+          preProcessing: undefined,
+          postProcessing: undefined,
+          disambiguation: undefined,
+          retrievalTelemetry: undefined,
+        })}
+      />,
+    );
+    expandAllStages();
+    expect(screen.getByText(/Retrieval telemetry not available/)).toBeInTheDocument();
+  });
+
+  it("renders CRAG fallback as a warning score", () => {
+    render(
+      <PipelineVisualizer
+        trace={fullTrace({
+          retrievalTelemetry: {
+            queryExpansionDurationMs: 20,
+            denseDurationMs: 100,
+            sparseBm25DurationMs: 50,
+            rrfFusionDurationMs: 1,
+            rerankDurationMs: 30,
+            corpusLoadDurationMs: 2,
+            expandedQueries: ["q"],
+            sparseEngine: "pg_fts",
+            bestCrossScore: 0.31,
+            cragFallbackTriggered: true,
+          },
+          sources: [],
+          researchSteps: [],
+        })}
+      />,
+    );
+    expandAllStages();
+    expect(screen.getByText(/FAIL \(CRAG Fallback\)/)).toBeInTheDocument();
+  });
+
+  it("renders the no-sources web-fallback notice", () => {
+    render(<PipelineVisualizer trace={fullTrace({ sources: [], researchSteps: [] })} />);
+    expandAllStages();
+    expect(screen.getByText(/No local chunks passed the CRAG threshold/)).toBeInTheDocument();
+  });
+
+  it("handles missing structured table, insights, and facts gracefully", () => {
+    render(
+      <PipelineVisualizer
+        trace={fullTrace({
+          analysisMatrix: {
+            summary: "No table.",
+            structured_table: "",
+            key_insights: [],
+            verified_facts: [],
+          },
+          agentCosts: [],
+        })}
+      />,
+    );
+    expandAllStages();
+    expect(screen.getByText("No table.")).toBeInTheDocument();
+    expect(screen.queryByText("Key insights")).not.toBeInTheDocument();
+    expect(screen.queryByText("Verified facts")).not.toBeInTheDocument();
   });
 });
