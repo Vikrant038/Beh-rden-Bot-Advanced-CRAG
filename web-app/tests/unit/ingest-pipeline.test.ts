@@ -13,7 +13,13 @@ vi.mock("@/server/db", () => {
   };
   return {
     prisma: {
-      document: { findUnique: vi.fn(), findMany: vi.fn(), upsert: vi.fn(), update: vi.fn() },
+      document: {
+        findUnique: vi.fn(),
+        findMany: vi.fn(),
+        upsert: vi.fn(),
+        update: vi.fn(),
+        updateMany: vi.fn(async () => ({ count: 1 })),
+      },
       documentParentChunk: { deleteMany: vi.fn(), create: vi.fn() },
       documentChunk: { deleteMany: vi.fn(), updateMany: vi.fn() },
       semanticCacheEntry: { findMany: vi.fn(), deleteMany: vi.fn() },
@@ -49,6 +55,7 @@ const prismaMock = prisma as unknown as {
     findMany: ReturnType<typeof vi.fn>;
     upsert: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
+    updateMany: ReturnType<typeof vi.fn>;
   };
   documentParentChunk: { deleteMany: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
   documentChunk: { deleteMany: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn> };
@@ -111,6 +118,12 @@ describe("ingestUrl", () => {
     expect(txMock.__tx.documentParentChunk.deleteMany).toHaveBeenCalled();
     expect(txMock.__tx.$executeRaw).toHaveBeenCalled();
     expect(txMock.__tx.document.update).toHaveBeenCalled();
+    // A successful CLI/direct-pipeline ingest must flip the document to SYNCED
+    // (the job worker does this too; without it the admin list spins forever).
+    expect(prismaMock.document.updateMany).toHaveBeenCalledWith({
+      where: { id: "doc-1" },
+      data: { status: "SYNCED", lastError: null },
+    });
     expect(mockedCache).toHaveBeenCalledWith("doc-1");
     expect(result.cacheInvalidated).toBe(2);
   });
@@ -178,6 +191,12 @@ describe("ingestUrl", () => {
     expect(result.status).toBe("skipped");
     expect(result.chunkCount).toBe(7);
     expect(txMock.__tx.$executeRaw).not.toHaveBeenCalled();
+    // A content-unchanged skip with chunks present must self-heal a stuck
+    // INGESTING flag (that is what "Sync all" hits on an already-seeded corpus).
+    expect(prismaMock.document.updateMany).toHaveBeenCalledWith({
+      where: { url: "https://www.example.com/visa-guide" },
+      data: { status: "SYNCED", lastError: null },
+    });
   });
 
   it("updates an existing document when content changed", async () => {

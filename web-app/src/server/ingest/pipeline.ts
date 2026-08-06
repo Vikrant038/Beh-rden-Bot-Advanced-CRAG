@@ -167,6 +167,18 @@ async function persistIngested(
         data: { sourceName: titleOverride },
       });
     }
+    // Self-heal a stuck INGESTING flag: content matches what is stored, so the
+    // document IS in sync — mark it SYNCED instead of leaving the admin list
+    // spinning forever. Only when chunks actually exist (a 0-chunk row with a
+    // matching hash is not "synced", it's a broken record).
+    if (existing.chunkCount > 0 && existing.status !== "SYNCED") {
+      await prisma.document
+        .updateMany({
+          where: { url: sourceKey },
+          data: { status: "SYNCED", lastError: null },
+        })
+        .catch(() => {});
+    }
     logger.info({ url: sourceKey }, "[INGEST] content unchanged; skipping");
     return {
       url: sourceKey,
@@ -311,6 +323,17 @@ async function persistIngested(
 
   const invalidated = await semanticCache.invalidateForDocument(documentId);
   await getCorpusProvider().invalidate();
+
+  // Mark the document SYNCED on completion. The job worker (jobs.ts
+  // finalizeJob) also does this, but CLI/direct pipeline runs never reach it —
+  // without this write the document stays INGESTING forever even though its
+  // chunks are stored (the bug that left the whole admin list spinning).
+  await prisma.document
+    .updateMany({
+      where: { id: documentId },
+      data: { status: "SYNCED", lastError: null },
+    })
+    .catch(() => {});
 
   logger.info(
     { url: sourceKey, status: "updated", chunks: childCount, invalidated },
