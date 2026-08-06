@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   AlertTriangle,
   Bookmark,
@@ -45,6 +46,19 @@ function friendlyError(error: string | null): string | null {
 export function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { status: sessionStatus } = useSession();
+
+  // Already signed in? Skip the login card entirely. The home page CTAs now
+  // route signed-in users straight to /chat, and a direct /login visit while
+  // authenticated should land in chat too — not on a redundant login form.
+  // Exception: when an OAuth `error` param is present (e.g. AccessDenied from
+  // the callback error flow), keep the page so the error banner stays visible.
+  useEffect(() => {
+    if (sessionStatus === "authenticated" && !searchParams.get("error")) {
+      router.replace("/chat");
+    }
+  }, [sessionStatus, searchParams, router]);
+
   const [guestOpen, setGuestOpen] = useState(false);
   const [startingGuest, setStartingGuest] = useState(false);
   const [guestError, setGuestError] = useState<string | null>(null);
@@ -85,7 +99,7 @@ export function LoginContent() {
         Back to home
       </Link>
 
-      <div className="relative z-10 mx-auto grid min-h-screen w-full max-w-5xl items-center gap-10 px-6 py-16 lg:grid-cols-2">
+      <div className="relative z-10 mx-auto grid min-h-screen w-full max-w-5xl items-center gap-10 px-4 py-10 sm:px-6 sm:py-16 lg:grid-cols-2">
         {/* Brand story column */}
         <div className="hidden lg:block">
           <div className="flex items-center gap-2">
@@ -121,7 +135,7 @@ export function LoginContent() {
 
         {/* Login card column */}
         <div className="mx-auto w-full max-w-sm">
-          <div className="rounded-2xl border border-glass-border bg-glass p-8 shadow-glass backdrop-blur">
+          <div className="rounded-2xl border border-glass-border bg-glass p-6 shadow-glass backdrop-blur sm:p-8">
             <div className="flex items-center gap-2 lg:hidden">
               <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-primary-foreground">
                 <GraduationCap className="h-5 w-5" />
@@ -167,14 +181,14 @@ export function LoginContent() {
               onClick={() => void continueAsGuest()}
               disabled={startingGuest}
               aria-expanded={guestOpen}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm text-muted transition hover:bg-surface-hover hover:text-foreground disabled:opacity-60"
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm text-muted transition hover:bg-surface-hover hover:text-foreground disabled:opacity-60 active:scale-[0.99]"
             >
               <LogIn className="h-4 w-4" />
               {startingGuest ? "Starting…" : "Continue as guest"}
             </button>
 
             {guestOpen && (
-              <div className="mt-3 rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-[11px] leading-relaxed text-muted">
+              <div className="mt-3 rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-xs leading-relaxed text-muted">
                 Browse and ask questions without an account — free guest browsing includes up to{" "}
                 {GUEST_PROMPT_LIMIT} prompts. Your chats stay on this device, and when you sign in
                 they&apos;re saved to your account automatically.

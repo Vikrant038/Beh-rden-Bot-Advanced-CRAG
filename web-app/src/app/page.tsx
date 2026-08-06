@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Image from "next/image";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -129,8 +131,8 @@ function StatCard({
   decimals?: number;
 }) {
   return (
-    <GlassCard className="p-5 text-center">
-      <p className="text-2xl font-bold text-foreground sm:text-3xl">
+    <GlassCard className="p-4 text-center sm:p-5">
+      <p className="text-2xl font-bold tabular-nums text-foreground sm:text-3xl">
         <CountUp value={value} suffix={suffix} decimals={decimals} />
       </p>
       <p className="mt-1 text-xs text-muted sm:text-sm">{label}</p>
@@ -145,6 +147,15 @@ export default function LandingPage() {
   const [changelogOpen, setChangelogOpen] = useState(false);
   const reduceMotion = useReducedMotion();
   const { stats, isLoading, isError } = useCorpusStats();
+  const pathname = usePathname();
+  const { status: sessionStatus } = useSession();
+
+  // Session-aware CTAs: a signed-in user pressing "Get started" / "Start asking"
+  // goes straight to chat instead of bouncing through the login page on every
+  // visit from the home button. Unauthenticated (or session still loading)
+  // visitors get the login page as before.
+  const startHref = sessionStatus === "authenticated" ? "/chat" : "/login";
+  const browseHref = sessionStatus === "authenticated" ? "/sources" : "/login";
 
   useEffect(() => {
     const onScroll = () => {
@@ -153,6 +164,20 @@ export default function LandingPage() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // #31 — close the mobile menu on Escape and on route change.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [menuOpen]);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
@@ -168,11 +193,11 @@ export default function LandingPage() {
 
   return (
     <div id="main" className="relative min-h-screen overflow-hidden bg-background">
-      <div className="gradient-mesh pointer-events-none absolute inset-0" />
+      <div className="gradient-mesh pointer-events-none absolute inset-0 opacity-40 md:opacity-100" />
 
-      {/* ─── Sticky glass navbar ─── */}
+      {/* ─── Sticky glass navbar (#13: slimmer on mobile) ─── */}
       <header className="sticky top-0 z-30 border-b border-glass-border bg-background/70 backdrop-blur-xl">
-        <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
+        <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-2 sm:px-6 md:py-3">
           <Link href="/" className="flex items-center gap-2 font-semibold">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-primary-foreground">
               <GraduationCap className="h-5 w-5" />
@@ -195,7 +220,7 @@ export default function LandingPage() {
           <div className="flex items-center gap-2">
             <ThemeToggle compact />
             <Link
-              href="/login"
+              href={startHref}
               className="hidden rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover md:inline-block"
             >
               Get started
@@ -226,7 +251,7 @@ export default function LandingPage() {
                 </a>
               ))}
               <Link
-                href="/login"
+                href={startHref}
                 onClick={() => setMenuOpen(false)}
                 className="mt-2 rounded-xl bg-primary px-4 py-2.5 text-center text-sm font-medium text-primary-foreground transition hover:bg-primary-hover"
               >
@@ -237,11 +262,11 @@ export default function LandingPage() {
         )}
       </header>
 
-      <main className="relative z-10 mx-auto max-w-6xl px-6 pb-24 pt-14 text-center">
+      <main className="relative z-10 mx-auto max-w-6xl px-4 pb-16 pt-12 text-center sm:px-6 sm:pb-24 sm:pt-14">
         {/* ─── Hero ─── */}
         <motion.div {...reveal} transition={{ duration: 0.5 }}>
           <GlassCard className="mx-auto max-w-3xl overflow-hidden">
-            <div className="relative aspect-video w-full overflow-hidden">
+            <div className="relative aspect-[4/3] w-full overflow-hidden sm:aspect-video">
               <Image
                 src="/Images/hero-banner.jpg"
                 alt="German universities, student visas, and blocked accounts guide"
@@ -252,7 +277,7 @@ export default function LandingPage() {
               />
             </div>
             <div className="px-6 pb-10 pt-8 sm:px-10">
-              <h1 className="text-4xl font-bold leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl">
+              <h1 className="text-3xl font-bold leading-[1.1] tracking-tight min-[400px]:text-4xl sm:text-5xl lg:text-6xl">
                 Your AI Guide to{" "}
                 <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
                   German Immigration
@@ -264,14 +289,14 @@ export default function LandingPage() {
               </p>
               <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <Link
-                  href="/login"
-                  className="cta-shimmer inline-block w-full rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground shadow-glass transition hover:bg-primary-hover active:scale-[0.98] sm:w-auto"
+                  href={startHref}
+                  className="cta-shimmer inline-block w-full max-w-xs rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground shadow-glass transition hover:bg-primary-hover active:scale-[0.98] sm:w-auto"
                 >
                   Start asking →
                 </Link>
                 <a
                   href="#how-it-works"
-                  className="inline-block w-full rounded-xl border border-glass-border bg-glass px-8 py-3 text-sm font-medium shadow-glass backdrop-blur transition hover:bg-surface-hover sm:w-auto"
+                  className="inline-block w-full max-w-xs rounded-xl border border-glass-border bg-glass px-8 py-3 text-sm font-medium shadow-glass backdrop-blur transition hover:bg-surface-hover sm:w-auto"
                 >
                   See how it works
                 </a>
@@ -284,7 +309,7 @@ export default function LandingPage() {
         <motion.section
           {...reveal}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="mx-auto mt-16 grid max-w-4xl grid-cols-2 gap-4 lg:grid-cols-4"
+          className="mx-auto mt-16 grid max-w-4xl grid-cols-1 gap-4 min-[360px]:grid-cols-2 lg:grid-cols-4"
           aria-label="Live corpus statistics"
         >
           {isLoading ? (
@@ -322,7 +347,7 @@ export default function LandingPage() {
           className="mt-24 grid items-center gap-10 text-left lg:grid-cols-2"
           id="demo"
         >
-          <div>
+          <div className="order-last lg:order-first">
             <p className="text-xs font-semibold uppercase tracking-wider text-accent">
               See it in action
             </p>
@@ -354,7 +379,7 @@ export default function LandingPage() {
           {...reveal}
           transition={{ duration: 0.5, delay: 0.05 }}
           id="how-it-works"
-          className="mt-24 scroll-mt-24"
+          className="mt-24 scroll-mt-20 md:scroll-mt-24"
         >
           <h2 className="text-2xl font-semibold sm:text-3xl">How it works</h2>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
@@ -378,12 +403,14 @@ export default function LandingPage() {
                 body: "Every answer links the sources it was grounded on.",
               },
             ].map((step) => (
-              <GlassCard key={step.step} className="p-6 text-left">
-                <span className="grid h-9 w-9 place-items-center rounded-full bg-primary/15 text-sm font-bold text-primary">
+              <GlassCard key={step.step} className="flex items-start gap-4 p-6 text-left sm:block">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/15 text-sm font-bold text-primary">
                   {step.step}
                 </span>
-                <h3 className="mt-3 font-semibold">{step.title}</h3>
-                <p className="mt-2 text-sm text-muted">{step.body}</p>
+                <div className="min-w-0">
+                  <h3 className="mt-0 font-semibold sm:mt-3">{step.title}</h3>
+                  <p className="mt-2 text-sm text-muted">{step.body}</p>
+                </div>
               </GlassCard>
             ))}
           </div>
@@ -394,7 +421,7 @@ export default function LandingPage() {
           {...reveal}
           transition={{ duration: 0.5 }}
           id="features"
-          className="mt-24 scroll-mt-24"
+          className="mt-24 scroll-mt-20 md:scroll-mt-24"
         >
           <h2 className="text-2xl font-semibold sm:text-3xl">Built for accuracy and privacy</h2>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
@@ -405,8 +432,8 @@ export default function LandingPage() {
               const Icon = feature.icon;
               return (
                 <motion.div key={feature.title} {...reveal} transition={{ duration: 0.4 }}>
-                  <GlassCard className="h-full p-5 transition hover:-translate-y-0.5 hover:shadow-glass">
-                    <span className="grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary">
+                  <GlassCard className="h-full p-4 transition hover:-translate-y-0.5 hover:shadow-glass sm:p-5">
+                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary sm:h-11 sm:w-11">
                       <Icon className="h-5 w-5" />
                     </span>
                     <h3 className="mt-3 font-semibold">{feature.title}</h3>
@@ -423,7 +450,7 @@ export default function LandingPage() {
           {...reveal}
           transition={{ duration: 0.5 }}
           id="corpus"
-          className="mt-24 scroll-mt-24"
+          className="mt-24 scroll-mt-20 md:scroll-mt-24"
         >
           <h2 className="text-2xl font-semibold sm:text-3xl">Built on a real legal corpus</h2>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
@@ -439,7 +466,10 @@ export default function LandingPage() {
                     {index + 1}
                   </span>
                   <div className="min-w-0">
-                    <h3 className="truncate text-sm font-medium" title={source.title}>
+                    <h3
+                      className="line-clamp-2 text-sm font-medium sm:truncate"
+                      title={source.title}
+                    >
                       {source.title}
                     </h3>
                     <p className="mt-1 text-xs text-muted">
@@ -469,8 +499,8 @@ export default function LandingPage() {
             {TOPICS.map((topic) => (
               <a
                 key={topic}
-                href="/login"
-                className="rounded-full border border-glass-border bg-glass px-3.5 py-1.5 text-xs text-muted shadow-glass backdrop-blur transition hover:border-primary hover:text-foreground"
+                href={startHref}
+                className="grid min-h-11 place-items-center rounded-full border border-glass-border bg-glass px-3.5 py-1.5 text-xs text-muted shadow-glass backdrop-blur transition hover:border-primary hover:text-foreground"
               >
                 {topic}
               </a>
@@ -483,7 +513,7 @@ export default function LandingPage() {
           {...reveal}
           transition={{ duration: 0.5 }}
           id="faq"
-          className="mx-auto mt-24 max-w-2xl scroll-mt-24 text-left"
+          className="mx-auto mt-24 max-w-2xl scroll-mt-20 text-left md:scroll-mt-24"
         >
           <h2 className="text-center text-2xl font-semibold sm:text-3xl">
             Frequently asked questions
@@ -497,7 +527,7 @@ export default function LandingPage() {
                     type="button"
                     onClick={() => setOpenFaq(open ? null : index)}
                     aria-expanded={open}
-                    className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left font-medium transition hover:bg-surface-hover"
+                    className="flex min-h-11 w-full items-center justify-between gap-4 px-5 py-3.5 text-left font-medium transition hover:bg-surface-hover sm:py-4"
                   >
                     {item.question}
                     <ArrowRight
@@ -513,7 +543,7 @@ export default function LandingPage() {
 
         {/* ─── Final CTA ─── */}
         <motion.section {...reveal} transition={{ duration: 0.5 }} className="mt-24">
-          <GlassCard className="relative overflow-hidden px-8 py-14">
+          <GlassCard className="relative overflow-hidden px-5 py-10 sm:px-8 sm:py-14">
             <h2 className="text-2xl font-semibold sm:text-3xl">
               Ready to start your German journey?
             </h2>
@@ -523,13 +553,13 @@ export default function LandingPage() {
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
-                href="/login"
+                href={startHref}
                 className="cta-shimmer inline-block w-full rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground shadow-glass transition hover:bg-primary-hover active:scale-[0.98] sm:w-auto"
               >
                 Start asking →
               </Link>
               <Link
-                href="/login"
+                href={browseHref}
                 className="inline-block w-full rounded-xl border border-glass-border bg-glass px-8 py-3 text-sm font-medium shadow-glass backdrop-blur transition hover:bg-surface-hover sm:w-auto"
               >
                 Browse the knowledge base
@@ -540,7 +570,8 @@ export default function LandingPage() {
       </main>
 
       <footer className="relative z-10 border-t border-glass-border bg-background/60 px-6 py-8 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 text-center sm:flex-row sm:text-left">
+        {" "}
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 text-center sm:flex-row sm:text-left">
           <div>
             <p className="font-semibold">Behörden-Bot</p>
             <p className="mt-1 text-xs text-muted">
@@ -576,7 +607,7 @@ export default function LandingPage() {
           type="button"
           onClick={scrollToTop}
           aria-label="Back to top"
-          className="fixed bottom-6 right-6 z-40 grid h-11 w-11 place-items-center rounded-full border border-glass-border bg-glass text-foreground shadow-glass backdrop-blur transition hover:bg-surface-hover"
+          className="fixed bottom-20 right-4 z-40 grid h-11 w-11 place-items-center rounded-full border border-glass-border bg-glass text-foreground shadow-glass backdrop-blur transition hover:bg-surface-hover sm:bottom-6 sm:right-6"
         >
           <ArrowUp className="h-4 w-4" />
         </button>
