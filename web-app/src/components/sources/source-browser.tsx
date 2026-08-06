@@ -199,8 +199,8 @@ export function SourceBrowser() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="relative min-w-0 flex-1">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <div className="relative w-full sm:w-auto sm:min-w-0 sm:flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <input
             type="search"
@@ -212,73 +212,75 @@ export function SourceBrowser() {
           />
         </div>
 
-        <div
-          role="radiogroup"
-          aria-label="Filter by document type"
-          className="inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1"
-        >
-          {(["all", "pdf", "web"] as const).map((option) => (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+          <div
+            role="radiogroup"
+            aria-label="Filter by document type"
+            className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-border bg-surface p-1"
+          >
+            {(["all", "pdf", "web"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                role="radio"
+                aria-checked={typeFilter === option}
+                onClick={() => setTypeFilter(option)}
+                className={`grid min-h-11 place-items-center rounded-lg px-3 py-1.5 text-xs capitalize transition focus-visible:ring-2 focus-visible:ring-primary ${
+                  typeFilter === option
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted hover:bg-surface-hover hover:text-foreground"
+                }`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+
+          <div
+            role="radiogroup"
+            aria-label="View mode"
+            className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-border bg-surface p-1"
+          >
             <button
-              key={option}
               type="button"
               role="radio"
-              aria-checked={typeFilter === option}
-              onClick={() => setTypeFilter(option)}
-              className={`rounded-lg px-3 py-1.5 text-xs capitalize transition focus-visible:ring-2 focus-visible:ring-primary ${
-                typeFilter === option
+              aria-checked={view === "list"}
+              onClick={() => setView("list")}
+              aria-label="List view"
+              className={`grid min-h-11 place-items-center rounded-lg p-2 transition ${
+                view === "list"
                   ? "bg-primary text-primary-foreground"
-                  : "text-muted hover:bg-surface-hover hover:text-foreground"
+                  : "text-muted hover:text-foreground"
               }`}
             >
-              {option}
+              <List className="h-4 w-4" />
             </button>
-          ))}
-        </div>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={view === "grid"}
+              onClick={() => setView("grid")}
+              aria-label="Grid view"
+              className={`grid min-h-11 place-items-center rounded-lg p-2 transition ${
+                view === "grid"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted hover:text-foreground"
+              }`}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+          </div>
 
-        <div
-          role="radiogroup"
-          aria-label="View mode"
-          className="inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1"
-        >
           <button
             type="button"
-            role="radio"
-            aria-checked={view === "list"}
-            onClick={() => setView("list")}
-            aria-label="List view"
-            className={`rounded-lg p-2 transition ${
-              view === "list"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted hover:text-foreground"
-            }`}
+            onClick={refresh}
+            aria-label="Refresh knowledge base"
+            title="Refresh"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-border text-muted transition hover:bg-surface-hover hover:text-foreground"
           >
-            <List className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={view === "grid"}
-            onClick={() => setView("grid")}
-            aria-label="Grid view"
-            className={`rounded-lg p-2 transition ${
-              view === "grid"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            <LayoutGrid className="h-4 w-4" />
+            <RefreshCw className="h-4 w-4" />
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={refresh}
-          aria-label="Refresh knowledge base"
-          title="Refresh"
-          className="grid h-10 w-10 place-items-center rounded-xl border border-border text-muted transition hover:bg-surface-hover hover:text-foreground"
-        >
-          <RefreshCw className="h-4 w-4" />
-        </button>
       </div>
 
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
@@ -382,6 +384,14 @@ export function SourceBrowser() {
             />
           ) : (
             <>
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                className="mb-3 inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs text-muted transition hover:bg-surface-hover md:hidden"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                Back to documents
+              </button>
               <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -521,14 +531,14 @@ export function SourceBrowser() {
                           }`}
                         >
                           <div className="flex items-start justify-between gap-3">
-                            <p className="text-sm leading-relaxed">
+                            <p className="break-words text-sm leading-relaxed">
                               {highlightMatches(chunk.text, chunkSearch)}
                             </p>
                             <button
                               type="button"
                               onClick={() => void handleCopyChunk(chunk.text)}
                               aria-label={`Copy chunk #${chunk.id}`}
-                              className="shrink-0 rounded-lg p-2 text-muted opacity-0 transition group-hover:opacity-100 hover:bg-surface-hover hover:text-foreground"
+                              className="shrink-0 rounded-lg p-2 text-muted opacity-100 transition hover:bg-surface-hover hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                             >
                               <Copy className="h-3.5 w-3.5" />
                             </button>

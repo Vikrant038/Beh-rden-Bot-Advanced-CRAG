@@ -9,5 +9,7 @@ interface GlassCardProps extends React.HTMLAttributes<HTMLDivElement> {
  * `backdrop-filter` is unsupported (see `.glass-card` in globals.css).
  */
 export function GlassCard({ className, as: Component = "div", ...props }: GlassCardProps) {
-  return <Component className={cn("glass-card rounded-2xl", className)} {...props} />;
+  return (
+    <Component className={cn("glass-card min-w-0 break-words rounded-2xl", className)} {...props} />
+  );
 }

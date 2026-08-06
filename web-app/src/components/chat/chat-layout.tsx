@@ -9,6 +9,16 @@ import { cn } from "@/lib/utils";
 export function ChatLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
+  // #35 — on a cold load (direct URL) there's no history to go back to; fall
+  // back to /chat when the back button would otherwise leave the app.
+  const goBack = useCallback(() => {
+    if (typeof window !== "undefined" && window.history.length <= 1) {
+      router.push("/chat");
+    } else {
+      router.back();
+    }
+  }, [router]);
+
   // ── Sidebar collapse state (md+) ─────────────────────────────────────────
   // lg+ (1024px+): always expanded (w-72), no hover behavior.
   // md (768–1023px): collapsed to icon rail (w-16), expands on hover.
@@ -135,7 +145,7 @@ export function ChatLayout({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 z-50 md:hidden">
           {/* Backdrop */}
           <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            className="drawer-backdrop absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={closeMobile}
             aria-hidden="true"
           />
@@ -147,7 +157,7 @@ export function ChatLayout({ children }: { children: React.ReactNode }) {
             role="dialog"
             aria-modal="true"
             aria-label="Navigation"
-            className="absolute inset-y-0 left-0 w-72 overflow-y-auto bg-surface shadow-2xl focus:outline-none"
+            className="drawer-panel absolute inset-y-0 left-0 w-[85vw] max-w-xs overflow-y-auto overscroll-contain bg-surface shadow-2xl focus:outline-none"
           >
             {/* Panel header */}
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -182,7 +192,7 @@ export function ChatLayout({ children }: { children: React.ReactNode }) {
         <header className="flex items-center gap-3 border-b border-border bg-background/80 px-4 py-3 backdrop-blur md:hidden">
           <button
             type="button"
-            onClick={() => router.back()}
+            onClick={goBack}
             aria-label="Go back"
             className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
           >

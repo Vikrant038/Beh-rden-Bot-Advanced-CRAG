@@ -28,7 +28,7 @@ export function DialogContent({
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out" />
       <DialogPrimitive.Content
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-glass-border bg-surface p-6 shadow-2xl",
+          "fixed left-1/2 top-1/2 z-50 max-h-[85dvh] w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-2xl border border-glass-border bg-surface p-6 shadow-2xl",
           className,
         )}
         {...props}
@@ -37,7 +37,7 @@ export function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             aria-label="Close"
-            className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
+            className="absolute right-4 top-4 grid h-11 w-11 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground sm:h-9 sm:w-9"
           >
             <X className="h-4 w-4" />
           </DialogPrimitive.Close>

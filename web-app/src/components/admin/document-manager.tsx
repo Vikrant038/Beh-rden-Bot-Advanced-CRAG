@@ -196,7 +196,7 @@ function DocumentPreviewModal({
                 }}
                 disabled={chunkNavigator.index <= 0}
                 aria-label="Previous chunk"
-                className="grid min-h-9 min-w-9 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
+                className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
@@ -214,7 +214,7 @@ function DocumentPreviewModal({
                 }}
                 disabled={chunkNavigator.index >= items.length - 1}
                 aria-label="Next chunk"
-                className="grid min-h-9 min-w-9 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
+                className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -562,7 +562,7 @@ export function DocumentManager() {
           document into the knowledge base.
         </p>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <div className="relative flex-1">
+          <div className="relative min-w-0 flex-1">
             <LinkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <input
               type="url"
@@ -574,14 +574,14 @@ export function DocumentManager() {
                 }
               }}
               placeholder="https://www.uni-assist.de/…"
-              className="w-full rounded-xl border border-border bg-background py-2.5 pl-9 pr-4 text-sm outline-none transition placeholder:text-muted focus:border-primary focus-visible:ring-2 focus-visible:ring-primary"
+              className="min-h-12 w-full rounded-xl border border-border bg-background py-2.5 pl-9 pr-4 text-sm outline-none transition placeholder:text-muted focus:border-primary focus-visible:ring-2 focus-visible:ring-primary"
             />
           </div>
           <button
             type="button"
             onClick={handleIngest}
             disabled={busy || !url.trim()}
-            className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover active:scale-[0.98] disabled:opacity-60"
+            className="min-h-12 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover active:scale-[0.98] disabled:opacity-60"
           >
             Ingest
           </button>
@@ -589,7 +589,7 @@ export function DocumentManager() {
             type="button"
             onClick={handleSync}
             disabled={busy}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm transition hover:bg-surface-hover active:scale-[0.98] disabled:opacity-60"
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm transition hover:bg-surface-hover active:scale-[0.98] disabled:opacity-60"
           >
             <RefreshCw className={`h-4 w-4 ${syncPending ? "animate-spin" : ""}`} />
             {syncPending ? "Syncing…" : "Sync all"}
@@ -601,7 +601,7 @@ export function DocumentManager() {
           onChange={(event) => setUrlTitle(event.target.value)}
           placeholder="Display name (optional) — defaults to the page title"
           aria-label="Optional display name"
-          className="mt-2 w-full rounded-xl border border-border bg-background px-4 py-2 text-sm outline-none transition placeholder:text-muted focus:border-primary focus-visible:ring-2 focus-visible:ring-primary"
+          className="mt-2 min-h-11 w-full rounded-xl border border-border bg-background px-4 py-2 text-sm outline-none transition placeholder:text-muted focus:border-primary focus-visible:ring-2 focus-visible:ring-primary"
         />
         {syncPending ? <IndeterminateBar label="Syncing all documents…" /> : null}
         {/* 10.2 — URL ingest now shows a progress bar while its job is polled. */}
@@ -800,7 +800,7 @@ export function DocumentManager() {
               <li
                 key={document.id}
                 className={cn(
-                  "glass-card group flex items-center gap-3 rounded-xl px-4 py-3",
+                  "glass-card group flex flex-wrap items-center gap-3 rounded-xl px-4 py-3",
                   checked && "border-primary/50",
                 )}
               >
@@ -820,9 +820,9 @@ export function DocumentManager() {
                   {checked ? <CheckCircle2 className="h-4 w-4" /> : null}
                 </button>
                 <FileText className="h-4 w-4 shrink-0 text-accent" />
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 basis-56">
                   <div className="flex items-center gap-2">
-                    <p className="truncate font-medium">{document.title}</p>
+                    <p className="line-clamp-2 font-medium">{document.title}</p>
                     <span
                       className={cn(
                         "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
@@ -857,7 +857,7 @@ export function DocumentManager() {
                     </a>
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-4 text-xs text-muted">
+                <div className="ml-auto flex shrink-0 items-center gap-3 text-xs text-muted sm:gap-4">
                   <span className="tabular-nums">{document.chunkCount} child chunks</span>
                   <span className="hidden sm:inline">{formatRelativeTime(document.updatedAt)}</span>
                   <button

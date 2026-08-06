@@ -123,7 +123,8 @@ export function ChatInput({
   const showQuickPrompts = suggestions.length > 0 && !isStreaming && value.trim() === "";
 
   return (
-    <div className="border-t border-border bg-background/80 p-4 backdrop-blur">
+    // #57 — keep the textarea clear of the iOS home indicator on notched phones
+    <div className="border-t border-border bg-background/80 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur">
       <div className="mx-auto max-w-3xl">
         {isStreaming && (
           <p className="mb-2 text-xs text-muted" role="status" aria-live="polite">
@@ -134,35 +135,36 @@ export function ChatInput({
           <div
             role="group"
             aria-label="Answer mode"
-            className="mb-2 inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-0.5"
+            // #55 — icons-only labels under 400px so the toggle never crowds the input row
+            className="mb-2 inline-flex items-center gap-1 overflow-x-auto rounded-xl border border-border bg-surface p-0.5"
           >
             <button
               type="button"
               onClick={() => onModeChange("standard")}
               aria-pressed={mode === "standard"}
               className={cn(
-                "flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition",
+                "flex min-h-9 items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition",
                 mode === "standard"
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-muted hover:text-foreground",
               )}
             >
               <BookOpen className="h-3 w-3" />
-              Standard
+              <span className="hidden min-[400px]:inline">Standard</span>
             </button>
             <button
               type="button"
               onClick={() => onModeChange("agentic")}
               aria-pressed={mode === "agentic"}
               className={cn(
-                "flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition",
+                "flex min-h-9 items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition",
                 mode === "agentic"
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-muted hover:text-foreground",
               )}
             >
               <Zap className="h-3 w-3" />
-              Agentic
+              <span className="hidden min-[400px]:inline">Agentic</span>
             </button>
           </div>
         )}
@@ -190,6 +192,7 @@ export function ChatInput({
             aria-describedby="chat-input-limit"
             className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm outline-none transition-[height] duration-150 placeholder:text-muted disabled:opacity-60"
           />
+          {/* #53 — shrink the four input controls below sm so they don't crowd the textarea */}
           {value && !isStreaming && (
             <button
               type="button"
@@ -198,7 +201,7 @@ export function ChatInput({
                 textareaRef.current?.focus();
               }}
               aria-label="Clear input"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground sm:h-10 sm:w-10"
             >
               <X className="h-4 w-4" />
             </button>
@@ -209,7 +212,7 @@ export function ChatInput({
               onClick={() => void pasteFromClipboard()}
               aria-label="Paste from clipboard"
               title="Paste from clipboard"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground sm:h-10 sm:w-10"
             >
               <ClipboardPaste className="h-4 w-4" />
             </button>
@@ -220,7 +223,7 @@ export function ChatInput({
               onClick={onStop}
               aria-label="Stop generating"
               title="Stop generating"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-glass-border bg-surface text-muted transition hover:bg-surface-hover hover:text-foreground"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-glass-border bg-surface text-muted transition hover:bg-surface-hover hover:text-foreground sm:h-10 sm:w-10"
             >
               <Square className="h-3.5 w-3.5 fill-muted-foreground text-muted-foreground" />
             </button>
@@ -230,14 +233,15 @@ export function ChatInput({
               onClick={submit}
               disabled={disabled || !value.trim()}
               aria-label="Send message"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted transition hover:text-foreground hover:shadow-sm hover:[&_svg]:stroke-[2.5] disabled:pointer-events-none disabled:opacity-40"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:text-foreground hover:shadow-sm hover:[&_svg]:stroke-[2.5] disabled:pointer-events-none disabled:opacity-40 sm:h-10 sm:w-10"
             >
               <SendHorizontal className="h-4 w-4" />
             </button>
           )}
         </div>
+        {/* #56 — quick-prompt chips scroll horizontally instead of wrapping into rows on phones */}
         {showQuickPrompts && (
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <div className="mt-2 flex flex-nowrap items-center gap-1.5 overflow-x-auto overscroll-x-contain pb-1 [-webkit-overflow-scrolling:touch]">
             <Sparkles className="h-3 w-3 shrink-0 text-accent" aria-hidden="true" />
             {suggestions.map((suggestion) => (
               <button
@@ -251,7 +255,8 @@ export function ChatInput({
             ))}
           </div>
         )}
-        <div className="mt-1.5 flex items-center justify-between gap-2">
+        {/* #54 — disclaimer + counter stack vertically below sm */}
+        <div className="mt-1.5 flex flex-col items-start justify-between gap-1 sm:flex-row sm:items-center sm:gap-2">
           <p className="flex items-center gap-1 text-[10px] text-muted">
             <AlertCircle className="h-3 w-3 shrink-0" aria-hidden="true" />
             <span title="AI answers can be wrong. Always verify important details against official sources.">

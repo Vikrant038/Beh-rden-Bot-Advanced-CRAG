@@ -24,15 +24,15 @@ export default function SettingsPage() {
   return (
     <div id="main" className="mx-auto max-w-2xl space-y-6 px-4 py-8">
       <BackButton href="/chat" label="Back to chat" />
-      <h1 className="text-2xl font-semibold">Settings</h1>
+      <h1 className="scroll-mt-20 text-2xl font-semibold">Settings</h1>
 
-      <section className="rounded-2xl border border-border bg-surface p-5">
+      <section className="scroll-mt-20 rounded-2xl border border-border bg-surface p-4 sm:p-5">
         <h2 className="mb-1 text-sm font-semibold">Appearance</h2>
         <p className="mb-3 text-sm text-muted">Choose how Behoerden-Bot looks on this device.</p>
         <ThemeToggle />
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface p-5">
+      <section className="scroll-mt-20 rounded-2xl border border-border bg-surface p-4 sm:p-5">
         <div className="mb-3 flex items-center gap-2">
           <Type className="h-4 w-4 text-muted" />
           <h2 className="text-sm font-semibold">Text size</h2>
@@ -51,7 +51,7 @@ export default function SettingsPage() {
               aria-checked={mounted && fontScale === option.value}
               onClick={() => setFontScale(option.value)}
               className={cn(
-                "rounded-lg px-3 py-1.5 text-sm transition focus-visible:ring-2 focus-visible:ring-primary",
+                "grid min-h-11 place-items-center rounded-lg px-3 py-1.5 text-sm transition focus-visible:ring-2 focus-visible:ring-primary",
                 fontScale === option.value
                   ? "bg-primary text-primary-foreground"
                   : "text-muted hover:bg-surface-hover hover:text-foreground",
@@ -63,7 +63,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface p-5">
+      <section className="scroll-mt-20 rounded-2xl border border-border bg-surface p-4 sm:p-5">
         <div className="mb-3 flex items-center gap-2">
           <MousePointer2 className="h-4 w-4 text-muted" />
           <h2 className="text-sm font-semibold">Motion</h2>
@@ -82,7 +82,7 @@ export default function SettingsPage() {
         </label>
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface p-5">
+      <section className="scroll-mt-20 rounded-2xl border border-border bg-surface p-4 sm:p-5">
         <div className="mb-3 flex items-center gap-2">
           <Contrast className="h-4 w-4 text-muted" />
           <h2 className="text-sm font-semibold">Contrast</h2>
@@ -101,9 +101,9 @@ export default function SettingsPage() {
         </label>
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface p-5">
+      <section className="scroll-mt-20 rounded-2xl border border-border bg-surface p-4 sm:p-5">
         <h2 className="mb-3 text-sm font-semibold">Profile</h2>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary text-lg font-semibold text-white">
             {user?.name?.charAt(0)?.toUpperCase() ?? user?.email?.charAt(0)?.toUpperCase() ?? "?"}
           </div>
@@ -125,7 +125,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface p-5">
+      <section className="scroll-mt-20 rounded-2xl border border-border bg-surface p-4 sm:p-5">
         <h2 className="mb-1 text-sm font-semibold">Account</h2>
         {user ? (
           <>

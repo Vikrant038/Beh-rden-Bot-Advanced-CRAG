@@ -45,12 +45,12 @@ export function PipelineStatus({ status }: { status: PipelineStage }) {
         </div>
         <span className="shrink-0 font-mono text-xs text-muted">{Math.round(progress)}%</span>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+      <div className="mt-2 flex items-center gap-x-3 gap-y-1 overflow-x-auto whitespace-nowrap pb-1 text-xs text-muted sm:flex-wrap sm:whitespace-normal">
         {STAGES.map((stage, index) => {
           const isActive = stage.keys.includes(status);
           const isComplete = activeIndex > index;
           return (
-            <div key={stage.primaryKey} className="flex items-center gap-1.5">
+            <div key={stage.primaryKey} className="flex shrink-0 items-center gap-1.5 sm:shrink">
               {isComplete ? (
                 <Check className="h-3 w-3 text-success" aria-hidden="true" />
               ) : (

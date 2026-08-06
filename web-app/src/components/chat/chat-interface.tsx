@@ -299,7 +299,7 @@ export function ChatInterface({
         </div>
       </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="touch-pan-y flex-1 overflow-y-auto">
         <div
           className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6"
           role="log"
@@ -388,7 +388,7 @@ export function ChatInterface({
                   key={followUp}
                   type="button"
                   onClick={() => void sendMessage(followUp, mode)}
-                  className="rounded-full border border-glass-border bg-glass px-3 py-1.5 text-xs text-muted backdrop-blur transition hover:border-primary hover:text-foreground"
+                  className="grid min-h-11 place-items-center rounded-full border border-glass-border bg-glass px-3 py-1.5 text-xs text-muted backdrop-blur transition hover:border-primary hover:text-foreground sm:inline-flex"
                 >
                   {followUp}
                 </button>
@@ -446,7 +446,7 @@ export function ChatInterface({
           type="button"
           onClick={scrollToBottom}
           aria-label="Scroll to latest message"
-          className="absolute bottom-28 right-6 z-20 grid h-10 w-10 place-items-center rounded-full border border-glass-border bg-glass text-foreground shadow-glass backdrop-blur transition hover:bg-surface-hover"
+          className="absolute bottom-36 right-4 z-20 grid h-10 w-10 place-items-center rounded-full border border-glass-border bg-glass text-foreground shadow-glass backdrop-blur transition hover:bg-surface-hover sm:bottom-28 sm:right-6"
         >
           <ArrowDown className="h-4 w-4" />
         </button>

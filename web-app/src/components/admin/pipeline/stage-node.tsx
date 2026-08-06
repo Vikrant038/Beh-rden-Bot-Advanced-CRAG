@@ -75,7 +75,7 @@ export function StageNode({ index, title, status, durationMs, children }: StageN
               onClick={() => setOpen((value) => !value)}
               aria-expanded={open}
               aria-label={open ? `Collapse ${title}` : `Expand ${title}`}
-              className="ml-auto rounded-md p-1 text-muted transition hover:bg-surface-hover hover:text-foreground"
+              className="ml-auto grid h-7 w-7 place-items-center rounded-md text-muted transition hover:bg-surface-hover hover:text-foreground sm:h-6 sm:w-6"
             >
               <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
             </button>

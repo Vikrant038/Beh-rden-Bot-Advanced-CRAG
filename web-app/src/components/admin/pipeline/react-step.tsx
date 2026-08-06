@@ -24,11 +24,13 @@ function actionIcon(action: string): React.ReactNode {
 export function ReactStep({ step }: ReactStepProps) {
   return (
     <div className="rounded-xl border border-glass-border bg-surface/60 p-3">
-      <div className="flex items-center gap-2">
-        <span className="grid h-6 w-6 place-items-center rounded-lg bg-primary/10 text-primary">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
           {actionIcon(step.action)}
         </span>
-        <p className="font-mono text-xs font-medium text-foreground">{step.action}</p>
+        <p className="min-w-0 flex-1 truncate font-mono text-xs font-medium text-foreground">
+          {step.action}
+        </p>
         {step.durationMs !== undefined ? (
           <span
             className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-surface-hover px-2 py-0.5 font-mono text-[10px] text-muted"

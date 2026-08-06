@@ -1,36 +1,47 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RecentQueriesTable } from "./recent-queries-table";
 
+const pushMock = vi.fn();
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: pushMock }),
 }));
+
+// Default queryDetail hook result; individual tests override via queryDetailMock.
+const queryDetailMock = vi.fn();
 
 vi.mock("@/lib/trpc/client", () => ({
   api: {
     admin: {
       queryDetail: {
-        useQuery: () => ({
-          data: {
-            latencyMs: 1200,
-            llmTokens: 450,
-            retrievalMs: 200,
-            pipelineStatus: "SUCCESS",
-            mode: "AGENTIC",
-            error: null,
-            sources: [],
-            userMessage: { content: "Test query", createdAt: "2026-08-05T10:00:00Z" },
-            assistantMessage: { content: "Test answer" },
-          },
-          isLoading: false,
-          error: null,
-        }),
+        useQuery: (args: unknown) => queryDetailMock(args),
       },
     },
   },
 }));
 
+function baseQueryDetail(data: unknown) {
+  return { data, isLoading: false, error: null };
+}
+
+const row = {
+  id: "q1",
+  conversationId: "c1",
+  query: "Test query",
+  createdAt: "2026-08-05T10:00:00Z",
+  mode: "AGENTIC",
+  latencyMs: 2500,
+  isCached: true,
+  retrievalPath: "HYBRID_RRF_CROSS_ENCODER",
+};
+
 describe("RecentQueriesTable", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    queryDetailMock.mockReturnValue(baseQueryDetail({}));
+  });
+
   it("renders a loading skeleton when loading is true", () => {
     const { container } = render(<RecentQueriesTable queries={[]} loading={true} />);
     expect(container.querySelector(".animate-pulse")).toBeDefined();
@@ -43,83 +54,107 @@ describe("RecentQueriesTable", () => {
 
   it("renders queries and handles 'Load more' click", () => {
     const onLoadMore = vi.fn();
-    const mockQueries = [
-      {
-        id: "q1",
-        conversationId: "c1",
-        query: "What is an APS certificate?",
-        createdAt: "2026-08-05T10:00:00Z",
-        mode: "AGENTIC",
-        latencyMs: 2500,
-        isCached: true,
-        retrievalPath: "HYBRID_RRF_CROSS_ENCODER",
-      },
-    ];
 
     render(
-      <RecentQueriesTable
-        queries={mockQueries}
-        loading={false}
-        hasMore={true}
-        onLoadMore={onLoadMore}
-      />,
+      <RecentQueriesTable queries={[row]} loading={false} hasMore={true} onLoadMore={onLoadMore} />,
     );
 
-    // Check if the query text is rendered
-    expect(screen.getByText("What is an APS certificate?")).toBeDefined();
+    expect(screen.getByText("Test query")).toBeDefined();
+    expect(screen.getByText("AGENTIC")).toBeDefined();
+    expect(screen.getByText("yes")).toBeDefined();
+    expect(screen.getByText("HYBRID_RRF_CROSS_ENCODER")).toBeDefined();
 
-    // Check 'Load more' button
     const loadMoreBtn = screen.getByRole("button", { name: /Load more/i });
-    expect(loadMoreBtn).toBeDefined();
     fireEvent.click(loadMoreBtn);
     expect(onLoadMore).toHaveBeenCalled();
   });
 
-  it("opens details drawer on eye click", async () => {
-    const mockQueries = [
-      {
-        id: "q1",
-        conversationId: "c1",
-        query: "Test query",
-        createdAt: "2026-08-05T10:00:00Z",
-        mode: "STANDARD",
-        latencyMs: 500,
-        isCached: false,
-        retrievalPath: null,
-      },
-    ];
+  it("navigates to the conversation on row click and on Enter keydown", () => {
+    render(<RecentQueriesTable queries={[row]} loading={false} />);
+    // The <tr role="button"> and the ExternalLink cell button share this label.
+    const rowEl = screen.getAllByRole("button", {
+      name: /Open conversation for query: Test query/i,
+    })[0];
+    fireEvent.click(rowEl);
+    expect(pushMock).toHaveBeenCalledWith("/chat/c1");
 
-    render(<RecentQueriesTable queries={mockQueries} loading={false} />);
-    const viewDetailsBtn = screen.getByTitle("View details");
-    fireEvent.click(viewDetailsBtn);
-    expect(await screen.findByText(/Query details/i)).toBeDefined();
-    expect(await screen.findByText("Pipeline outcome for this user query.")).toBeDefined();
+    pushMock.mockClear();
+    fireEvent.keyDown(rowEl, { key: "Enter" });
+    expect(pushMock).toHaveBeenCalledWith("/chat/c1");
   });
 
   it("shows loading state on load more button", () => {
     render(
       <RecentQueriesTable
-        queries={[
-          {
-            id: "q1",
-            conversationId: "c1",
-            query: "Test",
-            createdAt: "2026-08-05T10:00:00Z",
-            mode: "STANDARD",
-            latencyMs: 500,
-            isCached: false,
-            retrievalPath: null,
-          },
-        ]}
+        queries={[row]}
         loading={false}
         hasMore={true}
         loadingMore={true}
         onLoadMore={vi.fn()}
       />,
     );
-
     const loadMoreBtn = screen.getByRole("button", { name: /Loading/i });
-    expect(loadMoreBtn).toBeDefined();
     expect((loadMoreBtn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("shows a dash for a null retrieval path", () => {
+    render(<RecentQueriesTable queries={[{ ...row, retrievalPath: null }]} loading={false} />);
+    expect(screen.getByText("—")).toBeDefined();
+  });
+
+  it("opens the details drawer with metadata-driven stats", async () => {
+    queryDetailMock.mockReturnValue(
+      baseQueryDetail({
+        userMessage: {
+          content: "Test query",
+          createdAt: "2026-08-05T10:00:00Z",
+          metadata: { latencyMs: 1200.4, isCached: true, mode: "agentic", retrievalPath: "PASS" },
+        },
+        assistantResponse: { content: "Test answer" },
+      }),
+    );
+
+    render(<RecentQueriesTable queries={[row]} loading={false} />);
+    fireEvent.click(screen.getByTitle("View details"));
+
+    expect(await screen.findByText(/Query details/i)).toBeDefined();
+    expect(await screen.findByText("1200ms")).toBeDefined();
+    expect(await screen.findByText("agentic")).toBeDefined();
+    expect(await screen.findByText("PASS")).toBeDefined();
+    expect(await screen.findByText("Test answer")).toBeDefined();
+  });
+
+  it("falls back to defaults when metadata is missing", async () => {
+    queryDetailMock.mockReturnValue(
+      baseQueryDetail({
+        userMessage: { content: "Test query", createdAt: "2026-08-05T10:00:00Z" },
+        assistantResponse: null,
+      }),
+    );
+
+    render(<RecentQueriesTable queries={[row]} loading={false} />);
+    fireEvent.click(screen.getByTitle("View details"));
+
+    expect(await screen.findByText("standard")).toBeDefined();
+    expect(await screen.findByText("0ms")).toBeDefined();
+    expect(await screen.findByText(/No assistant response recorded/i)).toBeDefined();
+  });
+
+  it("shows 'Query not found' when the detail request returns no data", async () => {
+    queryDetailMock.mockReturnValue(baseQueryDetail(null));
+
+    render(<RecentQueriesTable queries={[row]} loading={false} />);
+    fireEvent.click(screen.getByTitle("View details"));
+    expect(await screen.findByText(/Query not found/i)).toBeDefined();
+  });
+
+  it("shows skeletons while the detail request is loading", async () => {
+    queryDetailMock.mockReturnValue({ data: undefined, isLoading: true, error: null });
+
+    render(<RecentQueriesTable queries={[row]} loading={false} />);
+    fireEvent.click(screen.getByTitle("View details"));
+    await waitFor(() => {
+      expect(document.querySelectorAll(".animate-pulse").length).toBeGreaterThan(0);
+    });
   });
 });

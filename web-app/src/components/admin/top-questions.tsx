@@ -32,11 +32,11 @@ export function TopQuestions({ queries, loading }: TopQuestionsProps) {
           {queries.map((question, index) => {
             return (
               // nosemgrep: javascript.express.security.injection.raw-html-format.raw-html-format — question.query is a React key + escaped text child, never dangerouslySetInnerHTML (see semgrep-backlog.md).
-              <li key={`${question.query}-${index}`} className="flex items-center gap-3">
+              <li key={`${question.query}-${index}`} className="flex min-h-11 items-center gap-3">
                 <span className="w-5 shrink-0 text-xs font-medium tabular-nums text-muted">
                   {index + 1}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-sm">{question.query}</span>
+                <span className="line-clamp-2 min-w-0 flex-1 text-sm">{question.query}</span>
                 <div className="hidden h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-surface-hover sm:block">
                   <div
                     className="h-full rounded-full bg-accent/70"

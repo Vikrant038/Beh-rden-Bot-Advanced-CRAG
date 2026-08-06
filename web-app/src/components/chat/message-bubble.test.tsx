@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import type { ChatMessage } from "@/lib/chat/types";
 
@@ -112,5 +112,101 @@ describe("MessageBubble", () => {
       <MessageBubble message={message({ role: "ASSISTANT", content: "" })} streaming={false} />,
     );
     expect(screen.getByText("Thinking…")).toBeInTheDocument();
+  });
+  it("copies the answer via the clipboard and shows the copied state", async () => {
+    const onCopied = vi.fn();
+    const originalNavigator = globalThis.navigator;
+    vi.stubGlobal(
+      "navigator",
+      Object.assign({}, navigator, {
+        clipboard: { writeText: vi.fn(async () => undefined) },
+      }),
+    );
+    try {
+      render(
+        <MessageBubble
+          message={message({ role: "ASSISTANT", content: "copyable answer" })}
+          streaming={false}
+          onCopied={onCopied}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Copy answer" }));
+      await waitFor(() => expect(onCopied).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Copy answer" }).querySelector(".lucide-check"),
+        ).not.toBeNull(),
+      );
+    } finally {
+      vi.stubGlobal("navigator", originalNavigator);
+    }
+  });
+
+  it("reports a copy failure when the clipboard write is denied", async () => {
+    const onCopyFailed = vi.fn();
+    const originalNavigator = globalThis.navigator;
+    vi.stubGlobal(
+      "navigator",
+      Object.assign({}, navigator, {
+        clipboard: { writeText: vi.fn(async () => Promise.reject(new Error("denied"))) },
+      }),
+    );
+    try {
+      render(
+        <MessageBubble
+          message={message({ role: "ASSISTANT", content: "copy me" })}
+          streaming={false}
+          onCopyFailed={onCopyFailed}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Copy answer" }));
+      await waitFor(() => expect(onCopyFailed).toHaveBeenCalledTimes(1));
+    } finally {
+      vi.stubGlobal("navigator", originalNavigator);
+    }
+  });
+
+  it("toggles feedback up/down and nulls on re-click", async () => {
+    const onFeedback = vi.fn();
+    render(
+      <MessageBubble
+        message={message({ role: "ASSISTANT", content: "answer" })}
+        streaming={false}
+        feedback="up"
+        onFeedback={onFeedback}
+      />,
+    );
+    await fireEvent.click(screen.getByRole("button", { name: "Mark answer as helpful" }));
+    // Re-clicking the active feedback clears it.
+    expect(onFeedback).toHaveBeenCalledWith(null);
+    await fireEvent.click(screen.getByRole("button", { name: "Mark answer as not helpful" }));
+    expect(onFeedback).toHaveBeenCalledWith("down");
+  });
+
+  it("renders a regenerate button and fires onRegenerate", async () => {
+    const onRegenerate = vi.fn();
+    render(
+      <MessageBubble
+        message={message({ role: "ASSISTANT", content: "answer" })}
+        streaming={false}
+        onRegenerate={onRegenerate}
+      />,
+    );
+    await fireEvent.click(screen.getByRole("button", { name: "Regenerate answer" }));
+    expect(onRegenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows cached latency in seconds when metadata has latencyMs", () => {
+    render(
+      <MessageBubble
+        message={message({
+          role: "ASSISTANT",
+          content: "Answer",
+          metadata: { isCached: true, latencyMs: 3500 },
+        })}
+        streaming={false}
+      />,
+    );
+    expect(screen.getByText(/Answered from cache \(3\.5s\)/)).toBeInTheDocument();
   });
 });

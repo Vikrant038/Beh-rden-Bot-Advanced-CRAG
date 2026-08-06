@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import "@fontsource-variable/source-sans-3";
 import "@fontsource-variable/source-serif-4";
@@ -15,6 +15,17 @@ import { PreferenceProvider } from "@/components/preferences/preference-provider
 // hydrates (blank screen). Force dynamic rendering so the renderer can read
 // the CSP from the forwarded request headers and stamp the nonce on scripts.
 export const dynamic = "force-dynamic";
+
+// #7 — mobile viewport: fit the iOS notch and never scale content past the screen.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#faf7f2" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b1020" },
+  ],
+};
 
 const APP_NAME = "Behörden-Bot";
 const APP_DESCRIPTION =

@@ -50,7 +50,7 @@ export function OAuthButtons() {
             onClick={() => handleSignIn(provider.id)}
             disabled={pendingProvider !== null}
             className={cn(
-              "flex w-full items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-60",
+              "flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm transition hover:bg-surface-hover active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60",
               provider.className,
             )}
           >

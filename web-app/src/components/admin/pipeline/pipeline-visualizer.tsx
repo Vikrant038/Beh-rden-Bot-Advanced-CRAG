@@ -175,14 +175,16 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
                       {Math.round(trace.retrievalTelemetry.queryExpansionDurationMs)}ms
                     </span>
                   </div>
-                  <ul className="list-disc pl-4 space-y-1 text-xs text-muted">
+                  <ul className="list-disc space-y-1 pl-4 text-xs text-muted">
                     {trace.retrievalTelemetry.expandedQueries.map((q, i) => (
-                      <li key={i}>{q}</li>
+                      <li key={i} className="break-all">
+                        {q}
+                      </li>
                     ))}
                   </ul>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div className="rounded-lg border border-glass-border bg-surface p-3">
                     <span className="mb-1 block text-xs font-medium text-foreground">
                       Dense Search (pgvector)
@@ -248,10 +250,14 @@ export function PipelineVisualizer({ trace }: PipelineVisualizerProps) {
                       key={index}
                       className="flex items-center justify-between rounded-lg border border-glass-border bg-surface px-3 py-2 text-xs"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-medium text-accent">{call.tool}</span>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="shrink-0 font-mono font-medium text-accent">
+                          {call.tool}
+                        </span>
                         {call.query && (
-                          <span className="max-w-xs truncate text-muted">{call.query}</span>
+                          <span className="min-w-0 max-w-full truncate text-muted sm:max-w-xs">
+                            {call.query}
+                          </span>
                         )}
                       </div>
                       <span className="font-mono text-[10px] text-muted">

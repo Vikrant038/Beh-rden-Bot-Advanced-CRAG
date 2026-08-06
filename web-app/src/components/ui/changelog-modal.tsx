@@ -52,7 +52,7 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
             Recent changes to Behörden-Bot
           </DialogDescription>
         </DialogHeader>
-        <div className="mt-5 space-y-6">
+        <div className="mt-5 max-h-[80dvh] space-y-6 overflow-y-auto overscroll-contain pr-1">
           {CHANGELOG.map((entry) => (
             <section key={entry.version}>
               <div className="flex items-baseline justify-between gap-2">

@@ -205,8 +205,8 @@ export function RecentQueriesTable({
                 }}
                 className="cursor-pointer border-b border-border/60 last:border-0 hover:bg-surface-hover/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
-                <td className="max-w-[220px] py-2.5 pr-4">
-                  <p className="truncate">{query.query}</p>
+                <td className="min-w-[160px] max-w-[220px] py-2.5 pr-4">
+                  <p className="line-clamp-2 break-words">{query.query}</p>
                 </td>
                 <td className="py-2.5 pr-4">
                   <span className="inline-flex items-center gap-1 text-xs">

@@ -102,13 +102,14 @@ export function ConversationItem({
           }}
           onBlur={saveRename}
           aria-label="Rename conversation"
-          className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm outline-none focus:border-primary"
+          className="min-h-11 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-primary"
         />
+        {/* #44 — 44px touch targets for the rename actions */}
         <button
           type="button"
           onClick={saveRename}
           aria-label="Save name"
-          className="shrink-0 rounded p-1 text-muted transition hover:text-success"
+          className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded p-1 text-muted transition hover:text-success"
         >
           <Check className="h-3.5 w-3.5" />
         </button>
@@ -119,7 +120,7 @@ export function ConversationItem({
             setEditing(false);
           }}
           aria-label="Cancel rename"
-          className="shrink-0 rounded p-1 text-muted transition hover:text-foreground"
+          className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded p-1 text-muted transition hover:text-foreground"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -153,7 +154,8 @@ export function ConversationItem({
         </p>
       </button>
 
-      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
+      {/* #36/#45 — actions are always visible on touch; hover-revealed on desktop only */}
+      <div className="flex shrink-0 items-center gap-0.5 transition md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
         <button
           type="button"
           onClick={onTogglePin}

@@ -276,7 +276,7 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
             onChange={(event) => setSearchInput(event.target.value)}
             placeholder="Search conversations…"
             aria-label="Search conversations"
-            className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted focus:border-primary"
+            className="min-h-11 w-full rounded-xl border border-border bg-surface py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted focus:border-primary"
           />
         </div>
 
@@ -333,7 +333,7 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
               type="button"
               onClick={() => void conversations.fetchNextPage()}
               disabled={conversations.isFetchingNextPage}
-              className="w-full rounded-lg px-2 py-1.5 text-center text-xs text-muted transition hover:bg-surface-hover hover:text-foreground disabled:opacity-60"
+              className="min-h-11 w-full rounded-lg px-2 py-1.5 text-center text-xs text-muted transition hover:bg-surface-hover hover:text-foreground disabled:opacity-60"
             >
               {conversations.isFetchingNextPage ? "Loading…" : "Load more"}
             </button>
@@ -396,7 +396,7 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
                 <div
                   role="menu"
                   aria-label="Profile menu"
-                  className="absolute bottom-full left-0 right-0 z-50 mb-2 overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-2xl"
+                  className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-[50vh] overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-2xl"
                 >
                   <button
                     type="button"

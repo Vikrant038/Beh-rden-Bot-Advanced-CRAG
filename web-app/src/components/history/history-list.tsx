@@ -253,35 +253,35 @@ export function HistoryList() {
   return (
     <div className="mt-6">
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-border bg-surface p-3">
+        <div className="rounded-xl border border-border bg-surface p-3.5">
           <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
             <MessageSquare className="h-3.5 w-3.5" /> Conversations
           </p>
-          <p className="mt-1 text-xl font-semibold tabular-nums">
+          <p className="mt-1 text-lg font-semibold tabular-nums sm:text-xl">
             {stats.isLoading ? "…" : (stats.data?.totalConversations ?? 0)}
           </p>
         </div>
-        <div className="rounded-xl border border-border bg-surface p-3">
+        <div className="rounded-xl border border-border bg-surface p-3.5">
           <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
             <MessagesSquare className="h-3.5 w-3.5" /> Messages
           </p>
-          <p className="mt-1 text-xl font-semibold tabular-nums">
+          <p className="mt-1 text-lg font-semibold tabular-nums sm:text-xl">
             {stats.isLoading ? "…" : (stats.data?.totalMessages ?? 0)}
           </p>
         </div>
-        <div className="rounded-xl border border-border bg-surface p-3">
+        <div className="rounded-xl border border-border bg-surface p-3.5">
           <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
             <Pin className="h-3.5 w-3.5" /> Pinned
           </p>
-          <p className="mt-1 text-xl font-semibold tabular-nums">
+          <p className="mt-1 text-lg font-semibold tabular-nums sm:text-xl">
             {stats.isLoading ? "…" : (stats.data?.pinnedConversations ?? 0)}
           </p>
         </div>
-        <div className="rounded-xl border border-border bg-surface p-3">
+        <div className="rounded-xl border border-border bg-surface p-3.5">
           <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
             <Trash2 className="h-3.5 w-3.5" /> Deleted
           </p>
-          <p className="mt-1 text-xl font-semibold tabular-nums">
+          <p className="mt-1 text-lg font-semibold tabular-nums sm:text-xl">
             {stats.isLoading ? "…" : (stats.data?.deletedConversations ?? 0)}
           </p>
         </div>
@@ -304,7 +304,7 @@ export function HistoryList() {
           <div
             role="radiogroup"
             aria-label="Filter by engine mode"
-            className="inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1"
+            className="inline-flex w-full items-center gap-1 rounded-xl border border-border bg-surface p-1 sm:w-auto"
           >
             {MODE_FILTERS.map((option) => (
               <button
@@ -314,7 +314,7 @@ export function HistoryList() {
                 aria-checked={modeFilter === option.value}
                 onClick={() => setModeFilter(option.value)}
                 className={cn(
-                  "rounded-lg px-3 py-1.5 text-xs transition focus-visible:ring-2 focus-visible:ring-primary",
+                  "grid min-h-11 flex-1 place-items-center rounded-lg px-3 py-1.5 text-xs transition focus-visible:ring-2 focus-visible:ring-primary sm:flex-none",
                   modeFilter === option.value
                     ? "bg-primary text-primary-foreground"
                     : "text-muted hover:bg-surface-hover hover:text-foreground",
@@ -332,7 +332,7 @@ export function HistoryList() {
             id="history-date-range"
             value={dateRange}
             onChange={(event) => setDateRange(event.target.value as DateRange)}
-            className="rounded-xl border border-border bg-surface px-3 py-2 text-xs outline-none transition focus:border-primary"
+            className="min-h-11 flex-1 rounded-xl border border-border bg-surface px-3 py-2 text-xs outline-none transition focus:border-primary sm:flex-none"
           >
             {DATE_RANGES.map((option) => (
               <option key={option.value} value={option.value}>
@@ -348,7 +348,7 @@ export function HistoryList() {
             id="history-sort"
             value={sort}
             onChange={(event) => setSort(event.target.value as SortKey)}
-            className="rounded-xl border border-border bg-surface px-3 py-2 text-xs outline-none transition focus:border-primary"
+            className="min-h-11 flex-1 rounded-xl border border-border bg-surface px-3 py-2 text-xs outline-none transition focus:border-primary sm:flex-none"
           >
             <option value="updated">Sort: recently updated</option>
             <option value="created">Sort: recently created</option>
@@ -495,7 +495,7 @@ export function HistoryList() {
                     event.stopPropagation();
                     toggleSelect(conversation.id);
                   }}
-                  className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-border text-muted transition hover:border-primary"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-border text-muted transition hover:border-primary"
                 >
                   {selected.has(conversation.id) ? (
                     <CheckSquare className="h-4 w-4 text-primary" />
@@ -534,7 +534,7 @@ export function HistoryList() {
               </div>
 
               {!selectMode ? (
-                <div className="flex shrink-0 items-center gap-1 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
+                <div className="flex shrink-0 items-center gap-1 opacity-100 transition group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                   <button
                     type="button"
                     aria-label="Preview conversation"
@@ -578,7 +578,7 @@ export function HistoryList() {
         </ul>
       )}
 
-      <div ref={loaderRef} className={cn("h-1", !conversations.hasNextPage && "hidden")} />
+      <div ref={loaderRef} className={cn("h-1 pb-2", !conversations.hasNextPage && "hidden")} />
 
       {conversations.isFetchingNextPage && (
         <p className="py-4 text-center text-xs text-muted">Loading more…</p>

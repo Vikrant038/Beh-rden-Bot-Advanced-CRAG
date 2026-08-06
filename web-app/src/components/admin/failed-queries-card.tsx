@@ -45,9 +45,9 @@ export function FailedQueriesCard({ queries, loading }: FailedQueriesCardProps) 
               <button
                 type="button"
                 onClick={() => router.push(`/chat/${query.conversationId}`)}
-                className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left transition hover:bg-surface-hover"
+                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-surface-hover"
               >
-                <span className="min-w-0 flex-1 truncate text-sm">{query.query}</span>
+                <span className="line-clamp-2 min-w-0 flex-1 text-sm">{query.query}</span>
                 <span className="shrink-0 text-[10px] text-muted">
                   {formatRelativeTime(query.createdAt)}
                 </span>

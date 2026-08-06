@@ -43,10 +43,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div id="main" className="relative mx-auto max-w-6xl px-4 py-8">
       <div className="gradient-mesh pointer-events-none absolute inset-x-0 top-0 -z-10 h-64 opacity-60" />
-      <div className="sticky top-2 z-30 mb-6 flex items-center gap-3 rounded-xl border border-border/50 bg-background/90 px-2 py-2 shadow-sm backdrop-blur">
+      <div className="sticky top-2 z-30 mb-6 flex flex-wrap items-center gap-2 rounded-xl border border-border/50 bg-background/90 px-2 py-2 shadow-sm backdrop-blur sm:gap-3">
         <Link
           href="/chat"
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-muted transition hover:bg-surface-hover hover:text-foreground"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-muted transition hover:bg-surface-hover hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to chats
@@ -56,7 +56,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <h1 className="text-lg font-semibold">Admin</h1>
         </div>
       </div>
-      <nav className="mb-6 flex gap-2 border-b border-border pb-3">
+      <nav className="mb-6 flex gap-2 overflow-x-auto border-b border-border pb-3">
         {NAV_ITEMS.map((item) => {
           const active = pathname === item.href;
           return (
@@ -65,7 +65,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               type="button"
               onClick={() => router.push(item.href)}
               className={cn(
-                "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm transition focus-visible:ring-2 focus-visible:ring-primary",
+                "inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-sm transition focus-visible:ring-2 focus-visible:ring-primary",
                 active
                   ? "bg-primary/10 font-medium text-foreground"
                   : "text-muted hover:bg-surface-hover hover:text-foreground",

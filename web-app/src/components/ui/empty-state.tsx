@@ -13,10 +13,12 @@ interface EmptyStateProps {
 /** Empty-state surface used across admin, chat, and pipeline surfaces. */
 export function EmptyState({ title, description, icon: Icon, action, className }: EmptyStateProps) {
   return (
-    <GlassCard className={cn("flex flex-col items-center gap-3 px-6 py-12 text-center", className)}>
+    <GlassCard
+      className={cn("flex flex-col items-center gap-3 px-6 py-10 text-center sm:py-16", className)}
+    >
       {Icon ? (
-        <div className="grid h-12 w-12 place-items-center rounded-full bg-surface-hover">
-          <Icon className="h-6 w-6 text-muted" />
+        <div className="grid h-10 w-10 place-items-center rounded-full bg-surface-hover sm:h-12 sm:w-12">
+          <Icon className="h-5 w-5 text-muted sm:h-6 sm:w-6" />
         </div>
       ) : null}
       <div>

@@ -34,7 +34,7 @@ export function ErrorState({ message, code, retry, className }: ErrorStateProps)
         <button
           type="button"
           onClick={retry}
-          className="rounded-lg border border-border bg-surface px-4 py-2 text-sm transition hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-primary"
+          className="min-h-11 w-full rounded-lg border border-border bg-surface px-4 py-2 text-sm transition hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-primary sm:w-auto"
         >
           Try again
         </button>

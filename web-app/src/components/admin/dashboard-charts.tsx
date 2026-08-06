@@ -96,6 +96,8 @@ const tooltipStyle = {
   borderRadius: 12,
   fontSize: 12,
   boxShadow: "var(--shadow-glass)",
+  // #94 — never let a chart tooltip run past the screen edge on phones.
+  maxWidth: "min(90vw, 320px)",
 } as const;
 
 /* ─── 9.8 — Rich tooltip content ───────────────────────────── */
@@ -129,7 +131,7 @@ function DailyTooltipWithTrend({
     series.length > 0 ? Math.round(series.reduce((sum, p) => sum + p.count, 0) / series.length) : 0;
   return (
     <div
-      className="rounded-xl border border-border bg-surface px-3 py-2 shadow-glass"
+      className="max-w-[90vw] rounded-xl border border-border bg-surface px-3 py-2 shadow-glass"
       role="status"
     >
       <p className="text-xs font-semibold">{label}</p>
@@ -169,7 +171,7 @@ function ModeTooltip({
   const total = payload.reduce((sum, entry) => sum + Number(entry.value ?? 0), 0);
   return (
     <div
-      className="rounded-xl border border-border bg-surface px-3 py-2 shadow-glass"
+      className="max-w-[90vw] rounded-xl border border-border bg-surface px-3 py-2 shadow-glass"
       role="status"
     >
       {payload.map((entry, index) => {
@@ -213,7 +215,7 @@ export function DailyQueriesChart({ data, loading = false }: DailyQueriesChartPr
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
           <XAxis
             dataKey="label"
-            tick={{ fontSize: 11, fill: "var(--color-muted)" }}
+            tick={{ fontSize: 10, fill: "var(--color-muted)" }}
             interval="preserveStartEnd"
           />
           <YAxis tick={{ fontSize: 11, fill: "var(--color-muted)" }} allowDecimals={false} />
@@ -387,8 +389,9 @@ export function ModeSplitChart({ data, loading = false }: ModeSplitChartProps) {
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
           <XAxis
             dataKey="mode"
-            tick={{ fontSize: 11, fill: "var(--color-muted)" }}
+            tick={{ fontSize: 10, fill: "var(--color-muted)" }}
             tickFormatter={(value: string) => value.toUpperCase()}
+            interval="preserveStartEnd"
           />
           <YAxis tick={{ fontSize: 11, fill: "var(--color-muted)" }} allowDecimals={false} />
           <Tooltip content={<ModeTooltip />} />

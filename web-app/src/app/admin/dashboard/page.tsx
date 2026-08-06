@@ -104,7 +104,7 @@ export default function AdminDashboardPage() {
             </p>
           ) : null}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div
             role="radiogroup"
             aria-label="Dashboard time range"
@@ -117,7 +117,7 @@ export default function AdminDashboardPage() {
                 role="radio"
                 aria-checked={days === option.days}
                 onClick={() => setDays(option.days)}
-                className={`rounded-lg px-3 py-1.5 text-xs transition focus-visible:ring-2 focus-visible:ring-primary ${
+                className={`grid min-h-11 place-items-center rounded-lg px-3 py-1.5 text-xs transition focus-visible:ring-2 focus-visible:ring-primary ${
                   days === option.days
                     ? "bg-primary text-primary-foreground"
                     : "text-muted hover:bg-surface-hover hover:text-foreground"
@@ -133,14 +133,14 @@ export default function AdminDashboardPage() {
             disabled={manualRefreshing}
             aria-label="Refresh dashboard"
             title="Refresh now"
-            className="grid h-10 w-10 place-items-center rounded-xl border border-border text-muted transition hover:bg-surface-hover hover:text-foreground disabled:opacity-60"
+            className="grid h-11 w-11 place-items-center rounded-xl border border-border text-muted transition hover:bg-surface-hover hover:text-foreground disabled:opacity-60 sm:h-10 sm:w-10"
           >
             <RefreshCw className={`h-4 w-4 ${manualRefreshing ? "animate-spin" : ""}`} />
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 min-[380px]:grid-cols-2 md:grid-cols-4">
         <MetricCard
           label="Total users"
           value={data?.totalUsers ?? 0}

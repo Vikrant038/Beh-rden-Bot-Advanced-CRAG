@@ -186,13 +186,13 @@ export default function AdminPipelineTesterPage() {
             }}
             placeholder="e.g. What is the APS certificate and who needs it?"
             aria-label="Test pipeline query"
-            className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none transition placeholder:text-muted focus:border-primary focus-visible:ring-2 focus-visible:ring-primary"
+            className="min-h-12 w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none transition placeholder:text-muted focus:border-primary focus-visible:ring-2 focus-visible:ring-primary"
           />
           <button
             type="button"
             onClick={run}
             disabled={testPipeline.isPending || isRunning || !prompt.trim()}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover active:scale-[0.98] disabled:opacity-60"
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover active:scale-[0.98] disabled:opacity-60"
           >
             <Play
               className={`h-4 w-4 ${testPipeline.isPending || isRunning ? "animate-pulse" : ""}`}
@@ -201,23 +201,25 @@ export default function AdminPipelineTesterPage() {
           </button>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {EXAMPLES.map((example) => (
-            <button
-              key={example.label}
-              type="button"
-              onClick={() => {
-                setPrompt(example.prompt);
-                testPipeline.reset();
-              }}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs text-muted transition hover:border-primary/60 hover:text-foreground"
-            >
-              <example.icon className="h-3 w-3" />
-              {example.label}
-            </button>
-          ))}
+        <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:flex-wrap lg:pb-0">
+            {EXAMPLES.map((example) => (
+              <button
+                key={example.label}
+                type="button"
+                onClick={() => {
+                  setPrompt(example.prompt);
+                  testPipeline.reset();
+                }}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs text-muted transition hover:border-primary/60 hover:text-foreground"
+              >
+                <example.icon className="h-3 w-3" />
+                {example.label}
+              </button>
+            ))}
+          </div>
 
-          <div className="ml-auto flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 lg:ml-auto">
             <div className="flex items-center gap-2">
               <button
                 type="button"
