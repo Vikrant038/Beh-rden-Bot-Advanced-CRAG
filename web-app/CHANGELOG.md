@@ -8,6 +8,40 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning:
 
 ### Added
 
+- **Session-aware landing-page CTAs:** the landing page now checks the session
+  (`useSession`) — "Get started" / "Start asking" route to `/chat` when signed
+  in (instead of bouncing to `/login` on every visit from the home button) and
+  fall back to `/login` when logged out. "Browse the knowledge base" deep-links
+  to `/sources` for signed-in users. The login page also redirects
+  already-authenticated users straight to `/chat`, unless an OAuth `error`
+  param is present so error banners stay visible. Unit tests cover the CTA
+  hrefs, the redirect, the OAuth error path, and the guest-browsing flow.
+
+- **Pipeline tester run retention:** the background worker now keeps only the
+  newest 5 pipeline-test runs and prunes older rows (best-effort) after each
+  run reaches a terminal state, so `traceJson` history on the `PipelineRun`
+  table stays bounded. RUNNING rows are never deleted while the UI may still
+  be polling them.
+
+- **Responsive mobile UI upgrade (320–480px):** 44px touch targets across
+  navbars, CTAs, FAQ rows, and admin controls; safe-area padding for notched
+  phones; `overflow-x: clip` against horizontal page scroll; no grey tap
+  highlight; 16px form inputs so iOS Safari stops auto-zooming; hover-only
+  reveals always show on touch devices; heading type scales down; markdown
+  tables/code stay swipeable; mobile menu closes on Escape/route change. See
+  `docs/responsive-ui-upgrade-checklist.md`.
+
+- **Seed corpus hardening:** `scripts/seed-corpus.sh` now guards the
+  `document_chunks_embedding_idx` pgvector HNSW index the same way it guards
+  the FTS GIN index — a data-only seed on a target without the index now
+  creates it, so dense retrieval never silently degrades to a full sequential
+  scan.
+
+- **Coverage gate closure:** `vitest.config.mts` raises the gate to 85%
+  across statements/branches/functions/lines and adds a branch threshold;
+  new unit tests for the landing page, login content, and theme toggle bring
+  global coverage to 92%+ statements / 85%+ branches (592 tests).
+
 - **Developer mode for the admin pipeline tester (Phase K):** the `/admin/pipeline-tester`
   page gains an admin-only **Developer mode** toggle next to "Bypass cache". When enabled,
   `admin.testPipeline` rethrows failures with the full error detail — class name, raw message,
