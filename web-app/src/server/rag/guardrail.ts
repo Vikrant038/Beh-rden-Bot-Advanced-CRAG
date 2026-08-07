@@ -5,6 +5,16 @@ import { DomainGuardBlockedError } from "@/server/lib/errors";
 
 const logger = createLogger("guardrail");
 
+/**
+ * Canonical out-of-domain rejection message, shared by the agentic
+ * orchestrator and the chat stream pipeline. Defined here (next to the
+ * guardrail itself) so the two consumers can never drift apart.
+ */
+export const OUT_OF_DOMAIN_MESSAGE =
+  "**Out of Domain Detected:** I am a specialized assistant for German immigration, " +
+  "student visas, and university admissions. I cannot help with general queries such as " +
+  "programming, sports, or other out-of-scope topics.";
+
 export const NEGATIVE_TERMS = [
   "japan",
   "stock trading",

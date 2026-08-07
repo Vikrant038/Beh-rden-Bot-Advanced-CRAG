@@ -20,6 +20,10 @@ vi.mock("@/server/rag/disambiguation", () => ({
 }));
 vi.mock("@/server/rag/guardrail", () => ({
   isQueryOutOfDomain: vi.fn(),
+  OUT_OF_DOMAIN_MESSAGE:
+    "**Out of Domain Detected:** I am a specialized assistant for German immigration, " +
+    "student visas, and university admissions. I cannot help with general queries such as " +
+    "programming, sports, or other out-of-scope topics.",
 }));
 vi.mock("@/server/rag/pipeline", () => ({
   runStandardCrag: vi.fn(),

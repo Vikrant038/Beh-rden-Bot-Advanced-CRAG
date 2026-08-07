@@ -1,6 +1,10 @@
 import type { RetrievedContext, WebSearchResult } from "@/server/rag/types";
 import { CRAG_THRESHOLD } from "@/server/rag/types";
-import { webSearch, formatWebResultsForPrompt } from "@/server/rag/tools/web-search";
+import {
+  webSearch,
+  formatWebResultsForPrompt,
+  formatChunksForPrompt,
+} from "@/server/rag/tools/web-search";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("crag-gate");
@@ -37,9 +41,7 @@ export async function runCragGate(
     };
   }
 
-  const contextText = retrieval.chunks
-    .map((chunk) => `[Source: ${chunk.sourceName} (${chunk.sourceUrl})]\n${chunk.text}`)
-    .join("\n\n");
+  const contextText = formatChunksForPrompt(retrieval.chunks);
 
   return {
     chunks: retrieval.chunks,

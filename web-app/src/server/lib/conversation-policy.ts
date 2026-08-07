@@ -5,9 +5,11 @@
  * - `ensureOwnership` (a fetch + userId guard) existed in both `routers/chat.ts`
  *   and `routers/conversation.ts`.
  * - The "how many prompts has this guest used" count was duplicated in
- *   `conversation.ts` (create + count), `chat.ts` (sendMessage), and the raw
- *   SSE route. Centralizing them ensures the free-tier invariant and the
- *   ownership rule are enforced identically everywhere.
+ *   `conversation.ts` (create + count) and the chat/stream SSE route. (The
+ *   tRPC `chat.sendMessage` mutation that once also enforced it was deleted —
+ *   user-message persistence now lives only in the SSE route.) Centralizing
+ *   them ensures the free-tier invariant and the ownership rule are enforced
+ *   identically everywhere.
  */
 
 import type { PrismaClient } from "@prisma/client";

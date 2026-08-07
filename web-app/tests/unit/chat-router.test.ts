@@ -12,29 +12,21 @@ vi.mock("@/server/db", () => ({
       count: vi.fn(),
     },
     message: {
-      create: vi.fn(),
       findFirst: vi.fn(),
       findUnique: vi.fn(),
       delete: vi.fn(),
-      count: vi.fn(),
     },
     messageFeedback: {
       upsert: vi.fn(),
       deleteMany: vi.fn(),
-    },
-    user: {
-      create: vi.fn(),
     },
   },
 }));
 
 import { prisma } from "@/server/db";
 import type { MockPrisma } from "../helpers/mock-prisma";
-import { GuestLimitReachedError } from "@/server/lib/errors";
-import { GUEST_PROMPT_LIMIT } from "@/lib/guest";
 
 const prismaMock = prisma as unknown as MockPrisma & {
-  message: { upsert: ReturnType<typeof vi.fn> };
   messageFeedback: { upsert: ReturnType<typeof vi.fn> };
 };
 
@@ -50,112 +42,9 @@ function makeCaller() {
   } as unknown as Context);
 }
 
-/** A caller that goes through the guest admission path (no session, guest id). */
-function makeGuestCaller(guestId = "guest-1") {
-  return appRouter.createCaller({
-    db: prismaMock as never,
-    session: null,
-    guestId,
-    headers: new Headers(),
-    resHeaders: new Headers(),
-  } as unknown as Context);
-}
-
 describe("chat router", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  it("sendMessage: persists the user message and returns its id", async () => {
-    prismaMock.conversation.findUnique.mockResolvedValue({
-      id: "conv-1",
-      userId: "user-1",
-      title: "My chat",
-    } as never);
-    prismaMock.message.create.mockResolvedValue({ id: "msg-1" } as never);
-
-    const caller = makeCaller();
-    const result = await caller.chat.sendMessage({
-      conversationId: "conv-1",
-      query: "What is APS?",
-      mode: "agentic",
-    });
-
-    expect(result.messageId).toBe("msg-1");
-    expect(prismaMock.message.create).toHaveBeenCalledWith({
-      data: {
-        conversationId: "conv-1",
-        role: "USER",
-        content: "What is APS?",
-        metadata: { mode: "agentic" },
-      },
-      select: { id: true },
-    });
-  });
-
-  it("sendMessage: auto-titles a new conversation from the first query", async () => {
-    prismaMock.conversation.findUnique.mockResolvedValue({
-      id: "conv-1",
-      userId: "user-1",
-      title: "New conversation",
-    } as never);
-    prismaMock.message.create.mockResolvedValue({ id: "msg-1" } as never);
-    prismaMock.conversation.update.mockResolvedValue({ id: "conv-1" } as never);
-
-    const caller = makeCaller();
-    await caller.chat.sendMessage({
-      conversationId: "conv-1",
-      query: "How much is the blocked account?",
-      mode: "standard",
-    });
-
-    expect(prismaMock.conversation.update).toHaveBeenCalledWith({
-      where: { id: "conv-1" },
-      data: { title: "How much is the blocked account?" },
-    });
-  });
-
-  it("sendMessage: does not rewrite an existing title", async () => {
-    prismaMock.conversation.findUnique.mockResolvedValue({
-      id: "conv-1",
-      userId: "user-1",
-      title: "Named chat",
-    } as never);
-    prismaMock.message.create.mockResolvedValue({ id: "msg-1" } as never);
-
-    const caller = makeCaller();
-    await caller.chat.sendMessage({ conversationId: "conv-1", query: "hello", mode: "agentic" });
-
-    expect(prismaMock.conversation.update).not.toHaveBeenCalled();
-  });
-
-  it("sendMessage: rejects messages to another user's conversation", async () => {
-    prismaMock.conversation.findUnique.mockResolvedValue({
-      id: "conv-x",
-      userId: "other-user",
-      title: "Theirs",
-    } as never);
-
-    const caller = makeCaller();
-    await expect(
-      caller.chat.sendMessage({ conversationId: "conv-x", query: "hi", mode: "agentic" }),
-    ).rejects.toThrow();
-  });
-
-  it("sendMessage: blocks a guest at the free-tier prompt cap", async () => {
-    prismaMock.user.create.mockResolvedValue({ id: "guest-1" } as never);
-    prismaMock.conversation.findUnique.mockResolvedValue({
-      id: "conv-1",
-      userId: "guest-1",
-      title: "My chat",
-    } as never);
-    prismaMock.message.count.mockResolvedValue(GUEST_PROMPT_LIMIT);
-
-    const caller = makeGuestCaller();
-    await expect(
-      caller.chat.sendMessage({ conversationId: "conv-1", query: "hi", mode: "agentic" }),
-    ).rejects.toMatchObject({ cause: expect.any(GuestLimitReachedError) });
-    expect(prismaMock.message.create).not.toHaveBeenCalled();
   });
 
   it("regenerate: removes the last assistant message and returns the prior user query", async () => {
@@ -210,25 +99,6 @@ describe("chat router", () => {
 
     const caller = makeCaller();
     await expect(caller.chat.regenerate({ conversationId: "conv-1" })).rejects.toThrow();
-  });
-
-  it("sendMessage: lets a guest below the cap persist a message", async () => {
-    prismaMock.user.create.mockResolvedValue({ id: "guest-1" } as never);
-    prismaMock.conversation.findUnique.mockResolvedValue({
-      id: "conv-1",
-      userId: "guest-1",
-      title: "My chat",
-    } as never);
-    prismaMock.message.count.mockResolvedValue(1);
-    prismaMock.message.create.mockResolvedValue({ id: "msg-1" } as never);
-
-    const caller = makeGuestCaller();
-    const result = await caller.chat.sendMessage({
-      conversationId: "conv-1",
-      query: "hi",
-      mode: "agentic",
-    });
-    expect(result.messageId).toBe("msg-1");
   });
 
   it("feedback: upserts an UP rating on an owned message", async () => {

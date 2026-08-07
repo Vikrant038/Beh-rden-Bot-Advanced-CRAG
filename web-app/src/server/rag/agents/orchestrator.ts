@@ -16,7 +16,7 @@ import type {
   AgentCostTelemetry,
 } from "@/server/rag/types";
 import { maskPii } from "@/server/pii/masker";
-import { isQueryOutOfDomain } from "@/server/rag/guardrail";
+import { isQueryOutOfDomain, OUT_OF_DOMAIN_MESSAGE } from "@/server/rag/guardrail";
 import { createLogger } from "@/server/lib/logger";
 import {
   LlmUsageCollector,
@@ -41,6 +41,12 @@ export interface AgenticRagOptions {
   memory: MemoryLike;
   bypassCache?: boolean;
   disambiguation?: { durationMs: number; isAmbiguous: boolean; options: string[] };
+  /**
+   * Pre-masked query. When the caller already ran Stage 0 (chat stream, admin
+   * pipeline tester), pass the masked text here so PII masking never runs
+   * twice for the same query.
+   */
+  maskedQuery?: string;
   onEvent?: (event: PipelineEvent) => void;
 }
 
@@ -80,11 +86,6 @@ export interface AgenticRagResponse {
   /** Cache write + memory write times (after Stage 3). */
   postProcessing?: PostProcessingTelemetry;
 }
-
-const OUT_OF_DOMAIN_MESSAGE =
-  "**Out of Domain Detected:** I am a specialized assistant for German immigration, " +
-  "student visas, and university admissions. I cannot help with general queries such as " +
-  "programming, sports, or other out-of-scope topics.";
 
 /** Small helper so `maskedQuery` / `guardrail` populate identically everywhere. */
 function withStageZero(
@@ -139,9 +140,12 @@ export async function runAgenticRag(
       onEvent,
     } = options;
 
+    // Stage -1 — PII masking. Callers that already ran Stage 0 (chat stream,
+    // admin tester) hand the masked query in via `options.maskedQuery`; the
+    // mask cost is then attributed to their stage, not counted here.
     const t_piiStart = Date.now();
-    const { text: maskedQuery } = maskPii(userQuery);
-    const piiMaskingDurationMs = Date.now() - t_piiStart;
+    const maskedQuery = options.maskedQuery ?? maskPii(userQuery).text;
+    const piiMaskingDurationMs = options.maskedQuery !== undefined ? 0 : Date.now() - t_piiStart;
 
     // Stage 0 — Query disambiguation & guardrail (includes the guardrail LLM call).
     const stage0Start = Date.now();

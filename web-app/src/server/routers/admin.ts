@@ -17,8 +17,7 @@ import { NotFoundError } from "@/server/lib/errors";
 import { z } from "zod";
 import { runAgenticRag } from "@/server/rag/agents/orchestrator";
 import { getHybridRetriever } from "@/server/rag/instance";
-import { disambiguateQuery } from "@/server/rag/disambiguation";
-import { maskPii } from "@/server/pii/masker";
+import { runStageZero } from "@/server/rag/stage-zero";
 
 const logger = createLogger("admin-router");
 
@@ -157,23 +156,19 @@ export async function executePipelineTest(
 ): Promise<void> {
   const startedAt = Date.now();
   try {
-    // Stage 0A — run the disambiguation check up front (same as the chat
+    // Stage 0 — run PII mask + disambiguation up front (same as the chat
     // pipeline) so the stored trace renders the disambiguation node in the
     // visualizer. The pipeline still runs to completion; ambiguity is
-    // recorded, not short-circuited, so the glass-box trace is complete.
-    const { text: maskedQuery } = maskPii(input.prompt);
-    const t0_dis = Date.now();
-    const disambiguation = await disambiguateQuery(maskedQuery);
+    // recorded, not short-circuited, so the glass-box trace is complete. The
+    // masked query is handed to the orchestrator so it never masks twice.
+    const { maskedQuery, disambiguation } = await runStageZero(input.prompt);
     const result = await runAgenticRag(input.prompt, {
       hybridRetriever: getHybridRetriever(),
       cache: semanticCache,
       memory: new NoopMemory(),
       bypassCache: input.bypassCache,
-      disambiguation: {
-        durationMs: Date.now() - t0_dis,
-        isAmbiguous: disambiguation.isAmbiguous,
-        options: disambiguation.options,
-      },
+      maskedQuery,
+      disambiguation,
     });
     await prisma.pipelineRun
       .update({

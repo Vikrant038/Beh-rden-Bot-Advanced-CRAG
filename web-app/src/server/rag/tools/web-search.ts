@@ -1,4 +1,4 @@
-import type { WebSearchResult } from "@/server/rag/types";
+import type { Chunk, WebSearchResult } from "@/server/rag/types";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("web-search");
@@ -117,6 +117,23 @@ export async function webSearch(query: string, maxResults: number = 3): Promise<
     );
     return FALLBACK_RESULTS;
   }
+}
+
+/**
+ * Synthesizes a flat context block from retrieved chunks for the LLM prompt.
+ *
+ * Single source of truth for the `[Source: name (url)]` block format — the
+ * standard CRAG pipeline and the CRAG confidence gate previously each kept
+ * their own copy. The empty-chunks case returns a sentinel string so the LLM
+ * explicitly sees that no official context matched.
+ */
+export function formatChunksForPrompt(chunks: Chunk[]): string {
+  if (chunks.length === 0) {
+    return "No relevant context found.";
+  }
+  return chunks
+    .map((chunk) => `[Source: ${chunk.sourceName} (${chunk.sourceUrl})]\n${chunk.text}`)
+    .join("\n\n");
 }
 
 /**

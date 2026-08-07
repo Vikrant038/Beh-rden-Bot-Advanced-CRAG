@@ -1,10 +1,11 @@
-import type { Chunk, Source } from "@/server/rag/types";
+import type { Source } from "@/server/rag/types";
 import type { HybridRetriever } from "@/server/rag/retrieval/hybrid";
 import { runCragGate } from "@/server/rag/crag-gate";
 import { generateSubQueries } from "@/server/rag/query-expansion";
 import { callLLM } from "@/server/llm/client";
 import type { LlmMessage } from "@/server/llm/client";
 import { maskPii } from "@/server/pii/masker";
+import { formatChunksForPrompt } from "@/server/rag/tools/web-search";
 import type { SemanticCache } from "@/server/rag/cache/semantic-cache";
 import { SummaryBufferMemory } from "@/server/rag/memory/summary-buffer";
 import { createLogger } from "@/server/lib/logger";
@@ -17,6 +18,11 @@ export interface StandardRagOptions {
   memory: SummaryBufferMemory;
   bypassCache?: boolean;
   topK?: number;
+  /**
+   * Pre-masked query. The chat stream already masks in Stage 0; passing the
+   * masked text here avoids a second maskPii pass on the same query.
+   */
+  maskedQuery?: string;
 }
 
 export interface StandardRagResult {
@@ -34,15 +40,6 @@ const SYSTEM_PROMPT =
   "student visa processes, APS certification, and blocked accounts.\n" +
   "Your answers must be clear, factual, well-structured, and strictly grounded in the provided official context.";
 
-function formatContextForPrompt(chunks: Chunk[]): string {
-  if (chunks.length === 0) {
-    return "No relevant context found.";
-  }
-  return chunks
-    .map((chunk) => `[Source: ${chunk.sourceName} (${chunk.sourceUrl})]\n${chunk.text}`)
-    .join("\n\n");
-}
-
 /**
  * Standard CRAG pipeline (ported from `src/rag.py:rag_answer`):
  * cache check → guardrail-free hybrid retrieval (guardrail runs at entry of
@@ -55,7 +52,7 @@ export async function runStandardCrag(
   const startTime = Date.now();
   const { hybridRetriever, cache, memory, bypassCache = false } = options;
 
-  const { text: maskedQuestion } = maskPii(question);
+  const maskedQuestion = options.maskedQuery ?? maskPii(question).text;
   const queryVector = await hybridRetriever.embedQuery(maskedQuestion);
 
   const cached = await cache.checkCache(maskedQuestion, queryVector);
@@ -91,7 +88,7 @@ export async function runStandardCrag(
     pathUsed = "CRAG_FALLBACK_UNGROUNDED";
   } else {
     const memoryContext = await memory.getContextFormatted();
-    const contextText = formatContextForPrompt(filteredChunks);
+    const contextText = formatChunksForPrompt(filteredChunks);
     const userPrompt =
       `${memoryContext}\n\n` +
       `OFFICIAL CONTEXT CHUNKS:\n${contextText}\n\n` +

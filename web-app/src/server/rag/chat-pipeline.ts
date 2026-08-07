@@ -4,11 +4,10 @@ import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { createMemory } from "@/server/rag/memory/summary-buffer";
 import { runStandardCrag } from "@/server/rag/pipeline";
 import { runAgenticRag } from "@/server/rag/agents/orchestrator";
-import { disambiguateQuery } from "@/server/rag/disambiguation";
-import { isQueryOutOfDomain } from "@/server/rag/guardrail";
+import { isQueryOutOfDomain, OUT_OF_DOMAIN_MESSAGE } from "@/server/rag/guardrail";
 import { getHybridRetriever } from "@/server/rag/instance";
+import { runStageZero } from "@/server/rag/stage-zero";
 import type { PipelineEvent } from "@/server/rag/types";
-import { maskPii } from "@/server/pii/masker";
 import { runWithTraceGen, setTraceInput } from "@/server/tracing";
 import { NotFoundError } from "@/server/lib/errors";
 import { createLogger } from "@/server/lib/logger";
@@ -33,11 +32,6 @@ export interface ChatStreamInput {
   bypassCache?: boolean;
   signal?: AbortSignal;
 }
-
-const OUT_OF_DOMAIN_MESSAGE =
-  "**Out of Domain Detected:** I am a specialized assistant for German immigration, " +
-  "student visas, and university admissions. I cannot help with general queries such as " +
-  "programming, sports, or other out-of-scope topics.";
 
 const GENERIC_ERROR_MESSAGE =
   "I'm sorry, I encountered an error while processing your request. Please try again in a moment.";
@@ -201,9 +195,10 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
       updatedAt: new Date(),
     },
   });
-  const { text: maskedQuery } = maskPii(trimmedQuery);
-  setTraceInput(maskedQuery);
-
+  // Stage 0 — PII mask + disambiguation, run exactly once. The returned
+  // `maskedQuery` is passed into the pipelines below so neither re-masks.
+  // The stage events bracket the call so the client sees the Disambiguation
+  // indicator live while the (slow) disambiguation LLM call runs.
   const t0_dis = Date.now();
   yield {
     type: "stage_start",
@@ -211,14 +206,14 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
     label: "Disambiguation Check",
     timestamp: t0_dis,
   };
-  const disambiguation = await disambiguateQuery(maskedQuery);
-  const disDurationMs = Date.now() - t0_dis;
+  const { maskedQuery, disambiguation } = await runStageZero(trimmedQuery);
+  setTraceInput(maskedQuery);
   yield {
     type: "stage_end",
     stage: "disambiguation",
     label: "Disambiguation Check",
     timestamp: Date.now(),
-    durationMs: disDurationMs,
+    durationMs: disambiguation.durationMs,
   };
 
   if (disambiguation.isAmbiguous && disambiguation.options.length >= 2) {
@@ -272,6 +267,7 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
         cache: semanticCache,
         memory,
         bypassCache,
+        maskedQuery,
       });
       result = {
         answer: standardResult.answer,
@@ -292,11 +288,8 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
         cache: semanticCache,
         memory,
         bypassCache,
-        disambiguation: {
-          durationMs: disDurationMs,
-          isAmbiguous: disambiguation.isAmbiguous,
-          options: disambiguation.options,
-        },
+        maskedQuery,
+        disambiguation,
         onEvent: (event) => eventQueue.push(event),
       });
       // Close the queue when the pipeline settles so the iterator terminates.

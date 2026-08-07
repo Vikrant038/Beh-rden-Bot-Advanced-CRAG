@@ -176,7 +176,8 @@ Open http://localhost:3000 in your browser and verify:
 ### 5.7 Health Endpoint
 
 - [ ] Open http://localhost:3000/api/health
-- [ ] Returns JSON with `database` and `cache` status
+- [ ] Returns `{ success: true, db: "ok", latencyMs, timestamp }` (a cheap DB liveness ping)
+- [ ] Returns 503 with the error detail when Postgres is unreachable
 
 ---
 

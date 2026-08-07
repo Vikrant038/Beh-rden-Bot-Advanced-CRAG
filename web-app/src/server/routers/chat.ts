@@ -1,30 +1,12 @@
 import { z } from "zod";
 import { router, protectedProcedure } from "@/server/trpc/t";
 import { prisma } from "@/server/db";
-import { GuestLimitReachedError, NotFoundError, ValidationError } from "@/server/lib/errors";
+import { NotFoundError, ValidationError } from "@/server/lib/errors";
 import { createLogger } from "@/server/lib/logger";
 import type { AuthedUser } from "@/server/trpc/t";
-import type { ChatMode } from "@/lib/chat/types";
-import { MAX_QUERY_LENGTH } from "@/lib/chat/types";
-import { chatModeSchema } from "@/server/routers/conversation";
-import { GUEST_PROMPT_LIMIT } from "@/lib/guest";
-import {
-  countGuestPromptsUsed,
-  ensureConversationOwnership,
-} from "@/server/lib/conversation-policy";
+import { ensureConversationOwnership } from "@/server/lib/conversation-policy";
 
 const logger = createLogger("chat-router");
-
-export const sendMessageSchema = z.object({
-  conversationId: z.string().min(1),
-  query: z.string().trim().min(1).max(MAX_QUERY_LENGTH),
-  mode: chatModeSchema.default("agentic"),
-});
-
-export interface SendMessageResult {
-  messageId: string;
-  conversationId: string;
-}
 
 export interface RegenerateResult {
   userMessageId: string;
@@ -33,47 +15,11 @@ export interface RegenerateResult {
 }
 
 export const chatRouter = router({
-  sendMessage: protectedProcedure
-    .input(sendMessageSchema)
-    .mutation(async ({ ctx, input }): Promise<SendMessageResult> => {
-      const user = ctx.user as AuthedUser;
-      const conversation = await ensureConversationOwnership(prisma, user, input.conversationId);
-
-      // Same free-tier invariant as conversation.create and the chat stream
-      // route: guests may persist at most GUEST_PROMPT_LIMIT prompts.
-      if (user.isGuest) {
-        const promptCount = await countGuestPromptsUsed(prisma, user.id);
-        if (promptCount >= GUEST_PROMPT_LIMIT) {
-          throw new GuestLimitReachedError(GUEST_PROMPT_LIMIT);
-        }
-      }
-
-      const mode: ChatMode = input.mode;
-      const message = await prisma.message.create({
-        data: {
-          conversationId: input.conversationId,
-          role: "USER",
-          content: input.query,
-          metadata: { mode },
-        },
-        select: { id: true },
-      });
-
-      if (!conversation.title || conversation.title === "New conversation") {
-        await prisma.conversation.update({
-          where: { id: input.conversationId },
-          data: { title: input.query.slice(0, 48) },
-        });
-      }
-
-      logger.info(
-        { conversationId: input.conversationId, userId: user.id, messageId: message.id },
-        "[CHAT] user message persisted",
-      );
-
-      return { messageId: message.id, conversationId: input.conversationId };
-    }),
-
+  // Note: user-message persistence intentionally lives ONLY in the chat/stream
+  // SSE route (`findOrCreateUserMessage` in rag/chat-pipeline.ts). A tRPC
+  // `sendMessage` mutation used to duplicate that path and was deleted — the
+  // client never called it, and keeping two persistence routes was a drift
+  // hazard (different title/error behavior from the live SSE path).
   regenerate: protectedProcedure
     .input(z.object({ conversationId: z.string().min(1) }))
     .mutation(async ({ ctx, input }): Promise<RegenerateResult> => {
