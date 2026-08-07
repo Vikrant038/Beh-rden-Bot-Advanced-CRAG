@@ -132,3 +132,7 @@ wraps it), so a failure rolls back everything.
 - `20260805000002_bge_m3_1024_dim/migration.sql` — approved destructive exception: corpus re-embed under BGE-M3 (768→1024-dim)
 - `docs/status/session-handoff-2026-08-04.md` — session state; drift analysis history
 - `web-app/docker/postgres-init.sql` — PoLP roles + extension bootstrap
+- `src/server/db/vector-queries.ts` — single source of truth for pgvector raw SQL (HNSW/`<=>`/tsvector-GIN queries)
+- `src/server/db/analytics.ts` — centralized admin/public aggregation SQL (see §2: raw SQL lives in `db/`, not in routers)
+- `src/server/db/mapping.ts` — row → domain (`Chunk`/`Source`) mapping shared by all DB reads
+- `src/server/lib/conversation-policy.ts` — cross-cutting conversation-ownership + guest-quota helpers
