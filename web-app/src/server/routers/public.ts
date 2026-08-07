@@ -1,5 +1,6 @@
 import { router, publicProcedure } from "@/server/trpc/t";
 import { prisma } from "@/server/db";
+import { germanChunkStats } from "@/server/db/analytics";
 
 /**
  * Public, read-only corpus statistics for the landing page.
@@ -16,12 +17,7 @@ export const publicRouter = router({
       prisma.document.count(),
       prisma.documentChunk.count(),
       prisma.documentParentChunk.count(),
-      prisma.$queryRaw<{ german: bigint; total: bigint }[]>`
-        SELECT
-          count(*) FILTER (WHERE text ~ '[äöüßÄÖÜ]') AS german,
-          count(*) AS total
-        FROM document_chunks;
-      `,
+      germanChunkStats(prisma),
       prisma.document.findMany({
         where: { chunkCount: { gt: 0 } },
         orderBy: { chunkCount: "desc" },
@@ -30,8 +26,7 @@ export const publicRouter = router({
       }),
     ]);
 
-    const german = Number(germanCount[0]?.german ?? 0);
-    const total = Number(germanCount[0]?.total ?? 0);
+    const { german, total } = germanCount;
     const germanChunkPercent = total > 0 ? Math.round((german / total) * 1000) / 10 : 0;
 
     return {

@@ -2,6 +2,15 @@ import { router, adminProcedure } from "@/server/trpc/t";
 import { after } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db";
+import {
+  EXCLUDE_GUESTS_WHERE,
+  dailyQueries,
+  failedQueries,
+  messageStats,
+  modeSplit,
+  recentQueries,
+  topQuestions,
+} from "@/server/db/analytics";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { createLogger } from "@/server/lib/logger";
 import { NotFoundError } from "@/server/lib/errors";
@@ -12,39 +21,6 @@ import { disambiguateQuery } from "@/server/rag/disambiguation";
 import { maskPii } from "@/server/pii/masker";
 
 const logger = createLogger("admin-router");
-
-interface MessageStatsRow {
-  assistantCount: number;
-  cacheHits: number;
-  avgLatencyMs: number | null;
-}
-
-interface DailyQueryRow {
-  date: string;
-  count: number;
-}
-
-interface ModeSplitRow {
-  mode: string;
-  count: number;
-}
-
-interface RecentQueryRowRaw {
-  id: string;
-  conversationId: string;
-  query: string;
-  createdAt: Date;
-  mode: string;
-  latencyMs: number;
-  isCached: boolean;
-  retrievalPath: string | null;
-}
-
-/**
- * Excludes device-scoped guest rows (guest:<uuid>@local) from user metrics so
- * guest browsing (3.10) does not inflate "Total users".
- */
-const EXCLUDE_GUESTS_WHERE = { email: { not: { startsWith: "guest:" } } };
 
 export interface AdminMetrics {
   totalUsers: number;
@@ -293,19 +269,10 @@ export const adminRouter = router({
             logger.warn({ error: String(error) }, "[ADMIN] document.count failed");
             return 0;
           }),
-          prisma.$queryRaw<MessageStatsRow[]>`
-            SELECT
-              COUNT(*) FILTER (WHERE role = 'ASSISTANT')::int AS "assistantCount",
-              COUNT(*) FILTER (WHERE role = 'ASSISTANT' AND metadata->>'isCached' = 'true')::int AS "cacheHits",
-              AVG((metadata->>'latencyMs')::float) AS "avgLatencyMs"
-            FROM messages
-            ${days ? Prisma.sql`WHERE "createdAt" >= NOW() - make_interval(days => ${days}::integer)` : Prisma.empty}
-          `
-            .then((rows) => rows[0])
-            .catch((error) => {
-              logger.warn({ error: String(error) }, "[ADMIN] message stats aggregation failed");
-              return undefined;
-            }),
+          messageStats(prisma, days).catch((error) => {
+            logger.warn({ error: String(error) }, "[ADMIN] message stats aggregation failed");
+            return undefined;
+          }),
         ]);
 
       const assistantCount = stats?.assistantCount ?? 0;
@@ -357,19 +324,10 @@ export const adminRouter = router({
   dailyQueries: adminProcedure
     .input(z.object({ days: z.number().int().min(7).max(DAILY_QUERY_MAX_DAYS).default(14) }))
     .query(async ({ input }): Promise<DailyQueryPoint[]> => {
-      return prisma.$queryRaw<DailyQueryRow[]>`
-      SELECT to_char("createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date, COUNT(*)::int AS count
-      FROM messages
-      WHERE role = 'USER'
-        AND "createdAt" >= NOW() - make_interval(days => ${input.days}::integer)
-      GROUP BY date
-      ORDER BY date ASC
-    `
-        .then((rows) => rows.map((row) => ({ date: row.date, count: Number(row.count ?? 0) })))
-        .catch((error) => {
-          logger.warn({ error: String(error) }, "[ADMIN] dailyQueries aggregation failed");
-          return [];
-        });
+      return dailyQueries(prisma, input.days).catch((error) => {
+        logger.warn({ error: String(error) }, "[ADMIN] dailyQueries aggregation failed");
+        return [];
+      });
     }),
 
   modeSplit: adminProcedure
@@ -382,19 +340,10 @@ export const adminRouter = router({
     )
     .query(async ({ input }): Promise<ModeSplitPoint[]> => {
       const days = input?.days;
-      return prisma.$queryRaw<ModeSplitRow[]>`
-        SELECT COALESCE(metadata->>'mode', 'standard') AS mode, COUNT(*)::int AS count
-        FROM messages
-        WHERE role = 'ASSISTANT' AND metadata->>'mode' IS NOT NULL
-          ${days ? Prisma.sql`AND "createdAt" >= NOW() - make_interval(days => ${days}::integer)` : Prisma.empty}
-        GROUP BY mode
-        ORDER BY count DESC
-      `
-        .then((rows) => rows.map((row) => ({ mode: row.mode, count: Number(row.count ?? 0) })))
-        .catch((error) => {
-          logger.warn({ error: String(error) }, "[ADMIN] modeSplit aggregation failed");
-          return [];
-        });
+      return modeSplit(prisma, days).catch((error) => {
+        logger.warn({ error: String(error) }, "[ADMIN] modeSplit aggregation failed");
+        return [];
+      });
     }),
 
   recentQueries: adminProcedure
@@ -417,81 +366,20 @@ export const adminRouter = router({
         const limit = input?.limit ?? RECENT_QUERY_LIMIT;
         const days = input?.days;
         const cursor = input?.cursor;
-        const take = limit + 1;
-        return prisma.$queryRaw<RecentQueryRowRaw[]>`
-        SELECT m."id",
-               m."conversationId" AS "conversationId",
-               m.content AS query,
-               m."createdAt" AS "createdAt",
-               COALESCE(a.metadata->>'mode', 'standard') AS mode,
-               COALESCE((a.metadata->>'latencyMs')::float, 0) AS "latencyMs",
-               COALESCE(a.metadata->>'isCached', 'false') = 'true' AS "isCached",
-               a.metadata->>'retrievalPath' AS "retrievalPath"
-        FROM messages m
-        CROSS JOIN LATERAL (
-          SELECT "metadata"
-          FROM messages a
-          WHERE a."conversationId" = m."conversationId"
-            AND a.role = 'ASSISTANT'
-            AND a."createdAt" > m."createdAt"
-          ORDER BY a."createdAt" ASC
-          LIMIT 1
-        ) a
-        WHERE m.role = 'USER'
-           ${days ? Prisma.sql`AND m."createdAt" >= NOW() - make_interval(days => ${days}::integer)` : Prisma.empty}
-          ${
-            cursor
-              ? Prisma.sql`AND (
-                  m."createdAt" < ${cursor.createdAt}
-                  OR (m."createdAt" = ${cursor.createdAt} AND m."id" < ${cursor.id})
-                )`
-              : Prisma.empty
-          }
-        ORDER BY m."createdAt" DESC, m."id" DESC
-        LIMIT ${take}
-      `
-          .then((rows) => {
-            const items = rows.slice(0, limit).map((row) => ({
-              id: row.id,
-              conversationId: row.conversationId,
-              query: row.query,
-              createdAt: row.createdAt,
-              mode: row.mode,
-              latencyMs: Number(row.latencyMs ?? 0),
-              isCached: Boolean(row.isCached),
-              retrievalPath: row.retrievalPath ?? null,
-            }));
-            const lastItem = rows.length > limit ? rows[limit - 1] : undefined;
-            const nextCursor =
-              rows.length > limit && lastItem
-                ? { createdAt: lastItem.createdAt, id: lastItem.id }
-                : null;
-            return { items, nextCursor };
-          })
-          .catch((error) => {
-            logger.warn({ error: String(error) }, "[ADMIN] recentQueries aggregation failed");
-            return { items: [], nextCursor: null };
-          });
+        return recentQueries(prisma, { limit, days, cursor }).catch((error) => {
+          logger.warn({ error: String(error) }, "[ADMIN] recentQueries aggregation failed");
+          return { items: [], nextCursor: null };
+        });
       },
     ),
 
   topQuestions: adminProcedure
     .input(z.object({ days: z.number().int().min(1).max(DAILY_QUERY_MAX_DAYS).default(30) }))
     .query(async ({ input }): Promise<Array<{ query: string; count: number }>> => {
-      return prisma.$queryRaw<Array<{ query: string; count: number }>>`
-        SELECT content AS query, COUNT(*)::int AS count
-        FROM messages
-        WHERE role = 'USER'
-           AND "createdAt" >= NOW() - make_interval(days => ${input.days}::integer)
-        GROUP BY content
-        ORDER BY count DESC, MAX("createdAt") DESC
-        LIMIT 10
-      `
-        .then((rows) => rows.map((row) => ({ query: row.query, count: Number(row.count ?? 0) })))
-        .catch((error) => {
-          logger.warn({ error: String(error) }, "[ADMIN] topQuestions aggregation failed");
-          return [];
-        });
+      return topQuestions(prisma, input.days).catch((error) => {
+        logger.warn({ error: String(error) }, "[ADMIN] topQuestions aggregation failed");
+        return [];
+      });
     }),
 
   failedQueries: adminProcedure
@@ -511,34 +399,10 @@ export const adminRouter = router({
       > => {
         const days = input?.days ?? 14;
         const limit = input?.limit ?? 10;
-        return prisma.$queryRaw<
-          Array<{ id: string; conversationId: string; query: string; createdAt: Date }>
-        >`
-          SELECT m."id", m."conversationId" AS "conversationId", m.content AS query, m."createdAt" AS "createdAt"
-          FROM messages m
-          WHERE m.role = 'USER'
-             AND m."createdAt" >= NOW() - make_interval(days => ${days}::integer)
-            AND NOT EXISTS (
-              SELECT 1 FROM messages a
-              WHERE a."conversationId" = m."conversationId"
-                AND a.role = 'ASSISTANT'
-                AND a."createdAt" > m."createdAt"
-            )
-          ORDER BY m."createdAt" DESC
-          LIMIT ${limit}
-        `
-          .then((rows) =>
-            rows.map((row) => ({
-              id: row.id,
-              conversationId: row.conversationId,
-              query: row.query,
-              createdAt: row.createdAt,
-            })),
-          )
-          .catch((error) => {
-            logger.warn({ error: String(error) }, "[ADMIN] failedQueries aggregation failed");
-            return [];
-          });
+        return failedQueries(prisma, { days, limit }).catch((error) => {
+          logger.warn({ error: String(error) }, "[ADMIN] failedQueries aggregation failed");
+          return [];
+        });
       },
     ),
 

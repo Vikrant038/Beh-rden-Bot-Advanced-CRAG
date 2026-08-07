@@ -7,6 +7,10 @@ import { createLogger } from "@/server/lib/logger";
 import type { AuthedUser } from "@/server/trpc/t";
 import type { ChatMessage, ChatSource } from "@/lib/chat/types";
 import { GUEST_PROMPT_LIMIT } from "@/lib/guest";
+import {
+  countGuestPromptsUsed,
+  ensureConversationOwnership,
+} from "@/server/lib/conversation-policy";
 
 const logger = createLogger("conversation-router");
 
@@ -95,20 +99,6 @@ function toChatMessage(row: {
   };
 }
 
-async function ensureOwnership(user: AuthedUser, conversationId: string) {
-  const conversation = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    select: { id: true, userId: true },
-  });
-  if (!conversation) {
-    throw new NotFoundError("Conversation", conversationId);
-  }
-  if (conversation.userId !== user.id) {
-    throw new NotFoundError("Conversation", conversationId);
-  }
-  return conversation;
-}
-
 export const conversationRouter = router({
   create: protectedProcedure
     .input(
@@ -126,9 +116,7 @@ export const conversationRouter = router({
       // a time. Signing in lifts the cap entirely and the guest's data is
       // transferred to the account (see server/guest.ts + trpc/context.ts).
       if (user.isGuest) {
-        const promptCount = await prisma.message.count({
-          where: { conversation: { userId: user.id, deletedAt: null }, role: "USER" },
-        });
+        const promptCount = await countGuestPromptsUsed(prisma, user.id);
         if (promptCount >= GUEST_PROMPT_LIMIT) {
           throw new GuestLimitReachedError(GUEST_PROMPT_LIMIT);
         }
@@ -210,7 +198,7 @@ export const conversationRouter = router({
     .input(z.object({ id: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       const user = ctx.user as AuthedUser;
-      await ensureOwnership(user, input.id);
+      await ensureConversationOwnership(prisma, user, input.id);
 
       const conversation = await prisma.conversation.findUnique({
         where: { id: input.id },
@@ -248,7 +236,7 @@ export const conversationRouter = router({
     .input(z.object({ id: z.string().min(1), title: z.string().trim().min(1).max(200) }))
     .mutation(async ({ ctx, input }) => {
       const user = ctx.user as AuthedUser;
-      await ensureOwnership(user, input.id);
+      await ensureConversationOwnership(prisma, user, input.id);
       const conversation = await prisma.conversation.update({
         where: { id: input.id },
         data: { title: input.title },
@@ -261,7 +249,7 @@ export const conversationRouter = router({
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       const user = ctx.user as AuthedUser;
-      await ensureOwnership(user, input.id);
+      await ensureConversationOwnership(prisma, user, input.id);
       await prisma.conversation.update({
         where: { id: input.id },
         data: { deletedAt: new Date() },
@@ -345,7 +333,7 @@ export const conversationRouter = router({
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       const user = ctx.user as AuthedUser;
-      await ensureOwnership(user, input.id);
+      await ensureConversationOwnership(prisma, user, input.id);
       await prisma.message.deleteMany({ where: { conversationId: input.id } });
       logger.info({ conversationId: input.id, userId: user.id }, "[CONV] cleared");
       return { success: true };
@@ -355,7 +343,7 @@ export const conversationRouter = router({
     .input(z.object({ id: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       const user = ctx.user as AuthedUser;
-      await ensureOwnership(user, input.id);
+      await ensureConversationOwnership(prisma, user, input.id);
 
       const conversation = await prisma.conversation.findUnique({
         where: { id: input.id },
@@ -401,7 +389,7 @@ export const conversationRouter = router({
     .input(z.object({ id: z.string().min(1), pinned: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
       const user = ctx.user as AuthedUser;
-      await ensureOwnership(user, input.id);
+      await ensureConversationOwnership(prisma, user, input.id);
       const updated = await prisma.conversation.update({
         where: { id: input.id },
         data: { pinned: input.pinned },
@@ -431,9 +419,7 @@ export const conversationRouter = router({
       // so the sidebar chip reads `n/GUEST_PROMPT_LIMIT prompts` — the resource
       // that is actually capped. Signed-in users get the conversation count.
       if (user.isGuest) {
-        const prompts = await prisma.message.count({
-          where: { conversation: { userId: user.id, deletedAt: null }, role: "USER" },
-        });
+        const prompts = await countGuestPromptsUsed(prisma, user.id);
         return { count: prompts };
       }
 

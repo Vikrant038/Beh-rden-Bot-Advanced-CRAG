@@ -1,6 +1,7 @@
 import type { Chunk } from "@/server/rag/types";
-import type { CorpusProvider } from "@/server/rag/retrieval/hybrid";
+import type { CorpusProvider } from "@/server/rag/retrieval/sparse";
 import { prisma } from "@/server/db";
+import { rowToChunk } from "@/server/db/mapping";
 
 /**
  * Loads the full chunk corpus from pgvector-backed Postgres.
@@ -52,14 +53,7 @@ export class PrismaCorpusProvider implements CorpusProvider {
       }
 
       for (const row of rows) {
-        chunks.push({
-          id: String(row.id),
-          parentId: row.parentId === null ? undefined : String(row.parentId),
-          documentId: row.documentId,
-          sourceName: row.sourceName,
-          sourceUrl: row.sourceUrl,
-          text: row.text,
-        });
+        chunks.push(rowToChunk(row));
       }
 
       cursor = rows[rows.length - 1].id;

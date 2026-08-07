@@ -9,26 +9,16 @@ import {
   SPARSE_TOP_K,
 } from "@/server/rag/types";
 import { denseRetrieve } from "@/server/rag/retrieval/dense";
-import { buildBm25, type Bm25Search } from "@/server/rag/retrieval/bm25";
 import { reciprocalRankFusion } from "@/server/rag/retrieval/rrf";
 import { expandToParents } from "@/server/rag/retrieval/join";
+import { SparseRetriever } from "@/server/rag/retrieval/sparse";
+import type { CorpusProvider } from "@/server/rag/retrieval/sparse";
 import type { Reranker } from "@/server/rag/retrieval/reranker";
 import type { EmbeddingClient } from "@/server/embeddings/client";
 import { prisma } from "@/server/db";
-import { vectorQueries } from "@/server/db/vector-queries";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("hybrid-retrieval");
-
-// BM25 index is memoized per corpus instance — only used on the FTS fallback
-// path (sparse search normally runs inside Postgres, see vectorQueries.sparseSearch).
-// PrismaCorpusProvider caches the corpus array for 1h and returns the same
-// reference, so the index survives across requests without rebuilds.
-const bm25IndexCache = new WeakMap<Chunk[], Bm25Search>();
-
-export interface CorpusProvider {
-  loadChunks(): Promise<Chunk[]>;
-}
 
 export interface HybridRetrieverOptions {
   embeddingClient: EmbeddingClient;
@@ -56,9 +46,10 @@ export class HybridRetriever {
     // Sparse search runs in Postgres (tsvector + GIN) so the full corpus is
     // never transferred on the hot path. The corpus is only loaded (and BM25
     // built) if the FTS query is unavailable — e.g. a fresh DB missing the
-    // index — keeping in-process BM25 as a pure fallback.
-    let corpusLoadDurationMs = 0;
-    let sparseEngine: "pg_fts" | "bm25_inproc" = "pg_fts";
+    // index — keeping in-process BM25 as a pure fallback. The dispatch +
+    // fallback + BM25 memoization live in SparseRetriever so the contract is
+    // unit-testable in isolation.
+    const sparseRetriever = new SparseRetriever(prisma, this.options.corpusProvider);
 
     const denseRankings: Chunk[][] = [];
     const sparseRankings: Chunk[][] = [];
@@ -78,35 +69,15 @@ export class HybridRetriever {
     const denseDurationMs = performance.now() - t0_dense;
 
     const t0_sparse = performance.now();
-    let perQuerySparse: Chunk[][];
-    try {
-      perQuerySparse = await Promise.all(
-        queries.map((subQuery) =>
-          vectorQueries.sparseSearch(prisma, subQuery, { topK: SPARSE_TOP_K }),
-        ),
-      );
-    } catch (error) {
-      sparseEngine = "bm25_inproc";
-      logger.warn(
-        { error: String(error) },
-        "[HYBRID] Postgres FTS sparse search failed; falling back to in-process BM25",
-      );
-      const t0_corpus = performance.now();
-      const corpus = await this.options.corpusProvider.loadChunks();
-      corpusLoadDurationMs = performance.now() - t0_corpus;
-
-      let bm25 = bm25IndexCache.get(corpus);
-      if (!bm25) {
-        bm25 = buildBm25(corpus);
-        bm25IndexCache.set(corpus, bm25);
-      }
-      perQuerySparse = queries.map((subQuery) => bm25!.search(subQuery, SPARSE_TOP_K));
-    }
+    const perQuerySparse = await Promise.all(
+      queries.map((subQuery) => sparseRetriever.search(subQuery, SPARSE_TOP_K)),
+    );
     const sparseBm25DurationMs = performance.now() - t0_sparse;
+    const { engine: sparseEngine, corpusLoadDurationMs } = perQuerySparse[0];
 
     for (let i = 0; i < queries.length; i++) {
       denseRankings.push(perQueryDense[i]);
-      sparseRankings.push(perQuerySparse[i]);
+      sparseRankings.push(perQuerySparse[i].chunks);
     }
 
     const allRankings = [...denseRankings, ...sparseRankings];

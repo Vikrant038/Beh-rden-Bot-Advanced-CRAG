@@ -85,9 +85,13 @@ const MOCK_LINES = Array.from(
 const MOCK_TEXT = MOCK_LINES.join("\n");
 
 function fakeEmbeddingClient() {
+  // 1024-dim vectors: `toVectorLiteral` (reused from vector-queries.ts) enforces
+  // the BGE-M3 embedding contract, so a shorter vector would throw — matching
+  // what the real `vector(1024)` column would reject at insert time.
+  const makeVector = (seed: number) => Array.from({ length: 1024 }, (_, i) => (i === seed ? 0.1 : 0.2));
   return {
-    embedTexts: vi.fn(async (texts: string[]) => texts.map((_, i) => [0.1, 0.2, i])),
-    embedQuery: vi.fn(async () => [0.1]),
+    embedTexts: vi.fn(async (texts: string[]) => texts.map((_, i) => makeVector(i % 1024))),
+    embedQuery: vi.fn(async () => makeVector(0)),
   };
 }
 

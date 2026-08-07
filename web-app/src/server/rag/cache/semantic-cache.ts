@@ -1,12 +1,14 @@
 import { createHash } from "node:crypto";
 import { prisma } from "@/server/db";
 import { vectorQueries } from "@/server/db/vector-queries";
+import { parseCachePayload } from "@/server/db/mapping";
 import type { Source } from "@/server/rag/types";
 import { CACHE_SIMILARITY_THRESHOLD, CACHE_TTL_SECONDS } from "@/server/rag/types";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("semantic-cache");
 
+/** Payload written to the cache (read side shares this shape via parseCachePayload). */
 export interface CachePayload {
   answer: string;
   sources: Source[];
@@ -65,9 +67,10 @@ export class SemanticCache {
             logger.info(
               `[CACHE HIT - TIER 2 VECTOR] sim ${sim.toFixed(4)} for query: '${query.slice(0, 40)}'`,
             );
+            const payload = parseCachePayload(rows[0].responseJson);
             return {
-              answer: this.extractAnswer(rows[0].responseJson),
-              sources: this.extractSources(rows[0].responseJson),
+              answer: payload.answer,
+              sources: payload.sources,
               retrievalPath: `TIER_2_VECTOR_CACHE_HIT (Sim: ${sim.toFixed(3)})`,
               latencyMs: 12,
               isCached: true,
@@ -151,23 +154,14 @@ export class SemanticCache {
     retrievalPath: string,
     latencyMs: number,
   ): CachedResponse {
+    const payload = parseCachePayload(row.responseJson);
     return {
-      answer: this.extractAnswer(row.responseJson),
-      sources: this.extractSources(row.responseJson),
+      answer: payload.answer,
+      sources: payload.sources,
       retrievalPath,
       latencyMs,
       isCached: true,
     };
-  }
-
-  private extractAnswer(responseJson: unknown): string {
-    const data = responseJson as { answer?: string };
-    return data?.answer ?? "";
-  }
-
-  private extractSources(responseJson: unknown): Source[] {
-    const data = responseJson as { sources?: Source[] };
-    return Array.isArray(data?.sources) ? data.sources : [];
   }
 }
 

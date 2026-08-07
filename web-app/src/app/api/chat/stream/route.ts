@@ -9,6 +9,7 @@ import { chatModeSchema } from "@/server/routers/conversation";
 import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/lib/guest";
 import { MAX_QUERY_LENGTH } from "@/lib/chat/types";
 import { createLogger } from "@/server/lib/logger";
+import { countGuestPromptsUsed } from "@/server/lib/conversation-policy";
 
 const logger = createLogger("chat-stream-route");
 
@@ -52,9 +53,7 @@ export async function POST(request: Request) {
   // conversation (conversation.create guards starting new threads); it must run
   // before the user message is persisted by the pipeline.
   if (guestId) {
-    const promptCount = await prisma.message.count({
-      where: { conversation: { userId, deletedAt: null }, role: "USER" },
-    });
+    const promptCount = await countGuestPromptsUsed(prisma, userId);
     if (promptCount >= GUEST_PROMPT_LIMIT) {
       return NextResponse.json(
         { error: "Guest limit reached", code: GUEST_LIMIT_REACHED_CODE },

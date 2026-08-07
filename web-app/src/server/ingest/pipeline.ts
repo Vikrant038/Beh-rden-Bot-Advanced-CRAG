@@ -27,6 +27,7 @@ import { RecursiveChunker, chunkParentChild } from "@/server/ingest/chunker";
 import { scrapeWebPage, type ScrapedDocument } from "@/server/ingest/scraper";
 import { parsePdf } from "@/server/ingest/pdf-parser";
 import { createDefaultEmbeddingClient, type EmbeddingClient } from "@/server/embeddings/client";
+import { toVectorLiteral } from "@/server/db/vector-queries";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { getCorpusProvider } from "@/server/rag/instance";
 import { ExternalApiError } from "@/server/lib/errors";
@@ -285,7 +286,7 @@ async function persistIngested(
             ${title},
             ${sourceKey},
             ${child.text},
-            ${`[${vector.join(",")}]`}::vector,
+            ${toVectorLiteral(vector)}::vector,
             NOW()
           )`;
         });

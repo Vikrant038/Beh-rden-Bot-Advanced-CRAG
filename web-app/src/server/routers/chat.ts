@@ -8,6 +8,10 @@ import type { ChatMode } from "@/lib/chat/types";
 import { MAX_QUERY_LENGTH } from "@/lib/chat/types";
 import { chatModeSchema } from "@/server/routers/conversation";
 import { GUEST_PROMPT_LIMIT } from "@/lib/guest";
+import {
+  countGuestPromptsUsed,
+  ensureConversationOwnership,
+} from "@/server/lib/conversation-policy";
 
 const logger = createLogger("chat-router");
 
@@ -28,33 +32,17 @@ export interface RegenerateResult {
   conversationId: string;
 }
 
-async function ensureOwnership(user: AuthedUser, conversationId: string) {
-  const conversation = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    select: { id: true, userId: true, title: true },
-  });
-  if (!conversation) {
-    throw new NotFoundError("Conversation", conversationId);
-  }
-  if (conversation.userId !== user.id) {
-    throw new NotFoundError("Conversation", conversationId);
-  }
-  return conversation;
-}
-
 export const chatRouter = router({
   sendMessage: protectedProcedure
     .input(sendMessageSchema)
     .mutation(async ({ ctx, input }): Promise<SendMessageResult> => {
       const user = ctx.user as AuthedUser;
-      const conversation = await ensureOwnership(user, input.conversationId);
+      const conversation = await ensureConversationOwnership(prisma, user, input.conversationId);
 
       // Same free-tier invariant as conversation.create and the chat stream
       // route: guests may persist at most GUEST_PROMPT_LIMIT prompts.
       if (user.isGuest) {
-        const promptCount = await prisma.message.count({
-          where: { conversation: { userId: user.id, deletedAt: null }, role: "USER" },
-        });
+        const promptCount = await countGuestPromptsUsed(prisma, user.id);
         if (promptCount >= GUEST_PROMPT_LIMIT) {
           throw new GuestLimitReachedError(GUEST_PROMPT_LIMIT);
         }
@@ -90,7 +78,7 @@ export const chatRouter = router({
     .input(z.object({ conversationId: z.string().min(1) }))
     .mutation(async ({ ctx, input }): Promise<RegenerateResult> => {
       const user = ctx.user as AuthedUser;
-      await ensureOwnership(user, input.conversationId);
+      await ensureConversationOwnership(prisma, user, input.conversationId);
 
       const lastAssistant = await prisma.message.findFirst({
         where: { conversationId: input.conversationId, role: "ASSISTANT" },

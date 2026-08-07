@@ -21,6 +21,7 @@ import {
   EMBEDDING_DIM,
   SPARSE_TOP_K,
 } from "@/server/rag/types";
+import { rowToChunk } from "@/server/db/mapping";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -115,15 +116,7 @@ async function findSimilarChunks(
     LIMIT ${topK};
   `;
 
-  return rows.map((row) => ({
-    id: String(row.id),
-    parentId: row.parentId === null ? undefined : String(row.parentId),
-    documentId: row.documentId ?? undefined,
-    sourceName: row.sourceName,
-    sourceUrl: row.sourceUrl,
-    text: row.text,
-    similarityScore: Number(row.sim),
-  }));
+  return rows.map((row) => ({ ...rowToChunk(row), similarityScore: Number(row.sim) }));
 }
 
 /**
@@ -214,15 +207,7 @@ async function sparseSearch(
     LIMIT ${topK};
   `;
 
-  return rows.map((row) => ({
-    id: String(row.id),
-    parentId: row.parentId === null ? undefined : String(row.parentId),
-    documentId: row.documentId ?? undefined,
-    sourceName: row.sourceName,
-    sourceUrl: row.sourceUrl,
-    text: row.text,
-    bm25Score: Number(row.rank),
-  }));
+  return rows.map((row) => ({ ...rowToChunk(row), bm25Score: Number(row.rank) }));
 }
 
 /**
