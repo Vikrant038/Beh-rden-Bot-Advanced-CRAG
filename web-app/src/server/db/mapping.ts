@@ -52,6 +52,9 @@ export interface CachePayload {
  * Parses a semantic-cache `responseJson` blob into a typed payload. The
  * `responseJson` contract (an object with optional `answer` string and sources
  * array) is defined here once, so cache reads and writes share the same shape.
+ *
+ * Malformed entries are dropped, never thrown: a corrupt/partial cache blob
+ * degrades to an empty answer + valid sources rather than crashing a request.
  */
 export function parseCachePayload(responseJson: unknown): CachePayload {
   const data: CachePayload = responseJson && typeof responseJson === "object"
@@ -59,6 +62,10 @@ export function parseCachePayload(responseJson: unknown): CachePayload {
     : { answer: "", sources: [] };
   return {
     answer: typeof data.answer === "string" ? data.answer : "",
-    sources: Array.isArray(data.sources) ? data.sources : [],
+    sources: Array.isArray(data.sources)
+      ? data.sources.filter(
+          (source): source is Source => typeof source === "object" && source !== null,
+        )
+      : [],
   };
 }

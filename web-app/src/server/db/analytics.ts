@@ -18,11 +18,17 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 
-/** `AND created_at >= now() - interval 'N days'` fragment, or empty when no window. */
-export function timeWindow(days?: number): Prisma.Sql {
-  return days
-    ? Prisma.sql`AND "createdAt" >= NOW() - make_interval(days => ${days}::integer)`
-    : Prisma.empty;
+/**
+ * `[AND|WHERE] created_at >= now() - interval 'N days'` fragment, or empty when
+ * no window. `prefix` defaults to `AND` for queries that already have a WHERE
+ * clause; pass `"WHERE"` for queries like `messageStats` that filter only on
+ * the time window.
+ */
+export function timeWindow(days?: number, prefix: "AND" | "WHERE" = "AND"): Prisma.Sql {
+  if (!days) return Prisma.empty;
+  return prefix === "WHERE"
+    ? Prisma.sql`WHERE "createdAt" >= NOW() - make_interval(days => ${days}::integer)`
+    : Prisma.sql`AND "createdAt" >= NOW() - make_interval(days => ${days}::integer)`;
 }
 
 // ─── Admin message stats ────────────────────────────────────────────────────
@@ -56,7 +62,7 @@ export async function messageStats(
       COUNT(*) FILTER (WHERE role = 'ASSISTANT' AND metadata->>'isCached' = 'true')::int AS "cacheHits",
       AVG((metadata->>'latencyMs')::float) AS "avgLatencyMs"
     FROM messages
-    ${timeWindow(days)}
+    ${timeWindow(days, "WHERE")}
   `;
   return rows[0];
 }
@@ -138,14 +144,7 @@ export async function recentQueries(
 ): Promise<RecentQueriesPage> {
   const { limit, days, cursor } = options;
   const take = limit + 1;
-  const rows = await prisma.$queryRaw<
-    Array<
-      RecentQueryRow & {
-        // rows are shaped by the SQL; numbers may arrive as bigint
-        count?: number | bigint | null;
-      }
-    >
-  >`
+  const rows = await prisma.$queryRaw<Array<RecentQueryRow>>`
     SELECT m."id",
            m."conversationId" AS "conversationId",
            m.content AS query,

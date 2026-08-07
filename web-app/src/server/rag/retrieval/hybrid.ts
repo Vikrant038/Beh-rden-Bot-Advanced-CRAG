@@ -73,7 +73,18 @@ export class HybridRetriever {
       queries.map((subQuery) => sparseRetriever.search(subQuery, SPARSE_TOP_K)),
     );
     const sparseBm25DurationMs = performance.now() - t0_sparse;
-    const { engine: sparseEngine, corpusLoadDurationMs } = perQuerySparse[0];
+    // Queries fall back to BM25 independently, so engines can mix (FTS for
+    // some sub-queries, in-process BM25 for others). Report the slowest engine
+    // and sum corpus-load time across every query that needed it.
+    const sparseEngine: "pg_fts" | "bm25_inproc" = perQuerySparse.some(
+      (outcome) => outcome.engine === "bm25_inproc",
+    )
+      ? "bm25_inproc"
+      : "pg_fts";
+    const corpusLoadDurationMs = perQuerySparse.reduce(
+      (acc, outcome) => acc + outcome.corpusLoadDurationMs,
+      0,
+    );
 
     for (let i = 0; i < queries.length; i++) {
       denseRankings.push(perQueryDense[i]);
