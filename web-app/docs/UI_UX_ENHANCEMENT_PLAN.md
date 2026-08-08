@@ -157,7 +157,7 @@
 
 ### 2.8 — Improve Hero Typography & Hierarchy
 **Files:** `src/app/page.tsx`
-**Current:** "Your AI Guide to German Immigration" is `text-4xl sm:text-5xl` — decent but lacks visual punch.
+**Current:** "Your German journey, decoded." (type-display with gradient span) — updated during the modern dark AI redesign; the old "Your AI Guide to German Immigration" was replaced for being generic.
 **Proposed:** Use a larger display size (`text-5xl sm:text-6xl`), tighter leading, a gradient accent on a keyword (e.g., "German Immigration"), and a subtle text-shadow/glow in dark mode.
 **Priority:** P1 · **Effort:** S
 

@@ -39,12 +39,10 @@ export function ChatLayout({ children }: { children: React.ReactNode }) {
     setHoverExpanded(false);
   }, []);
 
-  // On md screens, hovering the collapsed rail expands it; leaving collapses it.
-  // On lg+ screens, hover does nothing — the sidebar is always full width.
+  // Hovering the collapsed rail expands it at any size (md and lg+); leaving
+  // collapses it again. The collapse button remains the only way to close it.
   const handleSidebarHoverEnter = useCallback(() => {
-    // Only expand on hover if we're on md (not lg+) and currently collapsed
-    const isLg = window.matchMedia("(min-width: 1024px)").matches;
-    if (!isLg && collapsed) {
+    if (collapsed) {
       setHoverExpanded(true);
     }
   }, [collapsed]);
@@ -127,7 +125,7 @@ export function ChatLayout({ children }: { children: React.ReactNode }) {
       ══════════════════════════════════════════════════════════════════ */}
       <aside
         className={cn(
-          "hidden shrink-0 border-r border-border bg-surface/60 transition-[width] duration-200 md:block",
+          "sidebar-glass hidden shrink-0 border-r border-border transition-[width] duration-200 md:block",
           isExpanded ? "w-72" : "w-16",
         )}
         onMouseEnter={handleSidebarHoverEnter}
@@ -157,7 +155,7 @@ export function ChatLayout({ children }: { children: React.ReactNode }) {
             role="dialog"
             aria-modal="true"
             aria-label="Navigation"
-            className="drawer-panel absolute inset-y-0 left-0 w-[85vw] max-w-xs overflow-y-auto overscroll-contain bg-surface shadow-2xl focus:outline-none"
+            className="sidebar-glass drawer-panel absolute inset-y-0 left-0 w-[85vw] max-w-xs overflow-y-auto overscroll-contain shadow-2xl focus:outline-none"
           >
             {/* Panel header */}
             <div className="flex items-center justify-between border-b border-border px-4 py-3">

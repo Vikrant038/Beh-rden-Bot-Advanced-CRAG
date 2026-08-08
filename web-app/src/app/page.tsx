@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import Image from "next/image";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
@@ -17,8 +17,8 @@ import {
   Network,
   Receipt,
   ShieldCheck,
+  Sparkles,
   X,
-  Zap,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -119,7 +119,12 @@ const TOPICS = [
   "Degree Recognition",
 ];
 
-function StatCard({
+const DEMO_POINTS = [
+  "Bilingual query expansion (English + German)",
+  "Sources with relevance scores on every answer",
+];
+
+function StatCell({
   value,
   suffix,
   label,
@@ -131,12 +136,12 @@ function StatCard({
   decimals?: number;
 }) {
   return (
-    <GlassCard className="p-4 text-center sm:p-5">
-      <p className="text-2xl font-bold tabular-nums text-foreground sm:text-3xl">
+    <div className="flex flex-col items-center gap-1 px-3 py-3 text-center sm:border-l sm:border-glass-border sm:first:border-l-0">
+      <p className="text-xl font-bold tabular-nums text-foreground sm:text-2xl">
         <CountUp value={value} suffix={suffix} decimals={decimals} />
       </p>
-      <p className="mt-1 text-xs text-muted sm:text-sm">{label}</p>
-    </GlassCard>
+      <p className="text-[11px] text-muted sm:text-xs">{label}</p>
+    </div>
   );
 }
 
@@ -193,13 +198,13 @@ export default function LandingPage() {
 
   return (
     <div id="main" className="relative min-h-screen overflow-hidden bg-background">
-      <div className="gradient-mesh pointer-events-none absolute inset-0 opacity-40 md:opacity-100" />
+      <div className="gradient-mesh pointer-events-none absolute inset-0 opacity-60" />
 
-      {/* ─── Sticky glass navbar (#13: slimmer on mobile) ─── */}
+      {/* ─── Sticky glass navbar ─── */}
       <header className="sticky top-0 z-30 border-b border-glass-border bg-background/70 backdrop-blur-xl">
         <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-2 sm:px-6 md:py-3">
           <Link href="/" className="flex items-center gap-2 font-semibold">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-primary-foreground">
+            <span className="brand-gradient grid h-9 w-9 place-items-center rounded-xl text-white shadow-[0_4px_16px_-4px_var(--color-primary)]">
               <GraduationCap className="h-5 w-5" />
             </span>
             <span className="text-lg">Behörden-Bot</span>
@@ -221,7 +226,7 @@ export default function LandingPage() {
             <ThemeToggle compact />
             <Link
               href={startHref}
-              className="hidden rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover md:inline-block"
+              className="brand-gradient hidden rounded-xl px-4 py-2 text-sm font-medium text-white shadow-[0_4px_16px_-4px_var(--color-primary)] transition hover:brightness-110 md:inline-block"
             >
               Get started
             </Link>
@@ -253,7 +258,7 @@ export default function LandingPage() {
               <Link
                 href={startHref}
                 onClick={() => setMenuOpen(false)}
-                className="mt-2 rounded-xl bg-primary px-4 py-2.5 text-center text-sm font-medium text-primary-foreground transition hover:bg-primary-hover"
+                className="brand-gradient mt-2 rounded-xl px-4 py-2.5 text-center text-sm font-medium text-white transition hover:brightness-110"
               >
                 Get started
               </Link>
@@ -264,79 +269,99 @@ export default function LandingPage() {
 
       <main className="relative z-10 mx-auto max-w-6xl px-4 pb-16 pt-12 text-center sm:px-6 sm:pb-24 sm:pt-14">
         {/* ─── Hero ─── */}
-        <motion.div {...reveal} transition={{ duration: 0.5 }}>
-          <GlassCard className="mx-auto max-w-3xl overflow-hidden">
-            <div className="relative aspect-[4/3] w-full overflow-hidden sm:aspect-video">
-              <Image
-                src="/Images/hero-banner.jpg"
-                alt="German universities, student visas, and blocked accounts guide"
-                fill
-                priority
-                sizes="(max-width: 768px) 100vw, 48rem"
-                className="object-cover"
-              />
-            </div>
-            <div className="px-6 pb-10 pt-8 sm:px-10">
-              <h1 className="text-3xl font-bold leading-[1.1] tracking-tight min-[400px]:text-4xl sm:text-5xl lg:text-6xl">
-                Your AI Guide to{" "}
-                <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                  German Immigration
-                </span>
-              </h1>
-              <p className="mx-auto mt-4 max-w-xl text-base text-muted sm:text-lg">
-                Student visas, APS certification, blocked accounts, and university applications —
-                answered with official sources in seconds.
-              </p>
-              <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                <Link
-                  href={startHref}
-                  className="cta-shimmer inline-block w-full max-w-xs rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground shadow-glass transition hover:bg-primary-hover active:scale-[0.98] sm:w-auto"
-                >
-                  Start asking →
-                </Link>
-                <a
-                  href="#how-it-works"
-                  className="inline-block w-full max-w-xs rounded-xl border border-glass-border bg-glass px-8 py-3 text-sm font-medium shadow-glass backdrop-blur transition hover:bg-surface-hover sm:w-auto"
-                >
-                  See how it works
-                </a>
-              </div>
-            </div>
-          </GlassCard>
-        </motion.div>
+        <section className="relative mt-2 sm:mt-6">
+          {/* CSS-only aurora orbs layered over the gradient mesh */}
+          <div className="aurora" aria-hidden="true">
+            <div className="aurora-orb aurora-orb-a left-[-12%] top-[-24%] h-72 w-72 bg-primary/40 sm:h-96 sm:w-96" />
+            <div className="aurora-orb aurora-orb-b right-[-10%] top-[-4%] h-64 w-64 bg-accent/30 sm:h-80 sm:w-80" />
+            <div className="aurora-orb aurora-orb-c bottom-[-34%] left-[32%] h-72 w-72 bg-primary/25 sm:h-96 sm:w-96" />
+          </div>
 
-        {/* ─── Trust / stats bar (real DB numbers) ─── */}
+          <motion.div {...reveal} transition={{ duration: 0.5 }} className="relative">
+            <span className="inline-flex items-center gap-2 rounded-full border border-glass-border bg-glass px-3.5 py-1.5 text-xs text-muted shadow-glass backdrop-blur">
+              <Sparkles className="h-3.5 w-3.5 text-accent" />
+              German student visas · APS · blocked accounts · university admissions
+            </span>
+          </motion.div>
+
+          <motion.h1
+            {...reveal}
+            transition={{ duration: 0.55, delay: 0.05 }}
+            className="type-display mx-auto mt-6 max-w-4xl tracking-[-0.03em]"
+          >
+            Ask about student visas, APS, and blocked accounts.
+          </motion.h1>
+
+          <motion.p
+            {...reveal}
+            transition={{ duration: 0.55, delay: 0.12 }}
+            className="mx-auto mt-5 max-w-xl text-base text-muted sm:text-lg"
+          >
+            Get cited answers grounded in official German sources — in seconds, for free.
+          </motion.p>
+
+          <motion.div
+            {...reveal}
+            transition={{ duration: 0.55, delay: 0.18 }}
+            className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row"
+          >
+            <Link
+              href={startHref}
+              className="cta-shimmer brand-gradient inline-block w-full max-w-xs rounded-xl px-8 py-3 text-sm font-semibold text-white shadow-[0_8px_28px_-8px_var(--color-primary)] transition hover:brightness-110 active:scale-[0.98] sm:w-auto"
+            >
+              Start asking →
+            </Link>
+            <a
+              href="#how-it-works"
+              className="inline-block w-full max-w-xs rounded-xl border border-glass-border bg-glass px-8 py-3 text-sm font-medium shadow-glass backdrop-blur transition hover:bg-surface-hover sm:w-auto"
+            >
+              See how it works
+            </a>
+          </motion.div>
+
+          {/* Live-type chat mockup */}
+          <motion.div
+            {...reveal}
+            transition={{ duration: 0.6, delay: 0.34 }}
+            className="relative mx-auto mt-14 max-w-2xl"
+          >
+            <div className="pointer-events-none absolute -inset-6 rounded-[2rem] bg-primary/10 blur-3xl" aria-hidden="true" />
+            <ChatMockup />
+          </motion.div>
+        </section>
+
+        {/* ─── Trust / stats strip (real DB numbers) ─── */}
         <motion.section
           {...reveal}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="mx-auto mt-16 grid max-w-4xl grid-cols-1 gap-4 min-[360px]:grid-cols-2 lg:grid-cols-4"
+          className="mx-auto mt-20 max-w-3xl"
           aria-label="Live corpus statistics"
         >
           {isLoading ? (
-            <>
+            <GlassCard className="flex flex-col gap-4 p-5 sm:flex-row sm:gap-0">
               {[0, 1, 2, 3].map((index) => (
-                <GlassCard key={index} className="p-5 text-center">
-                  <div className="mx-auto h-8 w-16 animate-pulse rounded-md bg-surface-hover" />
-                  <div className="mx-auto mt-3 h-3 w-20 animate-pulse rounded bg-surface-hover" />
-                </GlassCard>
+                <div key={index} className="flex-1 px-4 text-center">
+                  <div className="mx-auto h-7 w-16 animate-pulse rounded-md bg-surface-hover" />
+                  <div className="mx-auto mt-2 h-3 w-20 animate-pulse rounded bg-surface-hover" />
+                </div>
               ))}
-            </>
+            </GlassCard>
           ) : isError || !stats ? (
-            <GlassCard className="col-span-full p-5 text-center text-sm text-muted">
+            <GlassCard className="p-5 text-center text-sm text-muted">
               Live corpus stats temporarily unavailable.
             </GlassCard>
           ) : (
-            <>
-              <StatCard value={stats?.sources ?? 0} suffix="+" label="official sources" />
-              <StatCard value={stats?.chunks ?? 0} suffix="+" label="indexed chunks" />
-              <StatCard
+            <GlassCard className="grid grid-cols-2 gap-y-4 p-3 sm:grid-cols-4 sm:gap-y-0 sm:p-2">
+              <StatCell value={stats?.sources ?? 0} suffix="+" label="official sources" />
+              <StatCell value={stats?.chunks ?? 0} suffix="+" label="indexed chunks" />
+              <StatCell
                 value={stats?.germanChunkPercent ?? 0}
                 suffix="%"
                 label="German-language chunks"
                 decimals={1}
               />
-              <StatCard value={3} suffix="" label="agent pipeline" />
-            </>
+              <StatCell value={3} suffix="" label="agent pipeline" />
+            </GlassCard>
           )}
         </motion.section>
 
@@ -344,34 +369,55 @@ export default function LandingPage() {
         <motion.section
           {...reveal}
           transition={{ duration: 0.5 }}
-          className="mt-24 grid items-center gap-10 text-left lg:grid-cols-2"
+          className="content-visibility-auto mt-24 text-left"
           id="demo"
         >
-          <div className="order-last lg:order-first">
-            <p className="text-xs font-semibold uppercase tracking-wider text-accent">
-              See it in action
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold sm:text-3xl">
-              Ask a question. Get a cited answer.
-            </h2>
-            <p className="mt-3 max-w-md text-sm text-muted">
-              Every answer is grounded in official sources with confidence scores — and the
-              three-agent pipeline tells you exactly what it&apos;s doing as it works.
-            </p>
-            <ul className="mt-6 space-y-2 text-sm text-muted">
-              {[
-                `Hybrid retrieval across ${stats ? `${stats.sources}+` : "115+"} official sources`,
-                "Bilingual query expansion (English + German)",
-                "Sources with relevance scores on every answer",
-              ].map((point) => (
-                <li key={point} className="flex items-center gap-2">
-                  <Zap className="h-3.5 w-3.5 shrink-0 text-accent" />
-                  {point}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <ChatMockup />
+          <GlassCard className="overflow-hidden p-6 sm:p-10">
+            {/* Framed image above the section heading */}
+            <div className="relative mb-8 overflow-hidden rounded-2xl border border-glass-border shadow-glass">
+              <div className="relative aspect-[8/5] w-full overflow-hidden sm:aspect-[21/9]">
+                <Image
+                  src="/Images/hero-image.jpeg"
+                  alt="Historic German town square at dusk — the journey this guide helps you plan"
+                  fill
+                  sizes="(max-width: 1024px) 100vw, 60rem"
+                  className="object-cover"
+                />
+                <div
+                  className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/40 via-transparent to-transparent"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+            <div className="grid items-center gap-8 lg:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-accent">
+                  See it in action
+                </p>
+                <h2 className="type-title mt-2">Ask a question. Get a cited answer.</h2>
+                <p className="mt-3 max-w-md text-sm text-muted">
+                  Every answer is grounded in official sources with confidence scores — and the
+                  three-agent pipeline tells you exactly what it&apos;s doing as it works.
+                </p>
+              </div>
+              <ul className="space-y-3">
+                {[
+                  `Hybrid retrieval across ${stats ? `${stats.sources}+` : "115+"} official sources`,
+                  ...DEMO_POINTS,
+                ].map((point, index) => (
+                  <li
+                    key={point}
+                    className="flex items-center gap-3 rounded-xl border border-glass-border bg-glass px-4 py-3 text-sm text-foreground backdrop-blur"
+                  >
+                    <span className="brand-gradient grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[11px] font-bold text-white">
+                      {index + 1}
+                    </span>
+                    {point}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </GlassCard>
         </motion.section>
 
         {/* ─── How it works ─── */}
@@ -379,9 +425,9 @@ export default function LandingPage() {
           {...reveal}
           transition={{ duration: 0.5, delay: 0.05 }}
           id="how-it-works"
-          className="mt-24 scroll-mt-20 md:scroll-mt-24"
+          className="content-visibility-auto mt-24 scroll-mt-20 md:scroll-mt-24"
         >
-          <h2 className="text-2xl font-semibold sm:text-3xl">How it works</h2>
+          <h2 className="type-title">How it works</h2>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
             A three-agent pipeline turns your question into a cited, verified answer.
           </p>
@@ -404,7 +450,7 @@ export default function LandingPage() {
               },
             ].map((step) => (
               <GlassCard key={step.step} className="flex items-start gap-4 p-6 text-left sm:block">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/15 text-sm font-bold text-primary">
+                <span className="brand-gradient grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold text-white shadow-[0_4px_14px_-4px_var(--color-primary)]">
                   {step.step}
                 </span>
                 <div className="min-w-0">
@@ -421,9 +467,9 @@ export default function LandingPage() {
           {...reveal}
           transition={{ duration: 0.5 }}
           id="features"
-          className="mt-24 scroll-mt-20 md:scroll-mt-24"
+          className="content-visibility-auto mt-24 scroll-mt-20 md:scroll-mt-24"
         >
-          <h2 className="text-2xl font-semibold sm:text-3xl">Built for accuracy and privacy</h2>
+          <h2 className="type-title">Built for accuracy and privacy</h2>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
             Every feature exists to earn your trust before you make a life-changing decision.
           </p>
@@ -433,7 +479,7 @@ export default function LandingPage() {
               return (
                 <motion.div key={feature.title} {...reveal} transition={{ duration: 0.4 }}>
                   <GlassCard className="h-full p-4 transition hover:-translate-y-0.5 hover:shadow-glass sm:p-5">
-                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary sm:h-11 sm:w-11">
+                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary shadow-[0_0_18px_-6px_var(--color-primary)] sm:h-11 sm:w-11">
                       <Icon className="h-5 w-5" />
                     </span>
                     <h3 className="mt-3 font-semibold">{feature.title}</h3>
@@ -450,9 +496,9 @@ export default function LandingPage() {
           {...reveal}
           transition={{ duration: 0.5 }}
           id="corpus"
-          className="mt-24 scroll-mt-20 md:scroll-mt-24"
+          className="content-visibility-auto mt-24 scroll-mt-20 md:scroll-mt-24"
         >
-          <h2 className="text-2xl font-semibold sm:text-3xl">Built on a real legal corpus</h2>
+          <h2 className="type-title">Built on a real legal corpus</h2>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
             Every answer is grounded in indexed official documents — federal laws, BAMF brochures,
             and Goethe/telc/TestDaF exam handbooks. These are the largest documents in the knowledge
@@ -462,7 +508,7 @@ export default function LandingPage() {
             {(stats?.topSources ?? []).map((source, index) => (
               <GlassCard key={source.title} className="p-5">
                 <div className="flex items-start gap-3">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
+                  <span className="brand-gradient grid h-8 w-8 shrink-0 place-items-center rounded-lg text-xs font-bold text-white">
                     {index + 1}
                   </span>
                   <div className="min-w-0">
@@ -489,8 +535,8 @@ export default function LandingPage() {
         </motion.section>
 
         {/* ─── Supported topics ─── */}
-        <motion.section {...reveal} transition={{ duration: 0.5 }} className="mt-24">
-          <h2 className="text-2xl font-semibold sm:text-3xl">What can I ask about?</h2>
+        <motion.section {...reveal} transition={{ duration: 0.5 }} className="content-visibility-auto mt-24">
+          <h2 className="type-title">What can I ask about?</h2>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
             From your first APS appointment to your first semester — the knowledge base covers the
             whole journey.
@@ -500,7 +546,7 @@ export default function LandingPage() {
               <a
                 key={topic}
                 href={startHref}
-                className="grid min-h-11 place-items-center rounded-full border border-glass-border bg-glass px-3.5 py-1.5 text-xs text-muted shadow-glass backdrop-blur transition hover:border-primary hover:text-foreground"
+                className="grid min-h-11 place-items-center rounded-full border border-glass-border bg-glass px-3.5 py-1.5 text-xs text-muted shadow-glass backdrop-blur transition hover:border-primary/60 hover:text-foreground"
               >
                 {topic}
               </a>
@@ -513,11 +559,9 @@ export default function LandingPage() {
           {...reveal}
           transition={{ duration: 0.5 }}
           id="faq"
-          className="mx-auto mt-24 max-w-2xl scroll-mt-20 text-left md:scroll-mt-24"
+          className="content-visibility-auto mx-auto mt-24 max-w-2xl scroll-mt-20 text-left md:scroll-mt-24"
         >
-          <h2 className="text-center text-2xl font-semibold sm:text-3xl">
-            Frequently asked questions
-          </h2>
+          <h2 className="type-title text-center">Frequently asked questions</h2>
           <div className="mt-8 space-y-3">
             {FAQ_ITEMS.map((item, index) => {
               const open = openFaq === index;
@@ -542,19 +586,21 @@ export default function LandingPage() {
         </motion.section>
 
         {/* ─── Final CTA ─── */}
-        <motion.section {...reveal} transition={{ duration: 0.5 }} className="mt-24">
+        <motion.section {...reveal} transition={{ duration: 0.5 }} className="content-visibility-auto mt-24">
           <GlassCard className="relative overflow-hidden px-5 py-10 sm:px-8 sm:py-14">
-            <h2 className="text-2xl font-semibold sm:text-3xl">
-              Ready to start your German journey?
-            </h2>
-            <p className="mx-auto mt-3 max-w-xl text-sm text-muted">
+            <div className="aurora" aria-hidden="true">
+              <div className="aurora-orb aurora-orb-c left-[-10%] top-[-60%] h-64 w-64 bg-primary/30" />
+              <div className="aurora-orb aurora-orb-b right-[-10%] bottom-[-70%] h-64 w-64 bg-accent/25" />
+            </div>
+            <h2 className="type-title relative">Ready to start your German journey?</h2>
+            <p className="relative mx-auto mt-3 max-w-xl text-sm text-muted">
               Get grounded, sourced answers about visas, APS, blocked accounts, and admissions — in
               seconds, for free.
             </p>
-            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <div className="relative mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
                 href={startHref}
-                className="cta-shimmer inline-block w-full rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground shadow-glass transition hover:bg-primary-hover active:scale-[0.98] sm:w-auto"
+                className="cta-shimmer brand-gradient inline-block w-full rounded-xl px-8 py-3 text-sm font-semibold text-white shadow-[0_8px_28px_-8px_var(--color-primary)] transition hover:brightness-110 active:scale-[0.98] sm:w-auto"
               >
                 Start asking →
               </Link>
@@ -570,7 +616,6 @@ export default function LandingPage() {
       </main>
 
       <footer className="relative z-10 border-t border-glass-border bg-background/60 px-6 py-8 backdrop-blur">
-        {" "}
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 text-center sm:flex-row sm:text-left">
           <div>
             <p className="font-semibold">Behörden-Bot</p>

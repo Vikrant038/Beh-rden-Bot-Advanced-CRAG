@@ -94,16 +94,24 @@ describe("ChatInput", () => {
     expect(screen.getByPlaceholderText(/Ask about visas/)).toHaveValue("Blocked account 2026?");
   });
 
-  it("hides quick prompts while streaming or with typed content", async () => {
+  it("recedes quick prompts while typing, but keeps them visible while streaming", async () => {
     const user = userEvent.setup();
     const { rerender } = setup({ suggestions: ["Prompt A"] });
     expect(screen.getByRole("button", { name: "Prompt A" })).toBeInTheDocument();
     await user.type(screen.getByPlaceholderText(/Ask about visas/), "typed");
     expect(screen.queryByRole("button", { name: "Prompt A" })).not.toBeInTheDocument();
+    // Sending a message clears the input but streaming continues; the suggestions
+    // stay visible so the user can fire a follow-up without re-typing.
+    await user.click(screen.getByRole("button", { name: "Clear input" }));
     rerender(
-      <ChatInput onSubmit={vi.fn()} onStop={vi.fn()} isStreaming suggestions={["Prompt A"]} />,
+      <ChatInput
+        onSubmit={vi.fn()}
+        onStop={vi.fn()}
+        isStreaming
+        suggestions={["Prompt A"]}
+      />,
     );
-    expect(screen.queryByRole("button", { name: "Prompt A" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Prompt A" })).toBeInTheDocument();
   });
 
   it("switches modes via the toggle buttons", async () => {

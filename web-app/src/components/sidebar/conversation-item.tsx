@@ -133,11 +133,18 @@ export function ConversationItem({
       className={cn(
         "group relative flex items-center gap-1 rounded-lg py-2 pl-3 pr-1 transition-colors",
         active
-          ? "bg-surface-hover text-foreground"
+          ? "bg-primary/10 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
           : "text-muted hover:bg-surface-hover hover:text-foreground",
         pinned && "bg-primary/5",
       )}
     >
+      {/* Active row accent bar */}
+      {active && (
+        <span
+          className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-accent shadow-[0_0_8px_var(--color-accent)]"
+          aria-hidden="true"
+        />
+      )}
       <button
         type="button"
         onClick={navigate}

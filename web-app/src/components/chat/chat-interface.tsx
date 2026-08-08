@@ -76,14 +76,16 @@ function followUpsFor(lastQuery: string): string[] {
 function ThinkingIndicator() {
   return (
     <div className="flex justify-start" aria-live="polite">
-      <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm border border-glass-border bg-glass px-4 py-3 text-sm text-muted backdrop-blur">
-        <MessageCircle className="h-4 w-4 text-primary" />
+      <div className="flex items-center gap-2.5 rounded-2xl rounded-bl-sm border border-glass-border bg-glass px-4 py-3 text-sm text-muted shadow-[0_0_20px_-8px_var(--color-primary)] backdrop-blur">
+        <span className="grid h-6 w-6 place-items-center rounded-lg bg-primary/10 text-primary">
+          <MessageCircle className="h-3.5 w-3.5" />
+        </span>
         <span>Behörden-Bot is thinking</span>
         <span className="flex gap-1" aria-hidden="true">
           {[0, 1, 2].map((dot) => (
             <motion.span
               key={dot}
-              className="h-1.5 w-1.5 rounded-full bg-primary"
+              className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_6px_var(--color-primary)]"
               animate={{ opacity: [0.3, 1, 0.3] }}
               transition={{ duration: 1, repeat: Infinity, delay: dot * 0.2 }}
             />
@@ -257,17 +259,14 @@ export function ChatInterface({
 
   return (
     <div className="relative flex h-full flex-col">
-      {/* ─── Chat header ─── */}
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-background/80 px-4 py-2.5 backdrop-blur">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-sm font-medium">
-            {mode === "agentic" ? "Agentic mode" : "Standard mode"}
-          </span>
-          <Badge variant={mode === "agentic" ? "accent" : "default"} className="shrink-0">
-            {mode === "agentic" ? <Zap className="h-3 w-3" /> : <BookOpen className="h-3 w-3" />}
-            {mode === "agentic" ? "3-Agent ReAct" : "Single pass"}
-          </Badge>
-        </div>
+      {/* ─── Quiet minimal header ───
+          No border, no slab: a slim floating row so the conversation is the
+          focus. Mode is a small pill; copy/clear/new-chat are ghost actions. */}
+      <header className="flex shrink-0 items-center justify-between gap-2 px-4 py-2">
+        <Badge variant={mode === "agentic" ? "accent" : "default"} className="shrink-0">
+          {mode === "agentic" ? <Zap className="h-3 w-3" /> : <BookOpen className="h-3 w-3" />}
+          {mode === "agentic" ? "3-Agent ReAct" : "Standard"}
+        </Badge>
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
@@ -291,7 +290,7 @@ export function ChatInterface({
           <button
             type="button"
             onClick={newChat}
-            className="ml-1 inline-flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground transition hover:bg-primary-hover"
+            className="brand-gradient ml-1 inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-white shadow-[0_4px_12px_-4px_var(--color-primary)] transition hover:brightness-110"
           >
             <Plus className="h-3.5 w-3.5" />
             New chat
@@ -301,7 +300,7 @@ export function ChatInterface({
 
       <div ref={scrollRef} className="touch-pan-y flex-1 overflow-y-auto">
         <div
-          className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6"
+          className="chat-column flex flex-col gap-4 px-4 py-6"
           role="log"
           aria-live="polite"
           aria-relevant="additions text"
@@ -388,7 +387,7 @@ export function ChatInterface({
                   key={followUp}
                   type="button"
                   onClick={() => void sendMessage(followUp, mode)}
-                  className="grid min-h-11 place-items-center rounded-full border border-glass-border bg-glass px-3 py-1.5 text-xs text-muted backdrop-blur transition hover:border-primary hover:text-foreground sm:inline-flex"
+                  className="grid min-h-11 place-items-center rounded-full border border-glass-border bg-glass px-3 py-1.5 text-xs text-muted backdrop-blur transition hover:border-primary/60 hover:text-foreground hover:shadow-[0_0_16px_-6px_var(--color-primary)] sm:inline-flex"
                 >
                   {followUp}
                 </button>
@@ -461,6 +460,7 @@ export function ChatInterface({
           mode={mode}
           onModeChange={setMode}
           suggestions={QUICK_PROMPTS}
+          autoFocus={isEmpty}
           onPasteUnavailable={() =>
             toast({ title: "Clipboard access is unavailable in this browser", variant: "error" })
           }

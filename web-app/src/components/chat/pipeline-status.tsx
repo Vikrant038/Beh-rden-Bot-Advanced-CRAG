@@ -29,7 +29,7 @@ export function PipelineStatus({ status }: { status: PipelineStage }) {
   const progress = ((activeIndex + 1) / STAGES.length) * 100;
 
   return (
-    <div className="px-1 py-2" aria-live="polite">
+    <div className="mx-auto max-w-3xl px-1 py-2" aria-live="polite">
       <div className="flex items-center gap-3">
         <div
           className="h-1.5 flex-1 overflow-hidden rounded-full bg-border"
@@ -39,18 +39,26 @@ export function PipelineStatus({ status }: { status: PipelineStage }) {
           aria-valuemax={100}
         >
           <div
-            className="h-full rounded-full bg-primary transition-all duration-500"
+            className="brand-gradient h-full rounded-full transition-all duration-500"
             style={{ width: `${progress}%` }}
           />
         </div>
         <span className="shrink-0 font-mono text-xs text-muted">{Math.round(progress)}%</span>
       </div>
-      <div className="mt-2 flex items-center gap-x-3 gap-y-1 overflow-x-auto whitespace-nowrap pb-1 text-xs text-muted sm:flex-wrap sm:whitespace-normal">
+      <div className="mt-3 flex items-center gap-x-2 gap-y-1.5 overflow-x-auto whitespace-nowrap pb-1 text-xs sm:flex-wrap sm:whitespace-normal">
         {STAGES.map((stage, index) => {
           const isActive = stage.keys.includes(status);
           const isComplete = activeIndex > index;
           return (
-            <div key={stage.primaryKey} className="flex shrink-0 items-center gap-1.5 sm:shrink">
+            <span
+              key={stage.primaryKey}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors",
+                isActive
+                  ? "border-primary/40 bg-primary/10 shadow-[0_0_16px_-4px_var(--color-primary)]"
+                  : "border-glass-border bg-glass backdrop-blur",
+              )}
+            >
               {isComplete ? (
                 <Check className="h-3 w-3 text-success" aria-hidden="true" />
               ) : (
@@ -71,7 +79,7 @@ export function PipelineStatus({ status }: { status: PipelineStage }) {
               >
                 {stage.label}
               </span>
-            </div>
+            </span>
           );
         })}
       </div>

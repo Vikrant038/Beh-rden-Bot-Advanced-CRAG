@@ -38,29 +38,45 @@
   --color-mesh-a: rgba(63, 91, 214, 0.18);
   --color-mesh-b: rgba(14, 116, 144, 0.14);
   --color-mesh-c: rgba(217, 119, 6, 0.1);
+  /* Gradient stops for the brand mark & primary CTAs (white-on-gradient safe) */
+  --color-gradient-a: #3f5bd6;
+  --color-gradient-b: #0e7490;
+  /* Theme-aware chat surfaces (light variants) */
+  --color-composer: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(250, 247, 242, 0.97) 100%);
+  --color-sidebar: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(250, 247, 242, 0.98) 100%);
+  --shadow-composer: 0 8px 32px rgba(90, 90, 140, 0.16);
 }
 
 .dark {
-  /* DARK — Midnight (deep slate-navy, luminous accents, dark glass) */
-  --color-background: #0b1020;
-  --color-foreground: #e8ecf8;
-  --color-surface: #111832;
-  --color-surface-hover: #1a2340;
-  --color-border: #232e4f;
-  --color-primary: #7c9cff;
-  --color-primary-hover: #93aeff;
-  --color-primary-foreground: #0b1020;
-  --color-accent: #22d3ee;
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
-  --color-destructive: #f87171;
-  --color-muted: #9aa4c0;
-  --color-glass: rgba(255, 255, 255, 0.06);
-  --color-glass-border: rgba(255, 255, 255, 0.12);
-  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.45);
-  --color-mesh-a: rgba(124, 156, 255, 0.22);
-  --color-mesh-b: rgba(34, 211, 238, 0.16);
-  --color-mesh-c: rgba(192, 132, 252, 0.14);
+  /* DARK — Midnight (deep near-black navy, luminous indigo/cyan accents) */
+  --color-background: #080a12;
+  --color-foreground: #e9edfb;
+  --color-surface: #10162b;
+  --color-surface-hover: #1a2242;
+  --color-border: #242e54;
+  --color-primary: #93a8ff;
+  --color-primary-hover: #a9baff;
+  --color-primary-foreground: #0a0d1c;
+  --color-accent: #3ce6f7;
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-destructive: #fb7185;
+  --color-muted: #9aa5c8;
+  --color-glass: rgba(18, 25, 48, 0.55);
+  --color-glass-border: rgba(255, 255, 255, 0.09);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.55);
+  --color-mesh-a: rgba(147, 168, 255, 0.25);
+  --color-mesh-b: rgba(60, 230, 247, 0.16);
+  --color-mesh-c: rgba(167, 139, 250, 0.16);
+  --color-gradient-a: #4f6ef7;
+  --color-gradient-b: #0891b2;
+  /* Theme-aware chat surfaces (dark variants) */
+  --color-composer: linear-gradient(180deg, rgba(22, 30, 58, 0.72) 0%, rgba(12, 16, 32, 0.88) 100%);
+  --color-sidebar: linear-gradient(180deg, rgba(16, 22, 43, 0.92) 0%, rgba(9, 12, 24, 0.96) 100%);
+  --shadow-composer:
+    0 12px 40px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(147, 168, 255, 0.05),
+    0 0 32px rgba(99, 102, 241, 0.08);
 }
 
 /* ─── Responsive safety nets (P0) ─── */
@@ -163,6 +179,132 @@ select {
 @supports not (backdrop-filter: blur(1px)) {
   .glass-card {
     background: var(--color-surface);
+  }
+}
+
+/* ─── Brand gradient system (modern AI look) ─── */
+
+/* Background gradient for the logo mark + primary CTAs. Uses the deeper
+   per-theme gradient stops so white text keeps readable contrast. */
+.brand-gradient {
+  background-image: linear-gradient(135deg, var(--color-gradient-a) 0%, var(--color-gradient-b) 100%);
+}
+
+/* Gradient headline text (reads light-on-dark in the dark theme). */
+.text-gradient-brand {
+  background-image: linear-gradient(92deg, var(--color-primary) 0%, var(--color-accent) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ─── Aurora hero background (landing) ─── */
+
+.aurora {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.aurora-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(72px);
+  opacity: 0.5;
+  will-change: transform, opacity;
+}
+
+@keyframes orb-drift-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2.5rem, 1.75rem, 0) scale(1.15);
+  }
+}
+@keyframes orb-drift-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.1);
+  }
+  50% {
+    transform: translate3d(-2rem, 1.25rem, 0) scale(0.92);
+  }
+}
+@keyframes orb-drift-c {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translate3d(1.25rem, -1.75rem, 0) scale(1.2);
+    opacity: 0.7;
+  }
+}
+
+.aurora-orb-a {
+  animation: orb-drift-a 16s ease-in-out infinite alternate;
+}
+.aurora-orb-b {
+  animation: orb-drift-b 20s ease-in-out infinite alternate;
+}
+.aurora-orb-c {
+  animation: orb-drift-c 24s ease-in-out infinite alternate;
+}
+
+/* ─── Chat reading column ───
+   Centered max-width wrapper for the conversation + composer, so long answers
+   read like a modern AI thread instead of stretching edge-to-edge. */
+.chat-column {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 48rem;
+}
+
+/* ─── Luminous dark surfaces ─── */
+
+/* Floating composer card pinned above the chat input row (theme-aware). */
+.composer-glass {
+  background: var(--color-composer);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border: 1px solid var(--color-glass-border);
+  box-shadow: var(--shadow-composer);
+}
+
+/* Sidebar chrome: translucent panel (theme-aware). */
+.sidebar-glass {
+  background: var(--color-sidebar);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .composer-glass,
+  .sidebar-glass {
+    background: var(--color-surface);
+  }
+}
+
+/* Live typing cursor for the hero chat mockup. */
+.type-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: var(--color-primary);
+  animation: type-blink 0.9s steps(1) infinite;
+}
+@keyframes type-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
   }
 }
 
@@ -325,7 +467,11 @@ select {
 }
 
 @media (prefers-reduced-motion: reduce), (prefers-reduced-transparency: reduce) {
-  .gradient-mesh {
+  .gradient-mesh,
+  .aurora-orb-a,
+  .aurora-orb-b,
+  .aurora-orb-c,
+  .type-cursor {
     animation: none;
   }
   .cta-shimmer::after {
@@ -405,6 +551,11 @@ html[data-high-contrast="true"] .glass-card {
 }
 .markdown-body p {
   margin: 0.5rem 0;
+}
+/* Borderless assistant block: the first block should not push the answer down
+   with a top margin, and list/paragraph rhythm stays calm for long reads. */
+.markdown-body > :first-child {
+  margin-top: 0;
 }
 .markdown-body ul {
   list-style: disc;

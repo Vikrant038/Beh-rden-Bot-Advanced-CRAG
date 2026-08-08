@@ -50,16 +50,18 @@ function resolveAppUrl(): string {
 }
 const APP_URL = resolveAppUrl();
 
+const PAGE_TAGLINE = "Asked and answered from official German sources.";
+
 export const metadata: Metadata = {
   title: {
-    default: `${APP_NAME} | Your AI Guide to German Immigration`,
+    default: `${APP_NAME} | ${PAGE_TAGLINE}`,
     template: `%s · ${APP_NAME}`,
   },
   description: APP_DESCRIPTION,
   applicationName: APP_NAME,
   metadataBase: new URL(APP_URL),
   openGraph: {
-    title: `${APP_NAME} | Your AI Guide to German Immigration`,
+    title: `${APP_NAME} | ${PAGE_TAGLINE}`,
     description: APP_DESCRIPTION,
     type: "website",
     url: APP_URL,
@@ -67,18 +69,18 @@ export const metadata: Metadata = {
     locale: "en_IN",
     images: [
       {
-        url: "/Images/hero-banner.jpg",
+        url: "/Images/hero-image.jpeg",
         width: 1200,
         height: 630,
-        alt: "Behörden-Bot — your AI guide to German immigration",
+        alt: "Behörden-Bot — AI assistant for German student visas, APS, and blocked accounts",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: `${APP_NAME} | Your AI Guide to German Immigration`,
+    title: `${APP_NAME} | ${PAGE_TAGLINE}`,
     description: APP_DESCRIPTION,
-    images: ["/Images/hero-banner.jpg"],
+    images: ["/Images/hero-image.jpeg"],
   },
   robots: {
     index: true,

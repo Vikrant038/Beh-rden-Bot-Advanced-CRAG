@@ -70,7 +70,7 @@ export function ThemeToggle({ compact = false, className }: ThemeToggleProps) {
             className={cn(
               "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition focus-visible:ring-2 focus-visible:ring-primary",
               active
-                ? "bg-primary text-primary-foreground"
+                ? "brand-gradient text-white shadow-[0_4px_14px_-4px_var(--color-primary)]"
                 : "text-muted hover:bg-surface-hover hover:text-foreground",
             )}
           >

@@ -248,7 +248,9 @@ describe("LandingPage interaction states", () => {
     render(<LandingPage />);
 
     // Page still renders; the hero heading and CTAs are present.
-    expect(screen.getByRole("heading", { name: /Your AI Guide to/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /Ask about student visas, APS, and blocked accounts/ }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Get started" })).toHaveAttribute("href", "/login");
     mockUseReducedMotion.mockReturnValue(false);
   });

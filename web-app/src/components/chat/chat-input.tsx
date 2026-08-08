@@ -29,6 +29,9 @@ interface ChatInputProps {
   suggestions?: string[];
   /** Called when the clipboard cannot be read, so the caller can surface a toast. */
   onPasteUnavailable?: () => void;
+  /** Focus the composer immediately (first-paint caret). Desktop-only: auto-
+      focusing on touch devices pops the on-screen keyboard on page load. */
+  autoFocus?: boolean;
 }
 
 function draftKey(conversationId: string): string {
@@ -45,6 +48,7 @@ export function ChatInput({
   onModeChange,
   suggestions = [],
   onPasteUnavailable,
+  autoFocus = false,
 }: ChatInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -59,6 +63,24 @@ export function ChatInput({
     }
     setValue(window.localStorage.getItem(draftKey(conversationId)) ?? "");
   }, [conversationId]);
+
+  // First-paint composer: focus the caret as soon as the empty state shows.
+  // Guarded to desktop (md+) so phones don't pop the keyboard on load.
+  useEffect(() => {
+    if (!autoFocus) {
+      return;
+    }
+    // matchMedia may be missing in jsdom (tests) — treat as non-desktop.
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function" ||
+      !window.matchMedia("(min-width: 768px)").matches
+    ) {
+      return;
+    }
+    const t = window.setTimeout(() => textareaRef.current?.focus(), 60);
+    return () => window.clearTimeout(t);
+  }, [autoFocus]);
 
   useEffect(() => {
     if (!conversationId) {
@@ -120,14 +142,17 @@ export function ChatInput({
     }
   };
 
-  const showQuickPrompts = suggestions.length > 0 && !isStreaming && value.trim() === "";
+  // Quick-prompt chips stay visible after the first send (not just on the empty
+  // state) so follow-up ideas are always one tap away. They only recede while
+  // the user is mid-composition, so they never crowd the typed text.
+  const showQuickPrompts = suggestions.length > 0 && value.trim() === "";
 
   return (
     // #57 — keep the textarea clear of the iOS home indicator on notched phones
-    <div className="border-t border-border bg-background/80 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur">
-      <div className="mx-auto max-w-3xl">
+    <div className="px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-4 sm:pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div className="composer-glass chat-column rounded-2xl px-2 pb-2 pt-2 sm:px-3">
         {isStreaming && (
-          <p className="mb-2 text-xs text-muted" role="status" aria-live="polite">
+          <p className="mb-2 px-1 text-xs text-muted" role="status" aria-live="polite">
             Generating answer…
           </p>
         )}
@@ -136,7 +161,7 @@ export function ChatInput({
             role="group"
             aria-label="Answer mode"
             // #55 — icons-only labels under 400px so the toggle never crowds the input row
-            className="mb-2 inline-flex items-center gap-1 overflow-x-auto rounded-xl border border-border bg-surface p-0.5"
+            className="mb-2 inline-flex items-center gap-1 overflow-x-auto rounded-xl border border-glass-border bg-background/40 p-0.5"
           >
             <button
               type="button"
@@ -145,7 +170,7 @@ export function ChatInput({
               className={cn(
                 "flex min-h-9 items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition",
                 mode === "standard"
-                  ? "bg-primary text-primary-foreground shadow-sm"
+                  ? "brand-gradient text-white shadow-[0_2px_10px_-2px_var(--color-primary)]"
                   : "text-muted hover:text-foreground",
               )}
             >
@@ -159,7 +184,7 @@ export function ChatInput({
               className={cn(
                 "flex min-h-9 items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition",
                 mode === "agentic"
-                  ? "bg-primary text-primary-foreground shadow-sm"
+                  ? "brand-gradient text-white shadow-[0_2px_10px_-2px_var(--color-primary)]"
                   : "text-muted hover:text-foreground",
               )}
             >
@@ -174,7 +199,7 @@ export function ChatInput({
             // bottom edge; the buttons are h-10 (matching min-h-10 on the
             // textarea) so on a single-line row the icons sit exactly level
             // with the text at every breakpoint.
-            "flex items-end gap-2 rounded-xl border border-border bg-surface px-2 transition focus-within:border-primary/50 focus-within:shadow-[0_0_0_3px_var(--color-primary)/10]",
+            "flex items-end gap-1.5 rounded-xl border border-glass-border bg-background/60 px-1.5 transition focus-within:border-primary/50 focus-within:shadow-[0_0_0_3px_rgba(99,102,241,0.12)]",
             atLimit && "border-warning",
           )}
         >
@@ -238,7 +263,12 @@ export function ChatInput({
               onClick={submit}
               disabled={disabled || !value.trim()}
               aria-label="Send message"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted transition hover:text-foreground hover:shadow-sm hover:[&_svg]:stroke-[2.5] disabled:pointer-events-none disabled:opacity-40"
+              className={cn(
+                "grid h-10 w-10 shrink-0 place-items-center rounded-lg transition",
+                value.trim() && !disabled
+                  ? "brand-gradient text-white shadow-[0_4px_14px_-4px_var(--color-primary)] hover:brightness-110"
+                  : "text-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40",
+              )}
             >
               <SendHorizontal className="h-4 w-4" />
             </button>

@@ -10,7 +10,6 @@ import {
   LogOut,
   MessageSquare,
   PanelLeftClose,
-  PanelLeftOpen,
   Plus,
   Search,
   Settings,
@@ -191,22 +190,10 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
             onClick={newChat}
             aria-label="New chat"
             title="New chat (⌘N)"
-            className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-primary-foreground transition hover:bg-primary-hover"
+            className="brand-gradient grid h-11 w-11 place-items-center rounded-xl text-white shadow-[0_4px_16px_-4px_var(--color-primary)] transition hover:brightness-110"
           >
             <Plus className="h-4 w-4" />
           </button>
-
-          {onToggleCollapsed ? (
-            <button
-              type="button"
-              onClick={onToggleCollapsed}
-              aria-label="Expand sidebar"
-              title="Expand sidebar"
-              className="grid h-11 w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover hover:text-foreground"
-            >
-              <PanelLeftOpen className="h-4 w-4" />
-            </button>
-          ) : null}
 
           <div className="mt-3 flex w-full flex-1 flex-col items-center gap-1">
             {bottomNavItems.map((item) => {
@@ -252,7 +239,7 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
           <button
             type="button"
             onClick={newChat}
-            className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover"
+            className="brand-gradient flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-white shadow-[0_4px_16px_-4px_var(--color-primary)] transition hover:brightness-110"
           >
             <Plus className="h-4 w-4" />
             New chat
@@ -276,7 +263,7 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
             onChange={(event) => setSearchInput(event.target.value)}
             placeholder="Search conversations…"
             aria-label="Search conversations"
-            className="min-h-11 w-full rounded-xl border border-border bg-surface py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted focus:border-primary"
+            className="min-h-11 w-full rounded-xl border border-border bg-surface/60 py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted focus:border-primary/60 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.12)]"
           />
         </div>
 
@@ -301,7 +288,7 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
                 <button
                   type="button"
                   onClick={newChat}
-                  className="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition hover:bg-primary-hover"
+                  className="brand-gradient mt-4 rounded-xl px-4 py-2 text-xs font-medium text-white transition hover:brightness-110"
                 >
                   Start your first chat
                 </button>
@@ -450,7 +437,7 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
               <button
                 type="button"
                 onClick={signIn}
-                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition hover:bg-primary-hover"
+                className="brand-gradient mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition hover:brightness-110"
               >
                 <LogIn className="h-3.5 w-3.5" />
                 Sign in

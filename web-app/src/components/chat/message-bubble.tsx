@@ -136,7 +136,7 @@ export function MessageBubble({
     return (
       <div className="flex justify-end">
         {/* #49 — wider bubbles + break long unbroken strings on phones */}
-        <div className="max-w-[90%] whitespace-pre-wrap break-words rounded-2xl rounded-br-sm bg-primary px-4 py-2.5 text-sm text-white sm:max-w-[85%]">
+        <div className="brand-gradient max-w-[90%] whitespace-pre-wrap break-words rounded-2xl rounded-br-sm px-4 py-2.5 text-sm text-white shadow-[0_8px_20px_-8px_var(--color-primary)] sm:max-w-[85%]">
           {message.content}
         </div>
       </div>
@@ -146,7 +146,7 @@ export function MessageBubble({
   if (message.role === "SYSTEM" || message.role === "DISAMBIGUATION") {
     return (
       <div className="flex justify-center">
-        <div className="max-w-[90%] break-words rounded-xl border border-border bg-surface px-4 py-2 text-xs text-muted sm:max-w-[85%]">
+        <div className="max-w-[90%] break-words rounded-xl border border-glass-border bg-surface/70 px-4 py-2 text-xs text-muted backdrop-blur sm:max-w-[85%]">
           {message.content}
         </div>
       </div>
@@ -159,9 +159,11 @@ export function MessageBubble({
   const cachedLatencySeconds = latencyMs ? (latencyMs / 1000).toFixed(1) : null;
 
   return (
-    <div className="group flex justify-start">
-      {/* #50 — assistant bubble uses more width on phones */}
-      <div className="max-w-[90%] rounded-2xl rounded-bl-sm border border-glass-border bg-glass px-4 py-3 text-sm backdrop-blur sm:max-w-[85%]">
+    // Borderless full-width text block — the Claude/ChatGPT signature. The
+    // reading column (max-w-3xl) does the constraining; no card chrome so the
+    // typography carries the answer.
+    <div className="group">
+      <div className="w-full text-sm sm:text-[0.9375rem]">
         {streaming ? (
           <Markdown content={message.content} streaming />
         ) : message.content ? (

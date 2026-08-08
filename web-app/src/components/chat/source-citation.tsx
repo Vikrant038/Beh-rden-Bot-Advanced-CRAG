@@ -78,7 +78,7 @@ export function SourceCitation({ sources }: { sources: ChatSource[] }) {
                     aria-hidden="true"
                   >
                     <span
-                      className="block h-full rounded-full bg-accent"
+                      className="brand-gradient block h-full rounded-full"
                       style={{ width: `${score}%` }}
                     />
                   </span>
@@ -87,7 +87,7 @@ export function SourceCitation({ sources }: { sources: ChatSource[] }) {
               </>
             );
             const classes =
-              "flex items-center gap-2 rounded-lg border border-glass-border bg-surface/60 px-2.5 py-1.5 transition hover:border-primary hover:bg-surface";
+              "flex items-center gap-2 rounded-lg border border-glass-border bg-surface/60 px-2.5 py-1.5 transition hover:border-primary/60 hover:bg-surface hover:shadow-[0_0_16px_-6px_var(--color-primary)]";
             return (
               <li key={`${source.url}-${index}`}>
                 {isPdf ? (

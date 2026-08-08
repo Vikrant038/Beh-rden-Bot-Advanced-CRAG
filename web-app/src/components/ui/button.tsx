@@ -4,7 +4,8 @@ type ButtonVariant = "primary" | "secondary" | "outline" | "ghost" | "danger";
 type ButtonSize = "sm" | "md" | "lg";
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-primary text-primary-foreground shadow-glass hover:bg-primary-hover",
+  primary:
+    "brand-gradient text-white shadow-[0_8px_24px_-10px_var(--color-primary)] transition-[filter,box-shadow] hover:brightness-110 hover:shadow-[0_10px_28px_-10px_var(--color-primary)]",
   secondary:
     "border border-glass-border bg-glass text-foreground shadow-glass backdrop-blur hover:bg-surface-hover",
   outline: "border border-border bg-transparent text-foreground hover:bg-surface-hover",

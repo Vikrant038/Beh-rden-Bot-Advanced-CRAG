@@ -9,3 +9,10 @@ test-results/
 !.env.example
 *.tsbuildinfo
 next-env.d.ts
+
+# Local scratch / diagnostic material (never commit)
+scratch_check_db.ts
+.screenshots/
+scratch/*.mjs
+scratch/*.html
+scratch/verify-rag-german.ts

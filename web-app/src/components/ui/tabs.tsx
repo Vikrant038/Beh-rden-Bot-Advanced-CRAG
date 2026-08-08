@@ -18,7 +18,7 @@ export function Tabs({ value, onValueChange, items, className }: TabsProps) {
     <div
       role="tablist"
       className={cn(
-        "inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-border bg-surface p-1",
+        "inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-glass-border bg-glass p-1 backdrop-blur",
         className,
       )}
     >
@@ -35,7 +35,7 @@ export function Tabs({ value, onValueChange, items, className }: TabsProps) {
             className={cn(
               "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm transition focus-visible:outline-none",
               active
-                ? "bg-primary text-primary-foreground"
+                ? "brand-gradient text-white shadow-[0_4px_14px_-4px_var(--color-primary)]"
                 : "text-muted hover:bg-surface-hover hover:text-foreground",
             )}
           >

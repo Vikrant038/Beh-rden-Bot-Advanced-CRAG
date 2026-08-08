@@ -5,7 +5,7 @@ test.describe("Landing page", () => {
     await page.goto("/");
 
     await expect(
-      page.getByRole("heading", { name: "Your AI Guide to German Immigration" }),
+      page.getByRole("heading", { name: "Ask about student visas, APS, and blocked accounts." }),
     ).toBeVisible();
     await expect(page.getByRole("heading", { name: "3-Agent ReAct" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Bilingual Retrieval" })).toBeVisible();
