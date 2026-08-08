@@ -325,7 +325,10 @@ export default function LandingPage() {
             transition={{ duration: 0.6, delay: 0.34 }}
             className="relative mx-auto mt-14 max-w-2xl"
           >
-            <div className="pointer-events-none absolute -inset-6 rounded-[2rem] bg-primary/10 blur-3xl" aria-hidden="true" />
+            <div
+              className="pointer-events-none absolute -inset-6 rounded-[2rem] bg-primary/10 blur-3xl"
+              aria-hidden="true"
+            />
             <ChatMockup />
           </motion.div>
         </section>
@@ -535,7 +538,11 @@ export default function LandingPage() {
         </motion.section>
 
         {/* ─── Supported topics ─── */}
-        <motion.section {...reveal} transition={{ duration: 0.5 }} className="content-visibility-auto mt-24">
+        <motion.section
+          {...reveal}
+          transition={{ duration: 0.5 }}
+          className="content-visibility-auto mt-24"
+        >
           <h2 className="type-title">What can I ask about?</h2>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
             From your first APS appointment to your first semester — the knowledge base covers the
@@ -586,7 +593,11 @@ export default function LandingPage() {
         </motion.section>
 
         {/* ─── Final CTA ─── */}
-        <motion.section {...reveal} transition={{ duration: 0.5 }} className="content-visibility-auto mt-24">
+        <motion.section
+          {...reveal}
+          transition={{ duration: 0.5 }}
+          className="content-visibility-auto mt-24"
+        >
           <GlassCard className="relative overflow-hidden px-5 py-10 sm:px-8 sm:py-14">
             <div className="aurora" aria-hidden="true">
               <div className="aurora-orb aurora-orb-c left-[-10%] top-[-60%] h-64 w-64 bg-primary/30" />

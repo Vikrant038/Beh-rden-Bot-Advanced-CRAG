@@ -104,12 +104,7 @@ describe("ChatInput", () => {
     // stay visible so the user can fire a follow-up without re-typing.
     await user.click(screen.getByRole("button", { name: "Clear input" }));
     rerender(
-      <ChatInput
-        onSubmit={vi.fn()}
-        onStop={vi.fn()}
-        isStreaming
-        suggestions={["Prompt A"]}
-      />,
+      <ChatInput onSubmit={vi.fn()} onStop={vi.fn()} isStreaming suggestions={["Prompt A"]} />,
     );
     expect(screen.getByRole("button", { name: "Prompt A" })).toBeInTheDocument();
   });

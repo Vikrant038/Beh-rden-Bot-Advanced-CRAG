@@ -63,10 +63,7 @@ export class SparseRetriever {
     }
   }
 
-  private async searchBm25(
-    query: string,
-    topK: number,
-  ): Promise<SparseSearchOutcome> {
+  private async searchBm25(query: string, topK: number): Promise<SparseSearchOutcome> {
     const t0_corpus = performance.now();
     const corpus = await this.corpusProvider.loadChunks();
     const corpusLoadDurationMs = performance.now() - t0_corpus;

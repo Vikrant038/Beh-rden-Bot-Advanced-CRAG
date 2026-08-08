@@ -74,13 +74,8 @@ export interface DailyQueryRow {
   count: number;
 }
 
-export async function dailyQueries(
-  prisma: PrismaClient,
-  days: number,
-): Promise<DailyQueryRow[]> {
-  const rows = await prisma.$queryRaw<
-    Array<{ date: string; count: number | bigint | null }>
-  >`
+export async function dailyQueries(prisma: PrismaClient, days: number): Promise<DailyQueryRow[]> {
+  const rows = await prisma.$queryRaw<Array<{ date: string; count: number | bigint | null }>>`
     SELECT to_char("createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date, COUNT(*)::int AS count
     FROM messages
     WHERE role = 'USER'
@@ -98,13 +93,8 @@ export interface ModeSplitRow {
   count: number;
 }
 
-export async function modeSplit(
-  prisma: PrismaClient,
-  days?: number,
-): Promise<ModeSplitRow[]> {
-  const rows = await prisma.$queryRaw<
-    Array<{ mode: string; count: number | bigint | null }>
-  >`
+export async function modeSplit(prisma: PrismaClient, days?: number): Promise<ModeSplitRow[]> {
+  const rows = await prisma.$queryRaw<Array<{ mode: string; count: number | bigint | null }>>`
     SELECT COALESCE(metadata->>'mode', 'standard') AS mode, COUNT(*)::int AS count
     FROM messages
     WHERE role = 'ASSISTANT' AND metadata->>'mode' IS NOT NULL
@@ -199,9 +189,7 @@ export async function topQuestions(
   prisma: PrismaClient,
   days: number,
 ): Promise<Array<{ query: string; count: number }>> {
-  const rows = await prisma.$queryRaw<
-    Array<{ query: string; count: number | bigint | null }>
-  >`
+  const rows = await prisma.$queryRaw<Array<{ query: string; count: number | bigint | null }>>`
     SELECT content AS query, COUNT(*)::int AS count
     FROM messages
     WHERE role = 'USER'
@@ -251,9 +239,7 @@ export interface GermanChunkStats {
   total: number;
 }
 
-export async function germanChunkStats(
-  prisma: PrismaClient,
-): Promise<GermanChunkStats> {
+export async function germanChunkStats(prisma: PrismaClient): Promise<GermanChunkStats> {
   const rows = await prisma.$queryRaw<Array<{ german: bigint; total: bigint }>>`
     SELECT
       count(*) FILTER (WHERE text ~ '[äöüßÄÖÜ]') AS german,

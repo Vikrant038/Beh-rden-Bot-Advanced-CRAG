@@ -57,9 +57,10 @@ export interface CachePayload {
  * degrades to an empty answer + valid sources rather than crashing a request.
  */
 export function parseCachePayload(responseJson: unknown): CachePayload {
-  const data: CachePayload = responseJson && typeof responseJson === "object"
-    ? (responseJson as CachePayload)
-    : { answer: "", sources: [] };
+  const data: CachePayload =
+    responseJson && typeof responseJson === "object"
+      ? (responseJson as CachePayload)
+      : { answer: "", sources: [] };
   return {
     answer: typeof data.answer === "string" ? data.answer : "",
     sources: Array.isArray(data.sources)

@@ -92,33 +92,35 @@ export function ChatEmptyState({ onSubmit }: ChatEmptyStateProps) {
       </div>
       <div className="relative">
         <ChatEmptyIllustration />
-      <h2 className="mt-5 text-xl font-semibold sm:mt-6 sm:text-2xl">How can I help you today?</h2>
-      <p className="mt-2 max-w-md px-2 text-sm text-muted">
-        Ask about German student visas, APS certification, blocked accounts, or university
-        applications.
-      </p>
-      <div className="mt-7 grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
-        {SUGGESTED_PROMPTS.map((prompt) => {
-          const Icon = prompt.icon;
-          return (
-            <button
-              key={prompt.title}
-              type="button"
-              onClick={() => onSubmit(prompt.query, "agentic")}
-              className="group flex min-h-11 items-start gap-3 rounded-xl border border-glass-border bg-glass px-4 py-3.5 text-left shadow-glass backdrop-blur transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-surface hover:shadow-[0_8px_24px_-8px_var(--color-primary)]"
-            >
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary shadow-[0_0_14px_-4px_var(--color-primary)]">
-                <Icon className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium">{prompt.title}</span>
-                <span className="mt-0.5 block text-xs text-muted">{prompt.description}</span>
-              </span>
-              <ArrowUpRight className="mt-1 h-4 w-4 shrink-0 text-muted opacity-0 transition group-hover:opacity-100" />
-            </button>
-          );
-        })}
-      </div>
+        <h2 className="mt-5 text-xl font-semibold sm:mt-6 sm:text-2xl">
+          How can I help you today?
+        </h2>
+        <p className="mt-2 max-w-md px-2 text-sm text-muted">
+          Ask about German student visas, APS certification, blocked accounts, or university
+          applications.
+        </p>
+        <div className="mt-7 grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
+          {SUGGESTED_PROMPTS.map((prompt) => {
+            const Icon = prompt.icon;
+            return (
+              <button
+                key={prompt.title}
+                type="button"
+                onClick={() => onSubmit(prompt.query, "agentic")}
+                className="group flex min-h-11 items-start gap-3 rounded-xl border border-glass-border bg-glass px-4 py-3.5 text-left shadow-glass backdrop-blur transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-surface hover:shadow-[0_8px_24px_-8px_var(--color-primary)]"
+              >
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary shadow-[0_0_14px_-4px_var(--color-primary)]">
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">{prompt.title}</span>
+                  <span className="mt-0.5 block text-xs text-muted">{prompt.description}</span>
+                </span>
+                <ArrowUpRight className="mt-1 h-4 w-4 shrink-0 text-muted opacity-0 transition group-hover:opacity-100" />
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

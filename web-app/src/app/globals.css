@@ -42,8 +42,16 @@
   --color-gradient-a: #3f5bd6;
   --color-gradient-b: #0e7490;
   /* Theme-aware chat surfaces (light variants) */
-  --color-composer: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(250, 247, 242, 0.97) 100%);
-  --color-sidebar: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(250, 247, 242, 0.98) 100%);
+  --color-composer: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.9) 0%,
+    rgba(250, 247, 242, 0.97) 100%
+  );
+  --color-sidebar: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(250, 247, 242, 0.98) 100%
+  );
   --shadow-composer: 0 8px 32px rgba(90, 90, 140, 0.16);
 }
 
@@ -74,8 +82,7 @@
   --color-composer: linear-gradient(180deg, rgba(22, 30, 58, 0.72) 0%, rgba(12, 16, 32, 0.88) 100%);
   --color-sidebar: linear-gradient(180deg, rgba(16, 22, 43, 0.92) 0%, rgba(9, 12, 24, 0.96) 100%);
   --shadow-composer:
-    0 12px 40px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(147, 168, 255, 0.05),
+    0 12px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(147, 168, 255, 0.05),
     0 0 32px rgba(99, 102, 241, 0.08);
 }
 
@@ -187,7 +194,11 @@ select {
 /* Background gradient for the logo mark + primary CTAs. Uses the deeper
    per-theme gradient stops so white text keeps readable contrast. */
 .brand-gradient {
-  background-image: linear-gradient(135deg, var(--color-gradient-a) 0%, var(--color-gradient-b) 100%);
+  background-image: linear-gradient(
+    135deg,
+    var(--color-gradient-a) 0%,
+    var(--color-gradient-b) 100%
+  );
 }
 
 /* Gradient headline text (reads light-on-dark in the dark theme). */

@@ -30,7 +30,11 @@ export async function ensureConversationOwnership(
     // Do not leak whether the conversation exists vs. is owned by someone else.
     throw new NotFoundError("Conversation", conversationId);
   }
-  return { conversationId: conversation.id, userId: conversation.userId, title: conversation.title };
+  return {
+    conversationId: conversation.id,
+    userId: conversation.userId,
+    title: conversation.title,
+  };
 }
 
 /**
@@ -38,10 +42,7 @@ export async function ensureConversationOwnership(
  * conversations. This is the free-tier invariant: a guest may have at most
  * GUEST_PROMPT_LIMIT prompts at a time (soft-deleting frees them).
  */
-export async function countGuestPromptsUsed(
-  db: PrismaClient,
-  userId: string,
-): Promise<number> {
+export async function countGuestPromptsUsed(db: PrismaClient, userId: string): Promise<number> {
   return db.message.count({
     where: { conversation: { userId, deletedAt: null }, role: "USER" },
   });
