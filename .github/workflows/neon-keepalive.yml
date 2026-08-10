@@ -1,0 +1,61 @@
+name: Neon Keep-Alive
+
+# Prevents Neon's free-plan project pause: a project with no activity for
+# 7 days is automatically paused. This runs a trivial `SELECT 1` every day so
+# the inactivity clock always resets — cheap insurance (~nothing in compute,
+# zero LLM calls, unlike the weekly CRAG eval which also connects but is
+# expensive and sits right at the 7-day boundary).
+#
+# Reuses the EVAL_DATABASE_URL secret (same Neon project the full-corpus eval
+# reads). The ping is read-only — it never writes to the database.
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # daily 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: web-app
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          # Explicit: `uses:` steps ignore `defaults.run.working-directory`.
+          version: 11.20.0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-app/pnpm-lock.yaml
+
+      - name: Install dependencies (no scripts)
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Ping the database
+        env:
+          # Scoped to this step only (semgrep gha-workflow-env-secret).
+          DATABASE_URL: ${{ secrets.EVAL_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$DATABASE_URL" ]]; then
+            echo "::error::EVAL_DATABASE_URL secret is required for the keep-alive ping (same value the full-corpus eval uses)."
+            exit 1
+          fi
+          # prisma db execute runs raw SQL directly — no generated client, no
+          # app code. A successful SELECT 1 counts as activity and resets
+          # Neon's 7-day inactivity clock.
+          printf 'SELECT 1;\n' | pnpm exec prisma db execute --url "$DATABASE_URL" --stdin
+          echo "keep-alive OK — Neon inactivity clock reset"
