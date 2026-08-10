@@ -1,6 +1,6 @@
 # Phase 4 — Implementation Roadmap (RFC → Atomic Tasks)
 
-> **Source of truth:** `Docs/WEB_APP_PLAN.md` (user-approved RFC), `Docs/EXISTING_PROJECT_ANALYSIS.md`, `Docs/Basic Prompt/{GUARDRAILS,CODING_STANDARDS,PIPELINE_OPS,prompt_design}.md`
+> **Source of truth:** `../../docs/WEB_APP_PLAN.md` (user-approved RFC), `../../docs/EXISTING_PROJECT_ANALYSIS.md`, `../../docs/basic-prompt/{GUARDRAILS,CODING_STANDARDS,PIPELINE_OPS,prompt_design}.md`
 > **Risk tier:** Commercial/Production — all pillars/modules enforced.
 > **Gate:** Requires `@ai-unblock-roadmap` before any implementation code.
 
@@ -106,7 +106,7 @@
 
 ## 3. Change-Control Acknowledgment (vs earlier draft plan)
 
-Per CCI (prompt_design §6.0): the user's `Docs/WEB_APP_PLAN.md` supersedes my root-level draft. Recorded deltas: tRPC replaces REST-first API; NextAuth providers replace Credentials-only; HF Inference embeddings replace OpenAI-compatible; same-repo `web-app/` branch replaces separate repo.
+Per CCI (prompt_design §6.0): the user's `../../docs/WEB_APP_PLAN.md` supersedes my root-level draft. Recorded deltas: tRPC replaces REST-first API; NextAuth providers replace Credentials-only; HF Inference embeddings replace OpenAI-compatible; same-repo `web-app/` branch replaces separate repo.
 
 ---
 

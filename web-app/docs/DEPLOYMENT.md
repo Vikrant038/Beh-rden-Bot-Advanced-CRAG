@@ -144,7 +144,7 @@ Documents added via the admin UI are **enqueued** as `ingest_jobs`, then drained
 (concurrency 1, embedding-rate-limit friendly). The queue is **resumable**: a per-job
 progress cursor + mid-tick time-budget check lets a large PDF finish across several drain
 ticks instead of dying on Vercel's 60 s serverless cap. Design:
-`docs/status/phase-h-resumable-ingest.md` + `../Docs/status/adr-resumable-ingest-queue.md`.
+`docs/status/phase-h-resumable-ingest.md` + `../../docs/status/adr-resumable-ingest-queue.md`.
 
 **How the drain is triggered on the free plan:** Vercel Hobby permits **daily** crons
 only — a `*/5 * * * *` entry in `vercel.json` **fails the deployment build** with

@@ -209,9 +209,9 @@ non-secret variables in the Vercel project and mark the secrets.
 
 ### 📚 For Developers
 
-- **`ARCHITECTURE.md`** — Complete system design, folder structure, data flow, design patterns
-- **`DEVELOPER_QUICKSTART.md`** — Quick reference for common tasks (start here!)
-- **`OPTIMIZATION_GUIDE.md`** — Database optimization, async patterns, performance targets
+- **`docs/ARCHITECTURE.md`** — Complete system design, folder structure, data flow, design patterns
+- **`docs/DEVELOPER_QUICKSTART.md`** — Quick reference for common tasks (start here!)
+- **`docs/OPTIMIZATION_GUIDE.md`** — Database optimization, async patterns, performance targets
 - **`docs/STARTUP.md`** — Local development setup walkthrough
 - **`docs/security/SECURITY_EXCEPTIONS.md`** — Known security limitations & mitigations
 - **`docs/status/`** — Phase delivery reports & milestones

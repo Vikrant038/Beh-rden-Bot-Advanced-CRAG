@@ -13,7 +13,7 @@ Greenfield full-stack TS web app reimplementing Behoerden-Bot (Repo-2) RAG busin
 
 ## Constraints
 - Next.js 15 + tRPC + Prisma + pgvector (Neon) + NextAuth v5 + Tailwind v4 + shadcn/ui + Upstash Redis + Vercel.
-- No Python runtime. Source of truth: `Docs/Basic Prompt/*` + user's `Docs/EXISTING_PROJECT_ANALYSIS.md` + `Docs/WEB_APP_PLAN.md`.
+- No Python runtime. Source of truth: `../../../docs/basic-prompt/*` + user's `../../../docs/EXISTING_PROJECT_ANALYSIS.md` + `../../../docs/WEB_APP_PLAN.md`.
 
 ## Metrics
 - CI quality gates: lint/type/unit/E2E green; RAGAS-equivalent eval thresholds preserved (Faithfulness ≥3.50, Relevance ≥4.00, Context Precision ≥75%).

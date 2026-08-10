@@ -3,7 +3,7 @@
 **Status:** COMPLETE (150/150 verified in code; 0 partial, 0 missing)
 **Audit Date:** 2026-08-03 (third pass)
 **Branch:** `web-app`
-**Audit Method:** Every item in `docs/UI_UX_ENHANCEMENT_PLAN.md` was checked one-by-one against the **actual source code** in `web-app/src/` (not against previous status claims). Coding rules follow `Docs/Basic Prompt/CODING_STANDARDS.md` + `GUARDRAILS.md` as the single source of truth.
+**Audit Method:** Every item in `docs/UI_UX_ENHANCEMENT_PLAN.md` was checked one-by-one against the **actual source code** in `web-app/src/` (not against previous status claims). Coding rules follow `../../../docs/basic-prompt/CODING_STANDARDS.md` + `../../../docs/basic-prompt/GUARDRAILS.md` as the single source of truth.
 
 ---
 

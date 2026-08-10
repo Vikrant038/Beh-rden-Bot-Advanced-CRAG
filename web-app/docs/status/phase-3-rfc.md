@@ -2,7 +2,7 @@
 
 - **Status:** COMPLETE
 - **Date:** 2026-07-31
-- **Gate:** Approved as part of `Docs/WEB_APP_PLAN.md` (user-authored PRD/RFC).
+- **Gate:** Approved as part of `../../../docs/WEB_APP_PLAN.md` (user-authored PRD/RFC).
 
 ## Deliverables
 - Tech stack table (§2), repo structure (§3), Prisma schema — 7 models (§5), tRPC router map + SSE event contract (§6), RAG pipeline design (§7), NextAuth config + RBAC matrix (§8), design tokens (§9), SSE architecture (§10), observability (§11), testing strategy (§12), deployment + env inventory (§13).

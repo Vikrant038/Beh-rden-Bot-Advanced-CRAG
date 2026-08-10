@@ -343,7 +343,7 @@ Landing (mobile-first)
 | D1.7 | Integration tests for `/api/guest` idempotency. | `web-app/tests/integration` |
 | D1.8 | System-prompt unit tests (E) asserting output schema/format. | `web-app/tests/unit` |
 | D1.9 | Keep web-app coverage ≥80% gate. | CI |
-| D1.10 | Document split in `ARCHITECTURE.md`/`DEVELOPER_QUICKSTART.md`. | docs |
+| D1.10 | Document split in `docs/ARCHITECTURE.md`/`docs/DEVELOPER_QUICKSTART.md`. | docs |
 
 ---
 
@@ -374,7 +374,7 @@ Landing (mobile-first)
 | E2.11 | Confidence disclosure: ungrounded/CRAG-fallback answers note "verify with official source." | Writer+base |
 | E2.12 | Keep prompts centralized/versioned constants, testable + auditable. | `src/server/rag/prompt.ts` |
 | E2.13 | Unit tests asserting prompt contract (no fabrication, citations required). | `web-app/tests/unit` |
-| E2.14 | Document prompting strategy in `ARCHITECTURE.md`. | docs |
+| E2.14 | Document prompting strategy in `docs/ARCHITECTURE.md`. | docs |
 
 ## E3. Success criteria
 - Grounded answers (no invented figures) — verified via RAGAS (Faithfulness ≥3.5).

@@ -52,7 +52,7 @@ Repo-2/
 │   ├── test_hf_client.py        # HF API client tests
 │   ├── test_tracing.py          # Tracing integration tests
 │   └── test_document_sync.py    # Incremental sync tests
-└── Docs/                        # Architecture diagrams, ADRs, eval reports
+└── docs/                        # Architecture diagrams, ADRs, eval reports
 ```
 
 ---
@@ -361,7 +361,7 @@ python src/run_comparative_benchmark.py
 
 | Report | Location | Contents |
 |--------|----------|----------|
-| Fine-tuning MRR@10 | `Docs/finetune_report.md` | Epoch curves, MRR@10 75.6% → 97.5% |
+| Fine-tuning MRR@10 | `docs/finetune_report.md` | Epoch curves, MRR@10 75.6% → 97.5% |
 | RAGAS CI Results | `tests/eval_ragas.py` output | Faithfulness, Relevance, Context Precision per run |
 | Comparative Benchmark | `src/run_comparative_benchmark.py` output | Table 3: Baseline vs CRAG (Context P/R, Faithfulness, Relevance) |
 | TruLens Dashboard | `python -m tests.eval_trulens` | Interactive chunk-size comparison (400 vs 600) |

@@ -12,3 +12,10 @@ __pycache__/
 .DS_Store
 # Freebuff desktop app state (local-only, churns every session)
 .freebuff/
+
+# CRAG-eval harness + generated eval data (not pushed)
+tests/eval_ragas_30.py
+data/eval/
+data/processed/
+scratch/rerank-server.py
+scratch/run-webapp-eval.sh

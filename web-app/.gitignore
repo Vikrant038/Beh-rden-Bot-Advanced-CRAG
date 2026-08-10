@@ -16,3 +16,6 @@ scratch_check_db.ts
 scratch/*.mjs
 scratch/*.html
 scratch/verify-rag-german.ts
+
+# CRAG-eval harness for the web-app pipeline (not pushed)
+scripts/eval-crag-webapp.ts

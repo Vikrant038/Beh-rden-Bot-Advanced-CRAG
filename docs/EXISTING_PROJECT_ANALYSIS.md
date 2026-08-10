@@ -54,7 +54,7 @@ Repo-2/
 ├── data/                     # Sources, raw text, processed artifacts
 ├── models/                   # Fine-tuned embedding model (437MB)
 ├── tests/                    # 8 test/eval files
-└── Docs/                     # 5 documentation files
+└── docs/                     # 5 documentation files
 ```
 
 ### Source Modules (src/)

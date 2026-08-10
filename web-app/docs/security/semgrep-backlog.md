@@ -82,7 +82,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 
 Both flag the root **legacy** compose's `postgres` service (the `ankane/pgvector`
 dev container used by the Python pipeline — documented in
-`Docs/Postgres_Docker_Setup.md`). It is a **local dev-only** database with a
+`../../../docs/Postgres_Docker_Setup.md`). It is a **local dev-only** database with a
 bind-mounted volume; `read_only: true` / `no-new-privileges: true` on a
 dev database container carrying a writable volume is low-value hardening that can
 cause spurious boot failures. Not reachable from the web-app or production.

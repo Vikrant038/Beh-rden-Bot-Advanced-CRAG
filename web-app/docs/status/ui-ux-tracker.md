@@ -1,6 +1,6 @@
 # UI/UX Enhancement Audit Tracker
 
-> **Audit basis:** Every row below was verified against the **actual source code** in `web-app/src/` (not against any status doc). Coding rules follow `Docs/Basic Prompt/CODING_STANDARDS.md` + `GUARDRAILS.md` as the single source of truth.
+> **Audit basis:** Every row below was verified against the **actual source code** in `web-app/src/` (not against any status doc). Coding rules follow `../../../docs/basic-prompt/CODING_STANDARDS.md` + `../../../docs/basic-prompt/GUARDRAILS.md` as the single source of truth.
 >
 > **Legend:** ✅ Implemented (verified in code) · ⚠️ Partial (core present, notable gap vs plan) · ❌ Not implemented
 >

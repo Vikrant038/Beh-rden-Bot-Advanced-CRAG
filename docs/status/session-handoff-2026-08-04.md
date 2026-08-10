@@ -80,7 +80,7 @@ c98caeb docs: add session handoff, migration policy, and two-compose DB setup no
 ```
 
 **Post-handoff docs commit (2026-08-05):** `c98caeb` added `MIGRATION_POLICY.md` (in
-`web-app/prisma/migrations/`), `Docs/Postgres_Docker_Setup.md`, and this handoff doc. All four
+`web-app/prisma/migrations/`), `../../../docs/Postgres_Docker_Setup.md`, and this handoff doc. All four
 workflows ran on it — CI ✅ and E2E ✅ green, security 🔴 and deploy 🔴 (same two causes below,
 verified on `c98caeb`: run IDs 30963711418 / 30963711384).
 

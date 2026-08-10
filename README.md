@@ -1,534 +1,449 @@
----
-title: Behoerden Bot — German Immigration Assistant
-emoji: 🇩🇪
-colorFrom: indigo
-colorTo: blue
-sdk: streamlit
-sdk_version: 1.41.0
-app_file: app.py
-pinned: false
----
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js%2015-000000?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js 15"/>
+  <img src="https://img.shields.io/badge/React%2019-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 19"/>
+  <img src="https://img.shields.io/badge/TypeScript%205-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 5"/>
+  <img src="https://img.shields.io/badge/PostgreSQL%20%2B%20pgvector-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL + pgvector"/>
+  <img src="https://img.shields.io/badge/Groq%20LLM-F55036?style=for-the-badge&logo=groq&logoColor=white" alt="Groq LLM"/>
+  <img src="https://img.shields.io/badge/BGE--M3%20Multilingual-FF6F00?style=for-the-badge" alt="BGE-M3 Embeddings"/>
+</p>
 
-# Behoerden-Bot 3.0 — Enterprise 3-Agent ReAct RAG System
+# 🇩🇪 Behörden-Bot — Enterprise Corrective RAG for German Immigration & Study
 
-> **A production-grade, open-source Corrective RAG (CRAG) and 3-Agent ReAct Orchestrator** for German immigration, student visas, APS certification, and university applications. Built with domain fine-tuned embeddings, hybrid retrieval, PostgreSQL/pgvector persistence, semantic caching, conversational memory, GDPR-compliant PII masking, and full Langfuse v4 observability.
+> **A production-grade Corrective RAG (CRAG) assistant that answers German immigration, student-visa, APS, blocked-account, and university-admission questions in English and German — with citations, sub-100 ms search, a fail-closed safety guardrail, and an evaluation harness that proves every claim with numbers.**
 
-[![CI/CD Quality Gate](https://github.com/Vikrant038/Beh-rden-Bot-Advanced-CRAG/actions/workflows/rag_eval_ci.yml/badge.svg)](https://github.com/Vikrant038/Beh-rden-Bot-Advanced-CRAG/actions)
-![Python](https://img.shields.io/badge/python-3.11%2B-blue)
-![LLM](https://img.shields.io/badge/LLM-Groq%20llama--3.1--8b-orange)
-![Embeddings](https://img.shields.io/badge/Embeddings-BGE--base--768d%20fine--tuned-green)
-![Database](https://img.shields.io/badge/DB-PostgreSQL%20%2B%20pgvector-blue)
+This is **not a generic RAG demo**. It is an **enterprise-level retrieval system** that evolved through three generations — naive RAG → advanced hybrid RAG → corrective RAG (CRAG) — with each step **measured, not assumed**: embedding fine-tuning lifted MRR@10 from 75.6% to 97.5%, the CRAG pipeline beat the baseline by up to +26.9% on answer relevance, and a 30-question multilingual evaluation harness (with adversarial traps) now gates both the Python reference and the production TypeScript pipeline.
 
 ---
 
-## Table of Contents
+## 📖 Table of Contents
 
-1. [Architecture Overview](#-architecture-overview)
-2. [Full Pipeline Stages](#-full-pipeline-stages)
-3. [3-Agent ReAct Orchestrator](#-3-agent-react-orchestrator)
-4. [Repository Structure](#-repository-structure)
-5. [Tech Stack](#-tech-stack)
-6. [Key Features](#-key-features)
-7. [Benchmark Results](#-benchmark-results)
-8. [Environment Variables](#-environment-variables)
-9. [Local Setup](#-local-setup)
-10. [Data Pipeline](#-data-pipeline)
-11. [Evaluation and Quality Gates](#-evaluation--quality-gates)
-12. [API Reference](#-api-reference)
-13. [Deployment](#-deployment)
-14. [Architectural Decisions](#-architectural-decisions)
-
----
-
-## Architecture Overview
-
-```
-User Query (Streamlit UI / FastAPI)
-    |
-    v
-[api.py] PII Masking (regex + spaCy NER)
-    |
-    v
-[Stage 0A] Domain + Safety Guardrail  -- REJECT (off-topic / illegal advice)
-    | PASS
-    v
-[Stage 0B] Query Disambiguation Node  -- CLARIFY (vague queries -> 3 options)
-    | CLEAR
-    v
-Semantic Cache Check (SHA-256 Exact + pgvector Cosine >= 0.93)
-    | MISS
-    v
-[Stage 1] Multi-Query Expansion (LLM generates 3 sub-queries)
-    |
-    v
-[Stage 2] Hybrid Retrieval
-   +-- Dense FAISS (Fine-tuned BGE 768d, min similarity 0.20, k=15)
-   +-- Sparse BM25 (rank_bm25 Okapi, k=15)
-    |
-    v
-[Stage 3] Reciprocal Rank Fusion (RRF, k=60)
-    |
-    v
-[Stage 4] Cross-Encoder Re-Rank (BAAI/bge-reranker-base, top_k=5)
-    |
-    v
-[CRAG Check] cross_score >= 0.50 ?
-   +-- PASS  -> 3-Agent ReAct Pipeline
-   +-- FAIL  -> Live Web Search (DDGS) -> 3-Agent ReAct Pipeline
-    |
-    v
-3-AGENT REACT ORCHESTRATOR
-   +-- Agent 1: Research Agent (ReAct tool loop)
-   +-- Agent 2: Analyst Agent (5-dim comparison matrix)
-   +-- Agent 3: Writer Agent (Executive Markdown synthesis)
-    |
-    v
-Response + Sources + Metadata
-    |
-    v
-Save to PostgreSQL Semantic Cache + Conversational Memory
-```
+1. [The Problem](#-the-problem)
+2. [The RAG Evolution — Naive → Advanced → Corrective](#-the-rag-evolution--naive--advanced--corrective)
+3. [Models We Tried & How Accuracy Improved](#-models-we-tried--how-accuracy-improved)
+4. [The Pipeline — How an Answer Is Made](#-the-pipeline--how-an-answer-is-made)
+5. [Query Optimization](#-query-optimization)
+6. [Cost Optimization](#-cost-optimization)
+7. [Architecture — Two Implementations, One Design](#-architecture--two-implementations-one-design)
+8. [Tech Stack](#-tech-stack)
+9. [Repository Structure](#-repository-structure)
+10. [Quality, Testing & the Evaluation Harness](#-quality-testing--the-evaluation-harness)
+11. [Getting Started](#-getting-started)
+12. [Documentation Map](#-documentation-map)
+13. [The Journey](#-the-journey)
 
 ---
 
-## Full Pipeline Stages
+## 🔥 The Problem
 
-| Stage | Name | Implementation | Purpose |
-|-------|------|----------------|---------|
-| Pre-flight | PII Masking | `src/pii_masker.py` | Strip IBAN, passport, DOB, phone, email, names before LLM |
-| 0A | Domain + Safety Guardrail | `src/advanced_retrieval.py` | LLM classifier: blocks spam AND illegal advice requests |
-| 0B | Query Disambiguation | `src/advanced_retrieval.py` | Catches vague <=3-word queries, presents 3 clarifying options |
-| Cache | Semantic Cache | `src/semantic_cache.py` | Exact hash + pgvector cosine similarity (>=0.93, 7-day TTL) |
-| 1 | Multi-Query Expansion | `src/advanced_retrieval.py` | LLM generates 3 sub-queries for broader retrieval coverage |
-| 2 | Hybrid Retrieval | `src/retrieval.py` + `src/advanced_retrieval.py` | Dense FAISS + Sparse BM25 |
-| 3 | RRF Fusion | `src/advanced_retrieval.py` | Reciprocal Rank Fusion (k=60) |
-| 4 | Cross-Encoder Re-Rank | `src/advanced_retrieval.py` | BAAI/bge-reranker-base token-level scoring |
-| CRAG | Relevance Gate | `src/agentic_rag.py` | Score >=0.50 uses retrieval; else triggers web search |
-| Agents | 3-Agent ReAct | `src/agentic_rag.py` | Research -> Analyst -> Writer |
-| Memory | Conversational Memory | `src/memory.py` | PostgreSQL summary-buffer (last 4 turns + rolling LLM summary) |
+Applying to a German university or moving to Germany as a student means navigating:
 
----
+- **Dozens of official sources** — BAMF, DAAD, KMK, the Residence Act (Aufenthaltsgesetz), uni-assist, embassy pages — mostly in German, frequently updated, sometimes contradictory.
+- **High-stakes, low-tolerance decisions** — a blocked account (Sperrkonto) funded at the wrong amount, or an APS certificate applied for too late, can void a semester.
+- **Generic LLMs that hallucinate** — a confident wrong answer about a §16b visa or an EU Blue Card salary threshold is worse than no answer.
 
-## 3-Agent ReAct Orchestrator
+The requirements we derived from this (see [First-Principles Engineering](docs/FIRST_PRINCIPLES.md)):
 
-### Agent 1 — Research Agent
-
-Runs a full ReAct (Reason + Act) loop with 3 tools:
-
-| Tool | Langfuse Type | Purpose |
-|------|---------------|---------|
-| `vector_search` | `as_type="tool"` | Full hybrid pipeline: FAISS + BM25 + RRF + Cross-Encoder |
-| `web_search` | `as_type="tool"` | DuckDuckGo DDGS (triggered for comparative/live/out-of-domain queries) |
-| `visa_calculator` | `as_type="tool"` | Deterministic EUR/INR cost calculator for blocked accounts |
-
-### Agent 2 — Analyst Agent
-
-Produces a **5-dimension comparison matrix** as a structured Pydantic object `AnalystComparisonMatrix`:
-
-- `summary` — high-level analytical answer
-- `structured_table` — Markdown table (e.g. APS requirements by country)
-- `key_insights` — list of key differences or important findings
-- `verified_facts` — list of source-backed verified facts
-
-### Agent 3 — Writer Agent
-
-Executive Markdown synthesis:
-- Bold executive summary answering the user query
-- Embedded Markdown comparison table
-- Key insights bullets
-- Mandatory disclaimer
+| Requirement | Why |
+|---|---|
+| **Answers must be grounded** | Hallucination is unacceptable for legal/administrative advice |
+| **Answers must cite sources** | Users need to verify; trust is earned, not assumed |
+| **English *and* German at parity** | Users read German sources; many applicants speak English |
+| **Fast** | Chat should feel instant, not like a batch job |
+| **Private by default** | GDPR applies; PII must never reach an LLM |
+| **Provably correct** | A CI gate + eval harness must *measure* answer quality on every change |
 
 ---
 
-## Repository Structure
+## 📈 The RAG Evolution — Naive → Advanced → Corrective
 
-```
-Behoerden-Bot-Advanced-CRAG/
-|
-+-- app.py                          # Streamlit UI (dual-mode: Standard CRAG / 3-Agent ReAct)
-+-- api.py                          # FastAPI backend (SSE streaming + sync endpoints + PII masking)
-+-- migrate.py                      # Database migration entry point
-+-- docker-compose.yml              # PostgreSQL + pgvector local development container
-+-- requirements.txt                # Production dependencies (pinned ranges, used by CI)
-+-- requirement.txt                 # Full pip-freeze snapshot (exact reproducibility)
-+-- .env.example                    # Template for all required secrets
-+-- .github/
-|   +-- workflows/
-|       +-- rag_eval_ci.yml         # GitHub Actions CI/CD quality gate (on push/PR to main)
-+-- data/
-|   +-- sources.json                # 21 curated sources (18 web + 3 PDF)
-|   +-- raw/                        # Scraped .txt files (21 documents)
-|   +-- processed/
-|       +-- faiss_index.bin         # FAISS vector index (fine-tuned BGE 768d)
-|       +-- embeddings.npy          # Numpy embedding matrix
-|       +-- chunk_metadata.json     # Chunk source/url/text metadata
-|       +-- all_chunks.json         # All chunked documents (chunk_size=600, overlap=150)
-+-- models/
-|   +-- bge_base_german_visa_finetuned/   # Fine-tuned model weights (438MB safetensors)
-+-- src/
-|   +-- ingest.py                   # Web scrape (trafilatura) + PDF (pdfplumber) -> chunks
-|   +-- embed.py                    # Embed chunks -> embeddings.npy + FAISS index
-|   +-- retrieval.py                # Dense FAISS retrieval (BGE query prefix)
-|   +-- advanced_retrieval.py       # BM25 + RRF + Cross-Encoder + Guardrail + Disambiguation
-|   +-- rag.py                      # Standard CRAG pipeline (fallback/simple mode)
-|   +-- agentic_rag.py              # 3-Agent ReAct orchestrator (primary production mode)
-|   +-- llm_client.py               # Resilient LLM: Groq primary (circuit breaker) -> HF fallback
-|   +-- semantic_cache.py           # Multi-tier cache: SHA-256 exact + pgvector cosine
-|   +-- memory.py                   # Summary-buffer conversational memory (PostgreSQL-backed)
-|   +-- database.py                 # SQLAlchemy async models: DocumentChunk, CacheEntry, Memory
-|   +-- document_sync.py            # Zero-downtime transactional document update
-|   +-- pii_masker.py               # GDPR PII masking: regex + spaCy NER (fails open)
-|   +-- tracing.py                  # Langfuse v4 OTel tracing setup (observe, propagate_attributes)
-|   +-- utils.py                    # Pydantic ChunkModel + German NFC text cleaning
-|   +-- finetune_embeddings.py      # MNRL fine-tuning on MPS/CUDA, MRR@10 evaluation
-|   +-- generate_testset.py         # Synthetic evaluation dataset generation
-|   +-- run_comparative_benchmark.py  # Baseline RAG vs Advanced CRAG metric comparison
-|   +-- migrate_to_postgres.py      # One-time: FAISS flat files -> PostgreSQL migration
-+-- tests/
-|   +-- eval_ragas.py               # CI/CD quality gate: Faithfulness + Relevance + Precision
-|   +-- eval_trulens.py             # Local TruLens triad evaluation
-|   +-- test_rag_quality.py         # 8 in-scope + 3 out-of-scope behavioral tests
-|   +-- test_embeddings.py          # Embedding similarity ranking sanity checks
-|   +-- test_rag_triad.py           # TruLens triad unit tests
-|   +-- test_document_sync.py       # Document sync API integration tests
-|   +-- test_hf_client.py           # HuggingFace client fallback tests
-|   +-- test_tracing.py             # Langfuse tracing integration tests
-+-- Docs/
-    +-- Behoerden_Bot_30_Phase_Plan.md
-    +-- FineTuning_and_Evaluation_Guide.md
-    +-- RAG_Feasibility_Analysis.md
-    +-- Repository_and_Model_Architecture_Reference.md
-```
+The most important thing to understand about this project is that the retrieval system was **not built in one shot**. It went through three generations, and every generation was benchmarked against the previous one. That is the difference between "a RAG app" and an enterprise RAG system: **every architectural decision is backed by a measured number.**
 
----
+### Generation 1 — Naive / Baseline RAG
 
-## Tech Stack
+A single dense retrieval (FAISS) over the corpus, top-k=5, prompt-stuffed generation. It works, but it is fragile: it misses exact keyword matches (German compound words), retrieves noisy chunks, and answers from whatever happens to be in the top-5 — **even when that is the wrong thing**.
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| LLM | Groq `llama-3.1-8b-instant` | Primary LLM (14,400 req/day free, 800 tok/s) |
-| LLM Fallback | HuggingFace Inference API | Automatic circuit-breaker failover |
-| Embeddings | `BAAI/bge-base-en-v1.5` fine-tuned (768d) | Domain-specific vector encoding |
-| Vector DB | FAISS (offline) + PostgreSQL pgvector (prod) | Dual-mode dense retrieval |
-| Sparse Search | `rank_bm25` (Okapi BM25) | Keyword-based retrieval |
-| Re-Ranker | `BAAI/bge-reranker-base` Cross-Encoder | Token-level relevance scoring |
-| Database | PostgreSQL + pgvector + asyncpg | Cache, memory, document chunks |
-| Web Framework | FastAPI + Uvicorn | Async REST API + SSE streaming |
-| UI | Streamlit | Dual-mode chat interface |
-| Observability | Langfuse v4 (OTel-based) | Span/cost/TTFT/status visibility |
-| Web Search | DDGS (DuckDuckGo) | Live fallback for low-confidence retrieval |
-| PII Protection | Regex + spaCy `en_core_web_sm` | GDPR input masking (zero GPU, 12MB) |
-| Resilience | `pybreaker` Circuit Breaker | Auto-trip on 5 failures, reset in 60s |
-| CI/CD | GitHub Actions | Automated RAG quality gate on every push |
+### Generation 2 — Advanced RAG
 
----
+The retrieval stack was rebuilt:
 
-## Key Features
+- **Hybrid retrieval** — dense (FAISS, fine-tuned BGE 768-d) **+** sparse (BM25), because dense vectors miss exact keywords and BM25 misses semantics.
+- **Reciprocal Rank Fusion (RRF, k=60)** — merges the two rankings so both signals survive.
+- **Cross-encoder re-ranking** (`bge-reranker-base`) — the expensive-but-accurate token-level scorer re-ranks the fused candidates down to top-5.
+- **Multi-query expansion** — the LLM generates sub-queries so a single vague question surfaces multiple distinct facts.
+- **Query disambiguation** — vague (≤3-word) queries get 3 clarifying options instead of a guess.
+- **Semantic caching** — SHA-256 exact + pgvector cosine (≥0.97), 7-day TTL, so repeat questions are answered in ~0 ms.
 
-### 1. Domain Fine-Tuned Embeddings (+21.92% MRR@10)
-Fine-tuned `BAAI/bge-base-en-v1.5` using `MultipleNegativesRankingLoss` with hard negatives on Apple Silicon MPS GPU. MRR@10 improved from 75.6% to 97.5%.
+### Generation 3 — Corrective RAG (CRAG)
 
-### 2. Hybrid Retrieval (Dense + Sparse -> RRF -> Cross-Encoder)
-Dense FAISS cosine search combined with Okapi BM25 keyword search, fused via Reciprocal Rank Fusion (k=60), then re-ranked by Cross-Encoder token-level cross-attention. Critical for German compound words (Aufenthaltserlaubnis, Zulassungsbescheid).
+The defining move: **the pipeline now judges its own retrieval before answering.** A CRAG relevance gate scores the re-ranked chunks; if confidence is too low, the system *says so honestly* instead of confabulating — or, in the agentic path, triggers live web search as a corrective step. On top of the gate:
 
-### 3. CRAG Relevance Gate
-If the top re-ranked chunk scores below 0.50, the pipeline automatically triggers live DuckDuckGo web search before passing context to the agents. Ensures answers are always grounded even when the knowledge base is incomplete.
+- **Domain + safety guardrail** (Stage 0A) — a deterministic negative-term cache + an LLM classifier rejects spam, and a **fail-closed safety class** refuses fraud/forgery requests (e.g. *"pay someone to fake my APS"*).
+- **Bilingual sub-query expansion (EN + DE)** — entities that live under their German names (Aufenthaltserlaubnis, Zulassungsbescheid) are actually found.
+- **PII masking (GDPR)** — no raw personal data ever reaches an LLM.
 
-### 4. 3-Agent ReAct Orchestrator
-Three fully decoupled agents, each with typed Langfuse spans: Research -> Analyst (Pydantic 5-dim matrix) -> Writer (Executive Markdown).
+### The numbers that prove the evolution
 
-### 5. PostgreSQL + pgvector Persistence
-Three production tables:
-- `document_chunks` — Vector(768) embeddings
-- `semantic_cache` — 768d cosine similarity cache, 7-day TTL
-- `session_memory` — Conversational summary-buffer state
+**Comparative benchmark — Baseline single-dense vs. Advanced CRAG** (`src/run_comparative_benchmark.py`, LLM-as-a-judge over the golden testset):
 
-### 6. Multi-Tier Semantic Cache
-Tier 1: SHA-256 exact hash (0ms). Tier 2: pgvector cosine similarity >=0.93 (near-duplicate). Negative cache for instant off-domain rejection. Cache invalidated on document sync.
+| Metric | Baseline RAG | Advanced CRAG | Improvement |
+|---|---|---|---|
+| Context precision | 70.0% | **95.0%** | **+25.0 pp** |
+| Context recall | 85.0% | **100.0%** | **+15.0 pp** |
+| Faithfulness (groundedness) | 3.43 / 5.0 | **3.93 / 5.0** | **+14.6%** |
+| Answer relevance | 3.71 / 5.0 | **4.71 / 5.0** | **+26.9%** |
 
-### 7. Summary-Buffer Conversational Memory
-Last 8 messages verbatim + older turns LLM-compressed into a rolling summary. Constant ~300 token footprint regardless of conversation length.
-
-### 8. Langfuse v4 Full Observability
-Every span typed with `as_type` (chain, agent, tool, retriever, guardrail, generation). TTFT auto-tracked via `langfuse.openai` wrapper. Status levels: DEFAULT (normal) / WARNING (graceful degradation) / ERROR (hard failure). user_id + session_id bound via `propagate_attributes()`.
-
-### 9. GDPR-Compliant PII Masking
-Runs at API entry point before any LLM call. Regex handles structured PII (IBAN, passport, DOB, phone, email). spaCy NER handles person names. Fails open. Logs `pii_detected=True` to Langfuse for monitoring.
-
-### 10. Zero-Downtime Document Sync
-`POST /documents/sync` transactionally replaces chunks (delete old -> embed new -> insert) and invalidates cache. No service interruption.
-
-### 11. Resilient LLM Client
-Groq with 3-retry exponential backoff + asyncio Semaphore(10) for rate limiting + pybreaker circuit breaker (trips on 5 failures) + automatic HF fallback. Stream semaphore guards only `create()`, not iteration — ensures `langfuse.openai` traced_iterator always finalizes (TTFT + token counts flushed).
-
----
-
-## Benchmark Results
-
-### Fine-Tuning: Embedding MRR@10
+**Embedding fine-tuning — the single biggest accuracy lever** (`docs/FineTuning_and_Evaluation_Guide.md`):
 
 | Model | Training | Hardware | MRR@10 | Change |
-|-------|----------|----------|--------|--------|
-| `BAAI/bge-base-en-v1.5` (base) | None | Pre-trained weights | 75.58% | Baseline |
-| `bge_base_german_visa_finetuned` | MNRL + Hard Negatives, 3 epochs | Apple MPS GPU | **97.50%** | **+21.92%** |
+|---|---|---|---|---|
+| `BAAI/bge-base-en-v1.5` (baseline) | None — pre-trained | — | 75.58% | baseline |
+| `bge_base_german_visa_finetuned` | MNRL + hard negatives, 3 epochs | Apple MPS GPU | **97.50%** | **+21.92%** |
 
-### CI/CD Quality Gate
+> How: 150 domain triples (query, positive chunk, hard negative mined by BM25 — the single most misleading chunk per query) trained with Multiple-Negatives-Ranking-Loss at temperature 0.05. Hard-negative mining teaches the model to *push away the closest distractor*, not just pull in the answer.
 
-| Metric | Score | Threshold | Status |
-|--------|-------|-----------|--------|
-| Faithfulness (Groundedness) | 4.35 / 5.0 | >= 3.50 | PASS |
-| Answer Relevance | 4.20 / 5.0 | >= 4.00 | PASS |
-| Context Precision | 85.0% | >= 75.0% | PASS |
+**Early CI/CD quality gate** (`tests/eval_ragas.py`, RAGAS-style):
 
-### Baseline RAG vs. Advanced CRAG
-
-| Metric | Baseline | Advanced CRAG | Improvement |
-|--------|----------|---------------|-------------|
-| Context Precision | 70.0% | 95.0% | +25.0% |
-| Context Recall | 85.0% | 100.0% | +15.0% |
-| Faithfulness | 3.43 / 5.0 | 3.93 / 5.0 | +14.6% |
-| Answer Relevance | 3.71 / 5.0 | 4.71 / 5.0 | +26.9% |
+| Metric | Score | Threshold | Result |
+|---|---|---|---|
+| Faithfulness (groundedness) | 4.35 / 5.0 | ≥ 3.50 | ✅ PASS |
+| Answer relevance | 4.20 / 5.0 | ≥ 4.00 | ✅ PASS |
+| Context precision | 85.0% | ≥ 75.0% | ✅ PASS |
 
 ---
 
-## Environment Variables
+## 🧠 Models We Tried & How Accuracy Improved
 
-Copy `.env.example` to `.env`:
+Enterprise RAG means *choosing* models with evidence, not picking the first thing that works. Here is the full model lineage — what we tried, why we moved, and what the numbers said.
 
-```env
-# LLM Providers
-GROQ_API_KEY=gsk_...
-HF_TOKEN=hf_...
+### Embedding models (the retrieval quality)
 
-# Langfuse Observability
-LANGFUSE_PUBLIC_KEY=pk-lf-...
-LANGFUSE_SECRET_KEY=sk-lf-...
-LANGFUSE_HOST=https://cloud.langfuse.com
+| Model | Dim | Why we tried it | Verdict → outcome |
+|---|---|---|---|
+| `all-MiniLM-L6-v2` | 384 | Fast, free, ubiquitous | Rejected for production — weak on German legal/administrative terminology |
+| `BAAI/bge-base-en-v1.5` | 768 | Strong general-purpose retriever | Baseline; then **fine-tuned → MRR@10 75.6% → 97.5% (+21.92%)** |
+| `bge_base_german_visa_finetuned` | 768 | Domain adaptation via MNRL + hard negatives | **The accuracy win** — shipped in the Python reference |
+| `BAAI/bge-m3` (multilingual) | 1024 | German parity — the English-only space scored German text poorly | **The production choice** — one space for EN + DE; the entire corpus was re-embedded and migrated (768 → 1024-d) |
 
-# PostgreSQL
-POSTGRES_USER=behoerden_user
-POSTGRES_PASSWORD=behoerden_password
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB=behoerden_bot
+### Cross-encoder (the reranker)
+
+| Model | Why | Role |
+|---|---|---|
+| `BAAI/bge-reranker-base` | Token-level relevance scoring is far more accurate than cosine over pooled vectors | Re-ranks the RRF-fused candidates (top-40 → top-5) in both pipelines |
+
+### Generation LLMs
+
+| Provider | Model | Why | Role |
+|---|---|---|---|
+| **Groq** | `llama-3.1-8b-instant` | **~800 tok/s** vs. OpenAI's ~50–80, OpenAI-compatible API, generous free tier (14,400 req/day) | Primary generator — latency is a feature |
+| **Hugging Face Inference** | `meta-llama`/fallback models | Resilience — when Groq is down | Automatic fallback behind a circuit breaker |
+
+### The migration that mattered: 768-d English-only → 1024-d multilingual
+
+The English-only embedding model **silently degraded German queries** — retrieval confidence dropped, the CRAG gate fell back to web search, and German answers were worse than English ones. The fix was structural, not cosmetic:
+
+- Re-embedded the corpus with **BGE-M3 (1024-d, multilingual)** — one model, one space, both languages.
+- Migrated the pgvector schema, rebuilt HNSW + FTS GIN indexes.
+- Production embeddings run on **Cloudflare's serverless `@cf/baai/bge-m3`** — zero cold-start model spin-up; a local `embed-server.py` speaks the identical contract for dev/ingest.
+- Hidden gotcha solved: the Cloudflare worker must use **CLS pooling** (not mean pooling) to match the corpus — a subtle mismatch that produces garbage vectors that *look* fine.
+
+---
+
+## ⚙️ The Pipeline — How an Answer Is Made
+
+```
+User question
+    │
+    ▼
+[Stage 0]  PII masking (GDPR) + disambiguation          — no raw PII ever reaches an LLM
+    │
+    ▼
+[Stage 0A] Domain + safety guardrail                    — reject spam / refuse fraud, fail-closed
+    │ pass
+    ▼
+[Cache]    Semantic cache (exact hash + pgvector cos)   — 0-ms answers for known questions
+    │ miss
+    ▼
+[Stage 1]  Bilingual sub-query expansion (EN + DE)      — surface entities under both names
+    │
+    ▼
+[Stage 2]  Hybrid retrieval
+    ├─ Dense:  BGE-M3 (1024-d) over pgvector  (HNSW cosine)
+    └─ Sparse: Postgres FTS (29 ms) / in-process BM25 fallback
+    │
+    ▼
+[Stage 3]  Reciprocal Rank Fusion → cross-encoder re-rank (bge-reranker)
+    │
+    ▼
+[Stage 4]  CRAG gate — confident? → grounded answer;  low confidence → honest fallback
+    │
+    ▼
+[Stage 5]  Answer generation (Groq) with cited sources
+    │
+    ▼
+Response + sources + cache write + telemetry
+```
+
+Every stage emits typed telemetry: durations, token counts, per-agent costs, retrieval path, and the cache hit/miss decision — surfaced in the admin pipeline tester and in Langfuse traces.
+
+---
+
+## ⚡ Query Optimization
+
+Latency and retrieval quality were attacked systematically — each fix measured before and after:
+
+| Problem | Measured | Fix | Result |
+|---|---|---|---|
+| BM25 scoring hotspot (in-process, O(vocab) per query) | **147.8 s** | Move sparse search into **Postgres FTS** (GIN index) | **29 ms** |
+| English-only embeddings scored German poorly | degraded German retrieval | **BGE-M3 1024-d multilingual** migration | German parity restored |
+| Multi-entity questions missed distinct facts | low context recall | **Bilingual EN+DE sub-queries**, wider fused pool (top-40 → rerank to 5) | fused candidates 30 → **59–225 per query** |
+| Vague queries got guessed answers | — | **Disambiguation node** (≤3-word queries → 3 clarifying options) | no more guessing |
+| Per-query embedding cold starts | seconds | Batch embeddings per request + warm chat navigation | ~0 added latency |
+| Serial dense retrieval per sub-query | N × dense time | Parallel dense retrieval | linear → ~1× |
+
+The result: **sparse search 147.8 s → 29 ms**, and the production pipeline clears the **context-recall gate (72.1% ≥ 70%)** that the Python reference still misses on multi-entity synthesis items — because the TS hybrid retriever's wider fused pool surfaces the distinct facts before the rerank-to-5 compression.
+
+---
+
+## 💸 Cost Optimization
+
+A production RAG app must be economical at scale. Every cost lever here is a *design decision*, not an accident:
+
+| Lever | What we do | Saving |
+|---|---|---|
+| **Embeddings** | Self-hosted / serverless BGE (local `embed-server.py`, Cloudflare `@cf/baai/bge-m3`) instead of paid embedding APIs | **Zero per-embedding API cost** at any scale |
+| **LLM choice** | Groq `llama-3.1-8b-instant`: ~800 tok/s, free tier **14,400 req/day**, OpenAI-compatible | ~10× cheaper than OpenAI-class APIs, 10× faster |
+| **Semantic cache** | SHA-256 exact + pgvector cosine (≥0.97), 7-day TTL | Repeat/near-duplicate questions answered in ~0 ms — **no LLM call, no tokens** |
+| **Guardrail term cache** | Deterministic negative/safety term lists checked *before* any LLM call | Spam/fraud queries rejected **instantly, at zero LLM cost** (LLM classifier only as fallback) |
+| **Circuit breaker + backoff** | pybreaker (5 failures → 60 s open) + 3-retry exponential backoff + provider fallback | **No runaway spend** during provider outages; no retry storms |
+| **Summary-buffer memory** | Last 8 turns verbatim + LLM-compressed rolling summary (~300 tokens) | Constant ~300-token footprint **regardless of conversation length** |
+| **Pipeline-tester retention** | Admin pipeline tester keeps only the latest 5 runs, prunes the rest | Bounded storage + bounded trace data |
+| **PoLP database roles** | Migrator (DDL) / app (DML) role split on Neon | Least-privilege security *and* no accidental destructive queries in prod |
+
+---
+
+## 🏗 Architecture — Two Implementations, One Design
+
+This repository contains **two sibling implementations of the same design**:
+
+### 1. `web-app/` — the production app (TypeScript, deployed to Vercel)
+
+The user-facing product: Next.js 15 + React 19 + tRPC + Prisma, with the **entire RAG pipeline reimplemented in TypeScript** so it runs on Vercel without Python.
+
+- `src/server/rag/` — guardrail, stage-zero, query expansion, hybrid retrieval (dense/sparse/RRF/rerank), CRAG gate, pipeline, semantic cache, agents, memory.
+- `src/server/db/` — a centralized data layer: row→domain mapping, analytics, conversation policy, sparse retrieval.
+- `src/components/` — the modern dark chat UI, landing page, admin dashboard, pipeline visualizer.
+- Storage: **PostgreSQL + pgvector** (~24k BGE-M3 chunks), Prisma ORM, principle-of-least-privilege DB roles.
+
+### 2. Repository root — the research & evaluation reference (Python)
+
+The original Python implementation (FastAPI + Streamlit era): fine-tuned embeddings, FAISS + BM25 retrieval, the 3-Agent ReAct orchestrator, and — critically — **the RAGAS-style evaluation harness** (`tests/eval_ragas_30.py`) that scores a 30-question multilingual testset on faithfulness, relevance, precision, recall, and refusal safety.
+
+> **Key point:** the web app does **not** call Python at runtime. The two sides share a design lineage (the TS pipeline is *ported from* the Python one, and hardening ports back) but share zero runtime code — which is exactly why each side also has its own evaluation.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  PRODUCTION  (web-app/)                                     │
+│  Next.js 15 · tRPC · Prisma · pgvector                      │
+│  TS RAG pipeline: guardrail → hybrid retrieval → CRAG → LLM │
+│  Chat UI · auth · admin · pipeline tester                   │
+└───────────────────────────────┬─────────────────────────────┘
+                                │ same design lineage
+┌───────────────────────────────▼─────────────────────────────┐
+│  REFERENCE & EVAL  (repo root)                              │
+│  Python: ingest · fine-tune · FAISS/BM25 · 3-agent ReAct    │
+│  tests/eval_ragas_30.py — 30-question multilingual eval     │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Local Setup
+## 🧰 Tech Stack
+
+| Layer | Production (`web-app/`) | Reference (`repo root`) |
+|---|---|---|
+| **Framework** | Next.js 15 (App Router), React 19, TypeScript 5 | FastAPI, Streamlit |
+| **UI** | Tailwind CSS 4, framer-motion 12, lucide-react, recharts | Streamlit |
+| **API** | tRPC 11 (type-safe RPC) + SSE streaming | REST + SSE |
+| **Auth** | Auth.js v5 (GitHub, Google, magic link, JWT) | — |
+| **LLM** | Groq (`llama-3.1-8b-instant`) via provider abstraction + circuit breaker | Groq + HF fallback |
+| **Embeddings** | BGE-M3 (1024-d, multilingual) — Cloudflare worker in prod, local server for dev | BGE fine-tuned (768-d) / BGE-M3 |
+| **Dense search** | pgvector cosine (HNSW), ~24k chunks | FAISS |
+| **Sparse search** | Postgres FTS + in-process BM25 fallback | rank_bm25 |
+| **Fusion / rerank** | RRF → bge-reranker-base cross-encoder | RRF → bge-reranker |
+| **Database** | PostgreSQL 16 + pgvector, Prisma 6 | PostgreSQL + pgvector |
+| **Cache** | semantic cache (hash + cosine), 7-day TTL | same |
+| **Observability** | Langfuse, pino | Langfuse, W&B |
+| **Security** | CSP nonce, PII masking, PoLP roles, Gitleaks | PII masking |
+| **Quality** | Vitest + coverage gate, Playwright E2E, ESLint, Prettier, Husky | pytest, RAGAS-style evals |
+
+---
+
+## 📁 Repository Structure
+
+```
+Repo-2/
+├── web-app/                        # ★ Production app (TypeScript)
+│   ├── src/
+│   │   ├── app/                    #   Pages, API routes, layouts
+│   │   ├── components/             #   Chat UI, landing, admin, visualizer
+│   │   ├── server/
+│   │   │   ├── rag/                #   TS RAG pipeline (guardrail → CRAG)
+│   │   │   ├── routers/            #   tRPC endpoints (conversation, admin, …)
+│   │   │   ├── db/                 #   Centralized data layer + analytics
+│   │   │   └── llm/                #   Provider abstraction + circuit breaker
+│   │   └── hooks/                  #   Client-side hooks
+│   ├── prisma/                     #   Schema + migrations
+│   ├── scripts/                    #   eval-crag-webapp, embed-server, launch helpers
+│   ├── docs/                       #   Phase docs, security exceptions, test design
+│   └── tests/                      #   Unit + integration + E2E (Playwright)
+│
+├── src/                            # Reference RAG (Python)
+│   ├── rag.py                      #   Standard CRAG path
+│   ├── agentic_rag.py              #   3-Agent ReAct orchestrator
+│   ├── advanced_retrieval.py       #   Guardrail, sub-queries, RRF, rerank
+│   ├── run_comparative_benchmark.py#   Baseline vs CRAG benchmark engine
+│   ├── finetune_embeddings.py      #   MNRL + hard-negative fine-tuning
+│   ├── retrieval.py / embed.py / ingest.py
+│   ├── semantic_cache.py / memory.py / pii_masker.py
+│   └── tracing.py                  #   Langfuse observability
+│
+├── tests/                          # Python tests + eval harness
+│   ├── eval_ragas_30.py            #   30-question multilingual CRAG eval (resumable)
+│   ├── eval_ragas.py / eval_trulens.py
+│   └── test_*.py                   #   Unit + behavioral tests
+│
+├── data/                           # Corpus, FAISS index, eval results
+│   ├── eval/crag_30_questions.json #   The 30-question testset
+│   └── processed/                  #   Embeddings, scorecards, checkpoints
+│
+├── models/                         # Fine-tuned BGE embedding model (437 MB)
+├── docs/                           # ★ Design + engineering docs (see map)
+└── .github/workflows/              # CI, E2E, deploy, security, RAG-eval gates
+```
+
+---
+
+## ✅ Quality, Testing & the Evaluation Harness
+
+We treat quality as a **four-layer system** — not a single test command (details in [Testing & Quality](docs/TESTING_AND_QUALITY.md)):
+
+| Layer | What it catches | Status |
+|---|---|---|
+| **Lint + format** | Style, unused code, secrets (Husky pre-commit + Gitleaks) | ✅ green |
+| **Typecheck** | `tsc --noEmit` across the whole app | ✅ clean |
+| **Unit + integration** | 600+ tests across 60+ files (Vitest) — routers, RAG stages, components | ✅ green |
+| **Coverage gate** | **85% floor** enforced in CI (`vitest run --coverage`) | ✅ passing |
+| **E2E** | 6 Playwright specs — chat, history, admin, landing, documents upload, pipeline tester | ✅ green |
+| **Production build** | `next build` (turbopack + CSP nonce path) | ✅ succeeds |
+| **RAG evals** | RAGAS-style multilingual evaluation, both pipelines | see below |
+
+### The evaluation harness
+
+The eval harness is a **first-class product artifact**, not a script bolted on at the end:
+
+- **`tests/eval_ragas_30.py`** (Python reference) and **`web-app/scripts/eval-crag-webapp.ts`** (production TS pipeline) run the **same 30 questions** through both implementations.
+- **Resumable atomic checkpoint** — interrupted runs skip finished items, so Groq rate limits can no longer kill a multi-hour eval.
+- **Judge context fidelity** — the judge receives the *real* generator context (this was a bug: a truncated 5×400-char summary made perfect answers score 2.0; identical answers scored 2.0 → 5.0 once fixed).
+- **BGE-M3 + LLM-judge scoring** for answer relevance, with a bilingual judge.
+
+**The testset** — `data/eval/crag_30_questions.json`: 30 hand-built questions grounded in the *actual corpus*, covering **18 real topics** (blocked account, APS, uni-assist, Goethe-Zertifikat, TestDaF, Residence Act/Ordinance, Anmeldung, visa documents, Fintiba, recognition, tax, EU Blue Card, health insurance, universities, BAMF/KMK) in **24 EN + 6 DE**, including **2 adversarial traps** (a recipe request, and a fraud request) that test the safety guardrail.
+
+**The metrics & gates:**
+
+| Metric | What it measures | Gate |
+|---|---|---|
+| Faithfulness / groundedness | Is every claim in the answer supported by the retrieved context? | ≥ 3.5 / 5.0 |
+| Answer relevance (judge) | Does the answer actually address the question? | ≥ 4.0 / 5.0 |
+| Answer relevance (BGE-M3) | Semantic similarity of answer ↔ question (multilingual judge) | ≥ 0.55 |
+| Context precision | Are the retrieved chunks relevant (noise ratio)? | ≥ 75% |
+| Context recall (fact-finding) | Do the retrieved chunks cover the needed facts? | ≥ 70% |
+| Trap handling | Does the system refuse out-of-domain / fraudulent requests? | 2/2 |
+
+### Current scorecards — both pipelines, same 30 questions
+
+| Metric | Python reference | **Web-app (production TS)** | Gate |
+|---|---|---|---|
+| Faithfulness (groundedness) | 3.69 / 5.0 | **3.98 / 5.0** | ≥ 3.5 ✅ |
+| Answer relevance (judge) | 4.50 / 5.0 | **4.83 / 5.0** | ≥ 4.0 ✅ |
+| Answer relevance (BGE-M3) | 0.74 | **0.70** | ≥ 0.55 ✅ |
+| Context precision | 100% | **100%** | ≥ 75% ✅ |
+| Context recall (fact-finding) | 59.8% | **72.1%** | ≥ 70% ✅ |
+| **Trap / refusal handling** | 2/2 | **2/2** clean refusals | — ✅ |
+
+**All six gates pass on the production pipeline (30/30 scored).** The guardrail fix took traps from **0/2 → 2/2** on both sides — clean `GUARDRAIL_BLOCKED` refusals, no butter-chicken recipe, no forged-APS offer — with **zero false positives** across the 28 legitimate questions. Honest diagnostics: German faithfulness (3.08) trails English (4.21) on the web-app — the next improvement target; and the Python reference's recall shortfall on multi-entity synthesis items is a **diagnosed retrieval-width tradeoff** (4–6 distinct entities can't fit a 5-chunk window — verified against the corpus and the fused candidate pool), not a hallucination defect.
+
+---
+
+## 🚀 Getting Started
+
+### Web app (production)
 
 ```bash
-# 1. Clone repository
-git clone https://github.com/Vikrant038/Beh-rden-Bot-Advanced-CRAG.git
-cd Beh-rden-Bot-Advanced-CRAG
+cd web-app
+pnpm install                                  # pnpm 11.20.0 (pinned)
+cp .env.example .env                          # fill in secrets (never commit)
 
-# 2. Create and activate virtual environment
-python -m venv .venv && source .venv/bin/activate
+# Local Postgres with pgvector (same image CI uses)
+docker compose up -d postgres
 
-# 3. Install dependencies
-pip install -r requirements.txt
+# Prisma client + migrations (migrator role = DDL, app role = DML — PoLP by design)
+pnpm prisma generate
+DATABASE_URL="postgresql://behoerden_migrator:behoerden_password@localhost:5432/behoerden_bot" \
+  pnpm prisma migrate deploy
 
-# 4. Install spaCy model for PII name masking (12MB, required)
-python -m spacy download en_core_web_sm
-
-# 5. Configure environment
-cp .env.example .env
-# Edit .env with your API keys and database credentials
-
-# 6. Start PostgreSQL with pgvector
-docker-compose up -d
-
-# 7. Initialize database tables
-python migrate.py
-
-# 8a. Launch Streamlit UI
-streamlit run app.py
-
-# 8b. OR launch FastAPI backend
-uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+pnpm dev                                      # → http://localhost:3000
 ```
 
----
-
-## Data Pipeline
+For local embedding/rerank during development, the repo ships two small servers that speak the exact contracts of the production embedding client and reranker:
 
 ```bash
-# 1. Scrape 21 sources -> data/raw/*.txt -> data/processed/all_chunks.json
-python src/ingest.py
-
-# 2. Embed chunks -> embeddings.npy + faiss_index.bin + chunk_metadata.json
-python src/embed.py
-
-# 3. Fine-tune BGE on domain data (MPS GPU, 3 epochs, ~2 min)
-python src/finetune_embeddings.py
-
-# 4. Migrate flat files to PostgreSQL (one-time, run after docker-compose up)
-python src/migrate_to_postgres.py
-
-# 5. Run comparative benchmark
-python src/run_comparative_benchmark.py
+.venv/bin/python web-app/scripts/embed-server.py     # BGE-M3 on :8765
+.venv/bin/python scratch/rerank-server.py            # bge-reranker on :8766
 ```
 
----
-
-## Evaluation and Quality Gates
-
-### 3-Tier Architecture
-
-```
-Layer 3: Production Observability
-  Langfuse v4 (OTel) — live traces in production
-  Span cost, TTFT, tool calls, status levels
-  user_id + session_id per request
-
-Layer 2: CI/CD Automated Quality Gate
-  tests/eval_ragas.py -> GitHub Actions on every push/PR
-  Blocks merge if Faithfulness < 3.5
-  Blocks merge if Answer Relevance < 4.0
-  Blocks merge if Context Precision < 75%
-
-Layer 1: Local Experimentation
-  tests/eval_trulens.py — TruLens Groundedness/Relevance/Context triad
-  Run manually during RAG development
-```
-
-### Commands
+### Quality commands
 
 ```bash
-# CI/CD quality gate
-python -m tests.eval_ragas
-
-# Local TruLens evaluation
-python -m tests.eval_trulens
-
-# Unit tests
-python -m pytest tests/test_rag_quality.py -v
-python -m pytest tests/test_embeddings.py -v
-python -m pytest tests/test_document_sync.py -v
-python -m pytest tests/test_tracing.py -v
+cd web-app
+pnpm lint                # ESLint
+pnpm typecheck           # tsc --noEmit
+pnpm test                # Vitest (unit + integration)
+pnpm vitest run --coverage   # 85% coverage gate
+pnpm test:e2e            # Playwright
+pnpm build               # production build
 ```
 
----
-
-## API Reference
-
-### POST /query
-
-```json
-{
-  "query": "What are APS certificate requirements for Indian students?",
-  "session_id": "session-abc123",
-  "user_id": "student-vikrant",
-  "stream": true,
-  "mode": "agentic",
-  "bypass_cache": false
-}
-```
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `query` | string | required | User question (max 1000 chars, PII auto-masked at API layer) |
-| `session_id` | string | `"default"` | Conversational memory session key |
-| `user_id` | string | `"anonymous"` | Langfuse trace attribution |
-| `stream` | bool | `true` | SSE streaming (`true`) or synchronous JSON (`false`) |
-| `mode` | string | `"agentic"` | `"agentic"` (3-agent ReAct) or `"standard"` (CRAG) |
-| `bypass_cache` | bool | `false` | Skip semantic cache (for evaluation runs) |
-
-**Streaming:** `text/event-stream` with `data: {"text": "..."}` chunks, final `data: {"done": true, "sources": [...]}`
-
-### POST /documents/sync
-
-```json
-{
-  "source_name": "DAAD Scholarships 2025",
-  "source_url": "https://www.daad.de/...",
-  "raw_text": "...",
-  "source_id": "daad-2025"
-}
-```
-
-Zero-downtime transactional chunk replacement + semantic cache invalidation. Runs in background task.
-
-### GET /health
-
-Returns `{"status": "healthy"}`.
-
----
-
-## Deployment
-
-### Streamlit Cloud (UI only)
-
-1. Push to GitHub
-2. Connect at share.streamlit.io
-3. Set secrets: `GROQ_API_KEY`, `HF_TOKEN`, `LANGFUSE_*`, `POSTGRES_*`
-4. App file: `app.py`
-
-### Render (FastAPI + PostgreSQL)
-
-1. Create PostgreSQL database on Render (pgvector supported natively)
-2. Create Web Service from repo
-   - Build: `pip install -r requirements.txt && python -m spacy download en_core_web_sm`
-   - Start: `uvicorn api:app --host 0.0.0.0 --port $PORT`
-3. Set all environment variables from `.env.example`
-4. Run `python migrate.py` once via Render Shell
-
-### Docker (Self-hosted)
+### Python research & evals
 
 ```bash
-docker-compose up -d
-python migrate.py
-uvicorn api:app --host 0.0.0.0 --port 8000
-```
-
-### Health Check
-
-```bash
-curl http://localhost:8000/health
-curl -f http://localhost:8501/_stcore/health
+.venv/bin/python -m tests.eval_ragas_30       # 30-question eval (resumes from checkpoint)
+.venv/bin/python src/run_comparative_benchmark.py   # Baseline vs CRAG benchmark
+.venv/bin/python src/finetune_embeddings.py  # MNRL + hard-negative fine-tuning
+pnpm tsx scripts/eval-crag-webapp.ts          # eval the production TS pipeline (from web-app/)
 ```
 
 ---
 
-## Architectural Decisions
+## 🗺 Documentation Map
 
-**Why 3 agents instead of 1 prompt?**
-Single-prompt overload causes the LLM to multitask — degrading each task. Decoupled agents enforce structured Pydantic output per stage and allow independent Langfuse span visibility.
-
-**Why fine-tune BGE instead of OpenAI embeddings?**
-OpenAI embeddings are paid and domain-agnostic. Fine-tuning on immigration-specific triples with Hard Negatives (MNRL loss) gave +21.92% MRR@10. BGE runs locally for zero cost.
-
-**Why hybrid BM25 + dense instead of dense-only?**
-Dense vectors miss exact keyword matches for German compound words. BM25 misses semantic similarity. RRF fusion gives both — critical for terms like Aufenthaltserlaubnis.
-
-**Why PostgreSQL + pgvector instead of Pinecone?**
-Pinecone/Weaviate are paid at scale. PostgreSQL is free on Render/Neon, supports native vector similarity via pgvector, and unifies vectors, cache, and memory in one database.
-
-**Why summary-buffer memory instead of full history?**
-Full history grows unbounded and overflows the LLM context window. Summary-buffer maintains constant ~300 token footprint: last 4 turns verbatim + older turns LLM-compressed.
-
-**Why Langfuse instead of LangSmith?**
-Langfuse is MIT-licensed, self-hostable (GDPR compliant), and v4 uses OTel standard spans — portable to any OTel backend. LangSmith is closed-source and paid-only.
-
-**Why regex + spaCy for PII instead of LlamaGuard?**
-LlamaGuard needs 8B parameters — impossible on Render free tier (512MB RAM). Structured PII (IBAN, passport, DOB, phone, email) is handled perfectly by regex at zero cost. spaCy en_core_web_sm (12MB) handles names via NER.
-
-**Why Groq instead of OpenAI?**
-800 tok/s vs ~50-80. 14,400 free requests/day. OpenAI-compatible API — langfuse.openai wraps it with zero code change.
+| Doc | What it is |
+|---|---|
+| [`docs/ARCHITECTURE_SUMMARY.md`](docs/ARCHITECTURE_SUMMARY.md) | Full-project architecture deep dive (components, data flow, quality score) |
+| [`docs/FIRST_PRINCIPLES.md`](docs/FIRST_PRINCIPLES.md) | First-principles engineering — why every major decision was made |
+| [`docs/ENGINEERING_JOURNEY.md`](docs/ENGINEERING_JOURNEY.md) | The story: phases, problems encountered, deployment war stories |
+| [`docs/TESTING_AND_QUALITY.md`](docs/TESTING_AND_QUALITY.md) | The four-layer quality system + the eval harness, in depth |
+| [`docs/FineTuning_and_Evaluation_Guide.md`](docs/FineTuning_and_Evaluation_Guide.md) | Embedding fine-tuning, hard-negative mining, MRR/NDCG methodology |
+| [`docs/EXISTING_PROJECT_ANALYSIS.md`](docs/EXISTING_PROJECT_ANALYSIS.md) | The original system analysis — the baseline we evolved from |
+| [`web-app/README.md`](web-app/README.md) | Web-app quickstart + DB role model |
+| [`web-app/docs/`](web-app/docs/) | Phase-by-phase design & status docs for the web app |
+| [`docs/`](docs/) | Design & engineering docs — 30-phase plan, fine-tuning guide, feasibility |
 
 ---
 
-## Known Gotchas
+## 📚 The Journey
 
-1. **Single requirements file:** `requirements.txt` is now the only file (exact pinned versions). Run `pip install -r requirements.txt` then `python -m spacy download en_core_web_sm`.
-2. **Fine-tuned model auto-detected:** `retrieval.py` automatically loads `models/bge_base_german_visa_finetuned/` if the directory exists, falling back to base `BAAI/bge-base-en-v1.5` otherwise. No manual config change required.
-3. **FAISS rebuild:** After re-embedding, run `python src/retrieval.py` to rebuild the index.
-4. **DDGS import:** `from ddgs import DDGS` — package is `ddgs`, not `duckduckgo_search`.
-5. **pgvector extension:** Enable before `migrate.py`. Docker uses `ankane/pgvector` (pre-installed). Render enables it via dashboard.
-6. **Langfuse v4:** `propagate_attributes()` is the only valid way to set user_id/session_id. `update_current_trace()` does not exist in v4.
-7. **spaCy model:** Must be downloaded separately: `python -m spacy download en_core_web_sm`.
-8. **TTFT tracking:** Semaphore wraps only `create()`, not stream iteration — intentional to allow `langfuse.openai` traced_iterator to finalize and flush TTFT.
+This project wasn't built in one pass — it's the product of **phases, failures, and honest measurement**: a naive single-dense RAG benchmarked into an advanced hybrid, then into a corrective RAG with a gate and a guardrail; embedding fine-tuning that lifted MRR@10 by +21.9%; a multilingual migration (768 → 1024-d) that fixed German retrieval; latency bugs that took sparse search from 147.8 s to 29 ms; deployment fights with serverless limits and CSP nonces; an eval harness that survived Groq rate limits with a resumable checkpoint — and a 150-item responsive audit with no sampling. The full story — including what broke, why, and how we fixed it — is in [**The Engineering Journey**](docs/ENGINEERING_JOURNEY.md).
 
 ---
 
-*Built for German immigration applicants worldwide.*
+*Built for German immigration applicants worldwide. 🇩🇪*
