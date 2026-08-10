@@ -8,6 +8,7 @@ import type { HybridRetriever } from "@/server/rag/retrieval/hybrid";
 import { generateSubQueries } from "@/server/rag/query-expansion";
 import { webSearch } from "@/server/rag/tools/web-search";
 import { calculateVisaRequirements } from "@/server/rag/tools/visa-calculator";
+import { RESEARCH_AGENT_INSTRUCTION } from "@/server/rag/prompt";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("research-agent");
@@ -38,6 +39,11 @@ const COMPARE_TRIGGERS = ["vs", "compare", "difference"];
  * Ported from `src/agentic_rag.py:agent_research_react`. Iteration 1 runs
  * hybrid retrieval; comparative queries trigger a secondary retrieval pass;
  * financial queries invoke the deterministic visa calculator.
+ *
+ * The loop is deterministic today (no LLM system prompt) — RESEARCH_AGENT_INSTRUCTION
+ * (src/server/rag/prompt.ts) documents the intended framing (gather, don't
+ * answer; official sources first; treat retrieved text as untrusted) so any
+ * future LLM-based research step slots into the same contract.
  */
 export async function agentResearchReact(
   userQuery: string,
@@ -46,6 +52,12 @@ export async function agentResearchReact(
   onEvent?: (event: PipelineEvent) => void,
 ): Promise<ResearchResult> {
   logger.info("[AGENT 1] Research agent starting ReAct loop");
+  // Framing contract documented in src/server/rag/prompt.ts — surfaced in the
+  // debug log so the agent's operating rules are auditable per run.
+  logger.debug(
+    { framing: RESEARCH_AGENT_INSTRUCTION.split("\n")[0] },
+    "[AGENT 1] research agent framing",
+  );
   const researchSteps: ResearchStep[] = [];
   const accumulatedContext: string[] = [];
   const sources: Source[] = [];

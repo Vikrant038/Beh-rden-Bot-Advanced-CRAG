@@ -6,11 +6,12 @@ import { LoginContent } from "./login-content";
 
 // vi.mock factories are hoisted above imports, so mutable references shared
 // with the mocks must be created via vi.hoisted.
-const { mockReplace, mockPush, mockUseSession, paramsRef } = vi.hoisted(() => ({
+const { mockReplace, mockPush, mockUseSession, paramsRef, guestStatusRef } = vi.hoisted(() => ({
   mockReplace: vi.fn(),
   mockPush: vi.fn(),
   mockUseSession: vi.fn(),
   paramsRef: { current: new URLSearchParams() },
+  guestStatusRef: { current: { hasGuest: false } },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -23,11 +24,22 @@ vi.mock("next-auth/react", () => ({
   signIn: vi.fn(),
 }));
 
+vi.mock("@/lib/trpc/client", () => ({
+  api: {
+    public: {
+      guestStatus: {
+        useQuery: () => ({ data: guestStatusRef.current }),
+      },
+    },
+  },
+}));
+
 describe("LoginContent", () => {
   beforeEach(() => {
     mockReplace.mockClear();
     mockPush.mockClear();
     paramsRef.current = new URLSearchParams();
+    guestStatusRef.current = { hasGuest: false };
     mockUseSession.mockReturnValue({ data: null, status: "unauthenticated" });
   });
 
@@ -48,6 +60,24 @@ describe("LoginContent", () => {
     render(<LoginContent />);
 
     expect(mockReplace).toHaveBeenCalledWith("/chat");
+  });
+
+  it("routes a returning guest (valid cookie, no session) straight to /chat", () => {
+    guestStatusRef.current = { hasGuest: true };
+    render(<LoginContent />);
+
+    expect(mockReplace).toHaveBeenCalledWith("/chat");
+  });
+
+  it("keeps the login page for a returning guest when an OAuth error is present", () => {
+    paramsRef.current = new URLSearchParams("error=AccessDenied");
+    guestStatusRef.current = { hasGuest: true };
+    render(<LoginContent />);
+
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Access was denied. You may not have permission to sign in."),
+    ).toBeInTheDocument();
   });
 
   it("keeps the login page when an OAuth error is present so the banner stays visible", () => {

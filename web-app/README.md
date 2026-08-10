@@ -13,8 +13,8 @@ pipeline.
 - **Auth:** Auth.js v5 (GitHub, Google, Resend magic link; JWT sessions)
 - **AI/LLM:** SSE streaming chat, 3-agent ReAct pipeline, hybrid retrieval
 - **Observability:** Langfuse tracing, pino logging
-- **Quality:** Vitest (unit + integration, ≥80% coverage), Playwright E2E,
-  ESLint, Prettier, Husky pre-commit hooks, GitHub Actions CI
+- **Quality:** Vitest (unit + integration, ≥85% coverage gate),
+  Playwright E2E, ESLint, Prettier, Husky pre-commit hooks, GitHub Actions CI
 
 ## Getting started
 
@@ -207,6 +207,12 @@ non-secret variables in the Vercel project and mark the secrets.
 
 ## Documentation
 
-- `docs/STARTUP.md` — local startup walkthrough
-- `docs/status/` — phase delivery reports
-- `CHANGELOG.md` — release history
+### 📚 For Developers
+
+- **`ARCHITECTURE.md`** — Complete system design, folder structure, data flow, design patterns
+- **`DEVELOPER_QUICKSTART.md`** — Quick reference for common tasks (start here!)
+- **`OPTIMIZATION_GUIDE.md`** — Database optimization, async patterns, performance targets
+- **`docs/STARTUP.md`** — Local development setup walkthrough
+- **`docs/security/SECURITY_EXCEPTIONS.md`** — Known security limitations & mitigations
+- **`docs/status/`** — Phase delivery reports & milestones
+- **`CHANGELOG.md`** — Release history

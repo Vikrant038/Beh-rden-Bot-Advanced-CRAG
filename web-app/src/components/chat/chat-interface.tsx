@@ -2,16 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, BookOpen, Copy, MessageCircle, Plus, Trash2, Zap } from "lucide-react";
+import { ArrowDown, Copy, MessageCircle, Plus, Trash2 } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { useChat, STREAMING_ID } from "@/hooks/use-chat";
 import type { ChatMode } from "@/lib/chat/types";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import { PipelineStatus } from "@/components/chat/pipeline-status";
 import { ChatInput } from "@/components/chat/chat-input";
-import { ChatEmptyState, QUICK_PROMPTS } from "@/components/chat/chat-empty-state";
+import { ChatEmptyState } from "@/components/chat/chat-empty-state";
+import { ChatSuggestions } from "@/components/chat/chat-suggestions";
+import { ModeToggle } from "@/components/chat/mode-toggle";
+import { useMode } from "@/components/chat/mode-context";
+import { useChatActions, type ChatActions } from "@/components/chat/chat-actions-context";
 import { DisambiguationCards } from "@/components/chat/disambiguation-cards";
-import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GuestLimitDialog } from "@/components/chat/guest-limit-dialog";
 import { useToast } from "@/lib/toast";
@@ -131,7 +134,17 @@ export function ChatInterface({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [mode, setMode] = useState<ChatMode>(initialMode ?? "agentic");
+  // Shared mode with the mobile top-bar dropdown (ModeProvider in ChatLayout).
+  const { mode, setMode } = useMode();
+  // Deep link / handoff (?m=) wins once on mount; the provider persists the
+  // choice across navigation afterwards.
+  const appliedInitialModeRef = useRef(false);
+  useEffect(() => {
+    if (initialMode && !appliedInitialModeRef.current) {
+      appliedInitialModeRef.current = true;
+      setMode(initialMode);
+    }
+  }, [initialMode, setMode]);
   const [showScrollButton, setShowScrollButton] = useState(false);
 
   // ── First-message handoff from the /chat composer ───────────────────────
@@ -251,6 +264,21 @@ export function ChatInterface({
     );
   };
 
+  // ── Mobile top-bar actions (copy / delete) ───────────────────────────────
+  // The desktop header shows these inline; on phones they live in the overflow
+  // menu in ChatLayout's top bar. Register the handlers here so the menu only
+  // appears while a conversation is open (the new-chat page registers none).
+  const actionsRef = useRef<ChatActions>({ onCopy: () => undefined, onClear: () => undefined });
+  actionsRef.current = { onCopy: copyConversation, onClear: () => setConfirmClearOpen(true) };
+  const { setActions } = useChatActions();
+  useEffect(() => {
+    setActions({
+      onCopy: () => actionsRef.current.onCopy(),
+      onClear: () => actionsRef.current.onClear(),
+    });
+    return () => setActions(null);
+  }, [setActions]);
+
   const bubbleAnimation = reduceMotion
     ? {}
     : { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 } };
@@ -261,19 +289,19 @@ export function ChatInterface({
     <div className="relative flex h-full flex-col">
       {/* ─── Quiet minimal header ───
           No border, no slab: a slim floating row so the conversation is the
-          focus. Mode is a small pill; copy/clear/new-chat are ghost actions. */}
-      <header className="flex shrink-0 items-center justify-between gap-2 px-4 py-2">
-        <Badge variant={mode === "agentic" ? "accent" : "default"} className="shrink-0">
-          {mode === "agentic" ? <Zap className="h-3 w-3" /> : <BookOpen className="h-3 w-3" />}
-          {mode === "agentic" ? "3-Agent ReAct" : "Standard"}
-        </Badge>
+          focus. Desktop (md+) shows the segmented answer-mode toggle on the
+          left and copy/clear/new-chat on the right; on phones the header is
+          hidden entirely — the top bar carries the mode dropdown on the left
+          and copy/delete behind its overflow menu on the right. */}
+      <header className="hidden shrink-0 flex-nowrap items-center justify-between gap-2 px-4 py-2 md:flex">
+        <ModeToggle mode={mode} onChange={setMode} className="hidden shrink-0 md:inline-flex" />
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
             onClick={() => void copyConversation()}
             aria-label="Copy conversation"
             title="Copy conversation"
-            className="grid h-9 w-9 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
+            className="grid h-11 w-11 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground sm:h-9 sm:w-9"
           >
             <Copy className="h-4 w-4" />
           </button>
@@ -283,17 +311,20 @@ export function ChatInterface({
             disabled={clearMutation.isPending || messages.length === 0}
             aria-label="Clear conversation"
             title="Clear conversation"
-            className="grid h-9 w-9 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground disabled:opacity-50"
+            className="grid h-11 w-11 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground disabled:opacity-50 sm:h-9 sm:w-9"
           >
             <Trash2 className="h-4 w-4" />
           </button>
           <button
             type="button"
             onClick={newChat}
-            className="brand-gradient ml-1 inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-white shadow-[0_4px_12px_-4px_var(--color-primary)] transition hover:brightness-110"
+            aria-label="New chat"
+            className="brand-gradient ml-1 inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-white shadow-[0_4px_12px_-4px_var(--color-primary)] transition hover:brightness-110 sm:min-h-9 sm:px-2.5 sm:py-1.5"
           >
             <Plus className="h-3.5 w-3.5" />
-            New chat
+            {/* Keep the label on anything wider than a phone; icon-only below so
+                the row never wraps on 320px screens. */}
+            <span className="hidden sm:inline">New chat</span>
           </button>
         </div>
       </header>
@@ -306,9 +337,7 @@ export function ChatInterface({
           aria-relevant="additions text"
           aria-label="Conversation"
         >
-          {isEmpty && (
-            <ChatEmptyState onSubmit={(query, promptMode) => void sendMessage(query, promptMode)} />
-          )}
+          {isEmpty && <ChatEmptyState />}
 
           {messages.map((message, index) => {
             const day = dayLabel(message.createdAt);
@@ -452,19 +481,19 @@ export function ChatInterface({
       )}
 
       {!notFound && (
-        <ChatInput
-          conversationId={conversationId}
-          onSubmit={(query) => void sendMessage(query, mode)}
-          onStop={stop}
-          isStreaming={isStreaming}
-          mode={mode}
-          onModeChange={setMode}
-          suggestions={QUICK_PROMPTS}
-          autoFocus={isEmpty}
-          onPasteUnavailable={() =>
-            toast({ title: "Clipboard access is unavailable in this browser", variant: "error" })
-          }
-        />
+        <>
+          {/* Separate suggestions window above the composer — never inside the
+              conversation view, and only BEFORE the first ask: once the first
+              message exists the panel disappears and the thread stays clean. */}
+          {isEmpty && <ChatSuggestions onSubmit={(query) => void sendMessage(query, mode)} />}
+          <ChatInput
+            conversationId={conversationId}
+            onSubmit={(query) => void sendMessage(query, mode)}
+            onStop={stop}
+            isStreaming={isStreaming}
+            autoFocus={isEmpty}
+          />
+        </>
       )}
 
       <ConfirmDialog

@@ -25,6 +25,18 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
+    // Mobile viewport coverage in CI (responsive checklist B8.186/B8.196):
+    // every spec also runs at a phone viewport so layout/touch regressions are
+    // caught on every push, not just at release time. The iPhone 13 profile
+    // defaults to WebKit, which is not installed locally/CI — keep its mobile
+    // viewport, touch, and UA but run the installed Chromium engine.
+    {
+      name: "mobile-chromium",
+      use: {
+        ...devices["iPhone 13"],
+        browserName: "chromium",
+      },
+    },
   ],
   webServer: {
     command: "pnpm dev --port 3000",

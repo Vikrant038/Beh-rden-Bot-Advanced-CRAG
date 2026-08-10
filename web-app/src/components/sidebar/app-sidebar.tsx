@@ -5,6 +5,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FileStack,
+  GraduationCap,
   History,
   LogIn,
   LogOut,
@@ -64,6 +65,11 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
   const isDefinitelyGuest = sessionStatus === "unauthenticated";
   const guestCount = api.conversation.count.useQuery(undefined, {
     enabled: isDefinitelyGuest,
+    // The prompt cap is a live resource: refetch when the tab regains focus
+    // (the global provider sets refetchOnWindowFocus:false) and treat the
+    // result as immediately stale so the chip never shows a stale count.
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), 300);
@@ -185,6 +191,13 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
     return (
       <>
         <div className="flex h-full flex-col items-center gap-1 py-3">
+          {/* Brand mark at the top of the rail — large screens only (≥800px). */}
+          <span
+            className="brand-gradient mb-2 hidden h-9 w-9 place-items-center rounded-xl text-white shadow-[0_4px_12px_-4px_var(--color-primary)] min-[800px]:grid"
+            aria-label="Behörden-Bot"
+          >
+            <GraduationCap className="h-4 w-4" />
+          </span>
           <button
             type="button"
             onClick={newChat}
@@ -235,36 +248,49 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
   return (
     <>
       <div className="flex h-full flex-col">
-        <div className="flex items-center gap-1 p-3 pb-2">
-          <button
-            type="button"
-            onClick={newChat}
-            className="brand-gradient flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-white shadow-[0_4px_16px_-4px_var(--color-primary)] transition hover:brightness-110"
-          >
-            <Plus className="h-4 w-4" />
-            New chat
-          </button>
+        {/* Brand header — brand mark + collapse toggle on one line. The logo
+            and wordmark only appear on large screens (≥800px); the collapse
+            toggle is always available in the expanded sidebar. */}
+        <div className="flex items-center gap-2 px-4 pb-1 pt-3.5">
+          <span className="brand-gradient hidden h-8 w-8 shrink-0 place-items-center rounded-lg text-white shadow-[0_4px_12px_-4px_var(--color-primary)] min-[800px]:grid">
+            <GraduationCap className="h-4 w-4" />
+          </span>
+          <span className="hidden truncate font-semibold min-[800px]:inline">Behörden-Bot</span>
           <button
             type="button"
             onClick={onToggleCollapsed}
             aria-label="Collapse sidebar"
             title="Collapse sidebar"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
+            className="ml-auto grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
           >
             <PanelLeftClose className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="relative px-3 pb-2">
-          <Search className="absolute left-6 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <input
-            type="search"
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            placeholder="Search conversations…"
-            aria-label="Search conversations"
-            className="min-h-11 w-full rounded-xl border border-border bg-surface/60 py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted focus:border-primary/60 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.12)]"
-          />
+        {/* Search first, New chat as a compact plus on the same line — the
+            search spans the width with even border spacing, the plus sits
+            flush right of it. */}
+        <div className="flex items-center gap-1.5 px-3 pb-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            <input
+              type="search"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Search conversations…"
+              aria-label="Search conversations"
+              className="min-h-11 w-full rounded-xl border border-border bg-surface/60 py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted focus:border-primary/60 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.12)]"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={newChat}
+            aria-label="New chat"
+            title="New chat (⌘N)"
+            className="brand-gradient grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white shadow-[0_4px_16px_-4px_var(--color-primary)] transition hover:brightness-110"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
         </div>
 
         <nav className="flex-1 space-y-3 overflow-y-auto px-2 pb-3" aria-label="Conversations">

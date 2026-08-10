@@ -141,6 +141,9 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
         if (!listRefreshedRef.current) {
           listRefreshedRef.current = true;
           void utils.conversation.list.invalidate();
+          // The user message is already persisted at this point — refresh the
+          // guest prompt count so the sidebar chip updates live too.
+          void utils.conversation.count.invalidate();
         }
       };
       switch (event.type) {
@@ -298,6 +301,9 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     }
     await utils.conversation.getById.invalidate({ id: conversationId });
     await utils.conversation.list.invalidate();
+    // Guest prompt count changes with every user message (send/regenerate/stop
+    // can all persist a USER row) — invalidate so the sidebar chip is live.
+    await utils.conversation.count.invalidate();
   }, [conversationId, utils]);
 
   const sendMessage = useCallback(

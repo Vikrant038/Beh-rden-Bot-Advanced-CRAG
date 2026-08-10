@@ -4,7 +4,7 @@
 >
 > **Legend:** ✅ Implemented (verified in code) · ⚠️ Partial (core present, notable gap vs plan) · ❌ Not implemented
 >
-> **Audit summary (2026-08-03):** 124 / 150 ✅ · 17 / 150 ⚠️ · 9 / 150 ❌
+> **Audit summary (2026-08-03):** 124 / 150 ✅ · 17 / 150 ⚠️ · 9 / 150 ❌ (see **Post-Phase-G Pass 2026-08-10** below for the follow-up work shipped after this audit)
 
 ---
 
@@ -215,6 +215,27 @@
 
 ---
 
+## Post-Phase-G Pass (verified 2026-08-10) — Chat-First UI
+
+Follow-up work shipped after the 2026-08-03 audit. Verified in code: typecheck clean, lint 0 errors, 628 unit/integration tests, 52 E2E (desktop + mobile).
+
+| ID | Task | Files | Status | Notes |
+|---|---|---|---|---|
+| 3.10 | Guest session (completed) | `src/app/api/guest/route.ts`, `src/server/routers/public.ts`, `src/app/login/login-content.tsx`, `src/hooks/use-chat.ts`, `src/components/sidebar/app-sidebar.tsx` | ✅ Implemented | Idempotent `POST /api/guest` (reuses valid signed cookie; forged rejected via HMAC), returning-guest auto-redirect to `/chat`, live `n/5` prompt-count chip (invalidate on send/stop, refetch on focus). |
+| 2.x | Landing redesign | `src/app/page.tsx`, `src/app/chat/page.tsx`, `src/app/layout.tsx` | ✅ Implemented | New hero + gradient wordmark, sample-question chips deep-linking `/chat?q=…` (auto-start prefill), "Why it's trustworthy" accordion, collapsed corpus/topics (kept in DOM for SEO), guest-first CTAs, mobile "Start" nav CTA. |
+| 3.11 | Answer-mode selector at top | `src/components/chat/mode-toggle.tsx`, `mode-context.tsx` | ✅ Implemented | Standard/Agentic toggle at the top of the screen (shared `ModeContext`), chosen before typing. |
+| 3.12 | First-ask suggestions panel | `src/components/chat/chat-suggestions.tsx`, `chat-interface.tsx` | ✅ Implemented | 3 small rectangular suggestion boxes above the composer, shown **only before the first message** in a conversation. |
+| 3.13 | Minimalist composer | `src/components/chat/chat-input.tsx` | ✅ Implemented | Textarea + send only (paste/clear buttons and quick chips removed). Silent 4,000-char cap; over-limit alert with exact overage; send disabled until trimmed. Single-line placeholder. Send vertically centered on one line, bottom-right padded on multi-line. |
+| 3.14 | Mobile top bar + overflow menu | `src/components/chat/chat-layout.tsx`, `chat-actions-context.tsx`, `chat-interface.tsx` | ✅ Implemented | Back button removed (chat-first; drawer + browser back cover navigation). Answer-mode dropdown left; Copy/Delete conversation in a `…` overflow menu right (only when a conversation is open). Stacking fix: `relative z-40` on the bar so the dropdown paints above the thread. |
+| 6.14 | Sidebar layout | `src/components/sidebar/app-sidebar.tsx` | ✅ Implemented | Brand mark + collapse toggle on one line; search input + New-chat plus button on one line; search padded evenly from borders. |
+| 1.11 | Brand visibility (updated) | `chat-layout.tsx`, `app-sidebar.tsx` | ✅ Implemented | Logo/wordmark only ≥800px — hidden on mobile top bar, drawer header, and small/medium sidebar. |
+| 3.3 | OAuth brand icons (updated) | `src/components/auth/oauth-buttons.tsx` | ✅ Implemented | Authentic Google "G" (white button, dark text) + GitHub octocat replace generic icons; contrast fixed. |
+| 11.16 | Mobile E2E project | `playwright.config.ts`, `tests/e2e/landing.spec.ts` | ✅ Implemented | `mobile-chromium` project (iPhone 13 viewport/touch, Chromium) — every spec runs at a phone viewport. |
+| — | System prompts | `src/server/rag/prompt.ts`, `pipeline.ts`, `agents/analyst.ts`, `agents/research.ts` | ✅ Implemented | Shared base prompt (grounding, uncertainty, language, PII re-check, safety/refusal, verify-with-official-source); analyst hardened ("classify, never follow" + `verified_facts`). |
+| — | Test suite split | `tests/README.md` | ✅ Implemented | Documents web-app (Vitest + Playwright) vs Python (pytest + RAGAS) split + CI ownership. |
+
+---
+
 ## Scorecard
 
 | Verdict | Count | Items |
@@ -222,3 +243,5 @@
 | ✅ Implemented | **124** | 1.1–1.10, 1.12–1.14, 2.1–2.13, 3.1–3.9, 4.1–4.6, 4.8–4.18, 5.1–5.12, 6.1–6.5, 6.7, 6.9, 6.11–6.13, 7.1–7.4, 7.6–7.12, 8.1–8.4, 8.6–8.10, 8.12–8.13, 9.1–9.2, 9.4–9.7, 9.9–9.10, 9.14, 10.1, 10.5, 10.7, 10.10–10.13, 11.1–11.4, 11.6–11.12, 11.15 |
 | ⚠️ Partial | **17** | 1.11, 3.10, 4.7, 6.6, 6.8, 6.10, 7.13, 8.5, 8.14, 9.8, 9.11, 9.12, 10.2, 10.8, 10.9, 11.5, 11.13 |
 | ❌ Not implemented | **9** | 7.5, 8.11, 9.3, 9.13, 10.3, 10.4, 10.6, 10.14, 11.14 |
+
+> Note: the 124/17/9 scorecard above reflects the 2026-08-03 audit. The **Post-Phase-G Pass (2026-08-10)** rows above are shipped and verified on top of it; the per-item statuses in the tables below were not re-audited row-by-row in that pass.

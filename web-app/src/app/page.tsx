@@ -9,9 +9,13 @@ import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
   ArrowUp,
+  BadgeCheck,
   Bot,
+  ChevronDown,
   Eye,
+  FileText,
   GraduationCap,
+  Landmark,
   Languages,
   Menu,
   Network,
@@ -124,6 +128,25 @@ const DEMO_POINTS = [
   "Sources with relevance scores on every answer",
 ];
 
+// Three tappable sample questions — each prefills a chat query on /chat.
+const SAMPLE_QUESTIONS = [
+  {
+    title: "Visa documents",
+    query: "What documents do I need for a German student visa?",
+    icon: FileText,
+  },
+  {
+    title: "Blocked account",
+    query: "How much do I need in a blocked account for 2026?",
+    icon: Landmark,
+  },
+  {
+    title: "APS certificate",
+    query: "How do I get my APS certificate and how long does it take?",
+    icon: BadgeCheck,
+  },
+];
+
 function StatCell({
   value,
   suffix,
@@ -154,12 +177,16 @@ export default function LandingPage() {
   const { stats, isLoading, isError } = useCorpusStats();
   const pathname = usePathname();
   const { status: sessionStatus } = useSession();
+  const { data: guestStatus } = api.public.guestStatus.useQuery(undefined, {
+    staleTime: 60_000,
+  });
 
-  // Session-aware CTAs: a signed-in user pressing "Get started" / "Start asking"
-  // goes straight to chat instead of bouncing through the login page on every
-  // visit from the home button. Unauthenticated (or session still loading)
-  // visitors get the login page as before.
-  const startHref = sessionStatus === "authenticated" ? "/chat" : "/login";
+  // Session-aware CTAs: a signed-in user — or a returning guest whose valid
+  // device cookie is still live — pressing "Get started" / "Start asking" goes
+  // straight to chat instead of bouncing through the login page. New visitors
+  // (or session still loading) get the login page as before.
+  const isReturningGuest = sessionStatus === "unauthenticated" && Boolean(guestStatus?.hasGuest);
+  const startHref = sessionStatus === "authenticated" || isReturningGuest ? "/chat" : "/login";
   const browseHref = sessionStatus === "authenticated" ? "/sources" : "/login";
 
   useEffect(() => {
@@ -224,11 +251,16 @@ export default function LandingPage() {
 
           <div className="flex items-center gap-2">
             <ThemeToggle compact />
+            {/* #33 — the primary CTA stays visible on mobile (compact "Start"
+                label); the accessible name stays "Get started" so tests and
+                screen readers see one consistent action. */}
             <Link
               href={startHref}
-              className="brand-gradient hidden rounded-xl px-4 py-2 text-sm font-medium text-white shadow-[0_4px_16px_-4px_var(--color-primary)] transition hover:brightness-110 md:inline-block"
+              aria-label="Get started"
+              className="brand-gradient inline-block rounded-xl px-3 py-2 text-xs font-medium text-white shadow-[0_4px_16px_-4px_var(--color-primary)] transition hover:brightness-110 sm:px-4 sm:text-sm"
             >
-              Get started
+              <span className="sm:hidden">Start</span>
+              <span className="hidden sm:inline">Get started</span>
             </Link>
             <button
               type="button"
@@ -289,7 +321,10 @@ export default function LandingPage() {
             transition={{ duration: 0.55, delay: 0.05 }}
             className="type-display mx-auto mt-6 max-w-4xl tracking-[-0.03em]"
           >
-            Ask about student visas, APS, and blocked accounts.
+            Your AI guide to studying in{" "}
+            <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+              Germany
+            </span>
           </motion.h1>
 
           <motion.p
@@ -297,7 +332,7 @@ export default function LandingPage() {
             transition={{ duration: 0.55, delay: 0.12 }}
             className="mx-auto mt-5 max-w-xl text-base text-muted sm:text-lg"
           >
-            Get cited answers grounded in official German sources — in seconds, for free.
+            Visas, APS, blocked accounts, university — answered from official sources.
           </motion.p>
 
           <motion.div
@@ -312,10 +347,10 @@ export default function LandingPage() {
               Start asking →
             </Link>
             <a
-              href="#how-it-works"
+              href="#demo"
               className="inline-block w-full max-w-xs rounded-xl border border-glass-border bg-glass px-8 py-3 text-sm font-medium shadow-glass backdrop-blur transition hover:bg-surface-hover sm:w-auto"
             >
-              See how it works
+              See an example
             </a>
           </motion.div>
 
@@ -332,6 +367,83 @@ export default function LandingPage() {
             <ChatMockup />
           </motion.div>
         </section>
+
+        {/* ─── What you can ask (sample chips → prefill chat) ─── */}
+        <motion.section
+          {...reveal}
+          transition={{ duration: 0.5 }}
+          className="mt-20"
+          aria-label="Sample questions"
+        >
+          <h2 className="type-title">What can I ask?</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
+            Tap a question to try it — it opens straight in the chat.
+          </p>
+          <div className="mx-auto mt-8 grid max-w-3xl gap-3 sm:grid-cols-3">
+            {SAMPLE_QUESTIONS.map((sample) => {
+              const Icon = sample.icon;
+              return (
+                <Link
+                  key={sample.title}
+                  href={`/chat?q=${encodeURIComponent(sample.query)}`}
+                  className="group flex min-h-11 flex-col items-start gap-2 rounded-xl border border-glass-border bg-glass px-4 py-4 text-left shadow-glass backdrop-blur transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-surface"
+                >
+                  <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary shadow-[0_0_14px_-4px_var(--color-primary)]">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="text-sm font-medium">{sample.title}</span>
+                  <span className="line-clamp-2 text-xs text-muted">{sample.query}</span>
+                  <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-accent">
+                    Ask this
+                    <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </motion.section>
+
+        {/* ─── How it works ─── */}
+        <motion.section
+          {...reveal}
+          transition={{ duration: 0.5, delay: 0.05 }}
+          id="how-it-works"
+          className="content-visibility-auto mt-24 scroll-mt-20 md:scroll-mt-24"
+        >
+          <h2 className="type-title">How it works</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
+            A three-agent pipeline turns your question into a cited, verified answer.
+          </p>
+          <div className="mt-10 grid gap-4 sm:grid-cols-3">
+            {[
+              {
+                step: "1",
+                title: "Ask a question",
+                body: "Type it in plain English — no forms, no jargon.",
+              },
+              {
+                step: "2",
+                title: "AI researches official sources",
+                body: "Hybrid retrieval + a research agent pull from verified documents.",
+              },
+              {
+                step: "3",
+                title: "Get a cited, verified answer",
+                body: "Every answer links the sources it was grounded on.",
+              },
+            ].map((step) => (
+              <GlassCard key={step.step} className="flex items-start gap-4 p-6 text-left sm:block">
+                <span className="brand-gradient grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold text-white shadow-[0_4px_14px_-4px_var(--color-primary)]">
+                  {step.step}
+                </span>
+                <div className="min-w-0">
+                  <h3 className="mt-0 font-semibold sm:mt-3">{step.title}</h3>
+                  <p className="mt-2 text-sm text-muted">{step.body}</p>
+                </div>
+              </GlassCard>
+            ))}
+          </div>
+        </motion.section>
 
         {/* ─── Trust / stats strip (real DB numbers) ─── */}
         <motion.section
@@ -423,142 +535,115 @@ export default function LandingPage() {
           </GlassCard>
         </motion.section>
 
-        {/* ─── How it works ─── */}
-        <motion.section
-          {...reveal}
-          transition={{ duration: 0.5, delay: 0.05 }}
-          id="how-it-works"
-          className="content-visibility-auto mt-24 scroll-mt-20 md:scroll-mt-24"
-        >
-          <h2 className="type-title">How it works</h2>
-          <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
-            A three-agent pipeline turns your question into a cited, verified answer.
-          </p>
-          <div className="mt-10 grid gap-4 sm:grid-cols-3">
-            {[
-              {
-                step: "1",
-                title: "Ask a question",
-                body: "Type it in plain English — no forms, no jargon.",
-              },
-              {
-                step: "2",
-                title: "AI researches official sources",
-                body: "Hybrid retrieval + a research agent pull from verified documents.",
-              },
-              {
-                step: "3",
-                title: "Get a cited, verified answer",
-                body: "Every answer links the sources it was grounded on.",
-              },
-            ].map((step) => (
-              <GlassCard key={step.step} className="flex items-start gap-4 p-6 text-left sm:block">
-                <span className="brand-gradient grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold text-white shadow-[0_4px_14px_-4px_var(--color-primary)]">
-                  {step.step}
-                </span>
-                <div className="min-w-0">
-                  <h3 className="mt-0 font-semibold sm:mt-3">{step.title}</h3>
-                  <p className="mt-2 text-sm text-muted">{step.body}</p>
-                </div>
-              </GlassCard>
-            ))}
-          </div>
-        </motion.section>
-
-        {/* ─── Features ─── */}
+        {/* ─── Features — collapsible "Why it's trustworthy" accordion ─── */}
         <motion.section
           {...reveal}
           transition={{ duration: 0.5 }}
           id="features"
-          className="content-visibility-auto mt-24 scroll-mt-20 md:scroll-mt-24"
+          className="content-visibility-auto mx-auto mt-24 max-w-3xl scroll-mt-20 text-left md:scroll-mt-24"
         >
-          <h2 className="type-title">Built for accuracy and privacy</h2>
-          <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
+          <h2 className="type-title text-center">Why it&apos;s trustworthy</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-center text-sm text-muted">
             Every feature exists to earn your trust before you make a life-changing decision.
           </p>
-          <div className="mt-10 grid gap-4 text-left sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-10 space-y-3">
             {FEATURES.map((feature) => {
               const Icon = feature.icon;
               return (
-                <motion.div key={feature.title} {...reveal} transition={{ duration: 0.4 }}>
-                  <GlassCard className="h-full p-4 transition hover:-translate-y-0.5 hover:shadow-glass sm:p-5">
-                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary shadow-[0_0_18px_-6px_var(--color-primary)] sm:h-11 sm:w-11">
+                <details
+                  key={feature.title}
+                  className="group rounded-xl border border-glass-border bg-glass shadow-glass backdrop-blur transition open:border-primary/40"
+                >
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center gap-4 px-5 py-3.5 transition hover:bg-surface-hover sm:py-4">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary shadow-[0_0_18px_-6px_var(--color-primary)]">
                       <Icon className="h-5 w-5" />
                     </span>
-                    <h3 className="mt-3 font-semibold">{feature.title}</h3>
-                    <p className="mt-2 text-sm text-muted">{feature.description}</p>
-                  </GlassCard>
-                </motion.div>
+                    <span className="min-w-0 flex-1 font-medium">{feature.title}</span>
+                    <ChevronDown className="h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-180" />
+                  </summary>
+                  <p className="px-5 pb-5 text-sm leading-relaxed text-muted">
+                    {feature.description}
+                  </p>
+                </details>
               );
             })}
           </div>
         </motion.section>
 
-        {/* ─── The corpus (real sources, no invented claims) ─── */}
+        {/* ─── Corpus + topics — collapsed behind "Explore the knowledge base" ─── */}
         <motion.section
           {...reveal}
           transition={{ duration: 0.5 }}
           id="corpus"
           className="content-visibility-auto mt-24 scroll-mt-20 md:scroll-mt-24"
         >
-          <h2 className="type-title">Built on a real legal corpus</h2>
-          <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
-            Every answer is grounded in indexed official documents — federal laws, BAMF brochures,
-            and Goethe/telc/TestDaF exam handbooks. These are the largest documents in the knowledge
-            base right now:
-          </p>
-          <div className="mt-10 grid gap-4 text-left sm:grid-cols-2 lg:grid-cols-3">
-            {(stats?.topSources ?? []).map((source, index) => (
-              <GlassCard key={source.title} className="p-5">
-                <div className="flex items-start gap-3">
-                  <span className="brand-gradient grid h-8 w-8 shrink-0 place-items-center rounded-lg text-xs font-bold text-white">
-                    {index + 1}
-                  </span>
-                  <div className="min-w-0">
-                    <h3
-                      className="line-clamp-2 text-sm font-medium sm:truncate"
-                      title={source.title}
-                    >
-                      {source.title}
-                    </h3>
-                    <p className="mt-1 text-xs text-muted">
-                      {source.chunkCount.toLocaleString()} indexed chunks
-                    </p>
-                  </div>
-                </div>
-              </GlassCard>
-            ))}
-          </div>
-          {!isLoading && (stats?.sources ?? 0) > 0 && (
-            <p className="mt-6 text-xs text-muted">
-              {stats?.sources} sources · {stats?.parentChunks?.toLocaleString()} parent sections ·
-              {stats?.chunks?.toLocaleString()} chunks · indexed as 1024-dim bge-m3 vectors.
-            </p>
-          )}
-        </motion.section>
+          {/* Keep the corpus content in the DOM (SEO) but visually collapsed until
+              the visitor opts in — progressive disclosure per the landing plan. */}
+          <details className="group mx-auto max-w-3xl rounded-2xl border border-glass-border bg-glass shadow-glass backdrop-blur">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 px-6 py-4 text-left transition hover:bg-surface-hover">
+              <span>
+                <span className="block font-semibold">Explore the knowledge base</span>
+                <span className="mt-0.5 block text-xs text-muted">
+                  Official documents, laws, and exam handbooks behind every answer
+                </span>
+              </span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="border-t border-glass-border px-6 py-6">
+              <h3 className="text-left font-semibold">Built on a real legal corpus</h3>
+              <p className="mt-2 text-left text-sm text-muted">
+                Federal laws, BAMF brochures, and Goethe/telc/TestDaF exam handbooks — the largest
+                documents in the knowledge base right now:
+              </p>
+              <div className="mt-6 grid gap-4 text-left sm:grid-cols-2 lg:grid-cols-3">
+                {(stats?.topSources ?? []).map((source, index) => (
+                  <GlassCard key={source.title} className="p-5">
+                    <div className="flex items-start gap-3">
+                      <span className="brand-gradient grid h-8 w-8 shrink-0 place-items-center rounded-lg text-xs font-bold text-white">
+                        {index + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <h4
+                          className="line-clamp-2 text-sm font-medium sm:truncate"
+                          title={source.title}
+                        >
+                          {source.title}
+                        </h4>
+                        <p className="mt-1 text-xs text-muted">
+                          {source.chunkCount.toLocaleString()} indexed chunks
+                        </p>
+                      </div>
+                    </div>
+                  </GlassCard>
+                ))}
+              </div>
+              {!isLoading && (stats?.sources ?? 0) > 0 && (
+                <p className="mt-6 text-xs text-muted">
+                  {stats?.sources} sources · {stats?.parentChunks?.toLocaleString()} parent sections
+                  · {stats?.chunks?.toLocaleString()} chunks · indexed as 1024-dim bge-m3 vectors.
+                </p>
+              )}
 
-        {/* ─── Supported topics ─── */}
-        <motion.section
-          {...reveal}
-          transition={{ duration: 0.5 }}
-          className="content-visibility-auto mt-24"
-        >
-          <h2 className="type-title">What can I ask about?</h2>
-          <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
-            From your first APS appointment to your first semester — the knowledge base covers the
-            whole journey.
-          </p>
-          <div className="mx-auto mt-8 flex max-w-3xl flex-wrap justify-center gap-2">
-            {TOPICS.map((topic) => (
-              <a
-                key={topic}
-                href={startHref}
-                className="grid min-h-11 place-items-center rounded-full border border-glass-border bg-glass px-3.5 py-1.5 text-xs text-muted shadow-glass backdrop-blur transition hover:border-primary/60 hover:text-foreground"
-              >
-                {topic}
-              </a>
-            ))}
-          </div>
+              <div className="mt-8 border-t border-glass-border pt-6">
+                <h3 className="text-left font-semibold">What can I ask about?</h3>
+                <p className="mt-2 text-left text-sm text-muted">
+                  From your first APS appointment to your first semester — the knowledge base covers
+                  the whole journey.
+                </p>
+                <div className="mt-5 flex flex-wrap justify-center gap-2">
+                  {TOPICS.map((topic) => (
+                    <a
+                      key={topic}
+                      href={startHref}
+                      className="grid min-h-11 place-items-center rounded-full border border-glass-border bg-glass px-3.5 py-1.5 text-xs text-muted shadow-glass backdrop-blur transition hover:border-primary/60 hover:text-foreground"
+                    >
+                      {topic}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </details>
         </motion.section>
 
         {/* ─── FAQ ─── */}

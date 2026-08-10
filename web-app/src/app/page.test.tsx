@@ -3,11 +3,14 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import LandingPage from "./page";
 
-const { mockUseSession, mockCorpusStats, mockUseReducedMotion } = vi.hoisted(() => ({
-  mockUseSession: vi.fn(),
-  mockCorpusStats: vi.fn(),
-  mockUseReducedMotion: vi.fn(() => false),
-}));
+const { mockUseSession, mockCorpusStats, mockGuestStatus, mockUseReducedMotion } = vi.hoisted(
+  () => ({
+    mockUseSession: vi.fn(),
+    mockCorpusStats: vi.fn(),
+    mockGuestStatus: vi.fn(),
+    mockUseReducedMotion: vi.fn(() => false),
+  }),
+);
 
 vi.mock("next-auth/react", () => ({
   useSession: () => mockUseSession(),
@@ -26,6 +29,9 @@ vi.mock("@/lib/trpc/client", () => ({
     public: {
       corpusStats: {
         useQuery: mockCorpusStats,
+      },
+      guestStatus: {
+        useQuery: mockGuestStatus,
       },
     },
   },
@@ -89,6 +95,7 @@ describe("LandingPage session-aware CTAs", () => {
   beforeEach(() => {
     setSession("unauthenticated");
     mockCorpusStats.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+    mockGuestStatus.mockReturnValue({ data: { hasGuest: false } });
   });
 
   it("routes unauthenticated visitors to /login", () => {
@@ -125,12 +132,20 @@ describe("LandingPage session-aware CTAs", () => {
 
     expect(screen.getByRole("link", { name: "Get started" })).toHaveAttribute("href", "/login");
   });
+
+  it("routes a returning guest (valid cookie, no session) straight to /chat", () => {
+    mockGuestStatus.mockReturnValue({ data: { hasGuest: true } });
+    render(<LandingPage />);
+
+    expect(screen.getByRole("link", { name: "Get started" })).toHaveAttribute("href", "/chat");
+  });
 });
 
 describe("LandingPage interaction states", () => {
   beforeEach(() => {
     setSession("unauthenticated");
     mockCorpusStats.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+    mockGuestStatus.mockReturnValue({ data: { hasGuest: false } });
   });
 
   it("renders a neutral placeholder while corpus stats are loading", () => {
@@ -249,9 +264,21 @@ describe("LandingPage interaction states", () => {
 
     // Page still renders; the hero heading and CTAs are present.
     expect(
-      screen.getByRole("heading", { name: /Ask about student visas, APS, and blocked accounts/ }),
+      screen.getByRole("heading", { name: /Your AI guide to studying in Germany/ }),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Get started" })).toHaveAttribute("href", "/login");
     mockUseReducedMotion.mockReturnValue(false);
+  });
+
+  it("renders sample-question chips that prefill a chat query", () => {
+    render(<LandingPage />);
+
+    const visaChip = screen.getByRole("link", { name: /Visa documents/ });
+    expect(visaChip).toHaveAttribute(
+      "href",
+      `/chat?q=${encodeURIComponent("What documents do I need for a German student visa?")}`,
+    );
+    expect(screen.getByRole("link", { name: /Blocked account/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /APS certificate/ })).toBeInTheDocument();
   });
 });

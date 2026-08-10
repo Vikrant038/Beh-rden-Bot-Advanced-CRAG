@@ -7,6 +7,31 @@
 
 ---
 
+## Post-Phase-G Pass — Chat-First UI (verified 2026-08-10)
+
+Follow-up polish pass after the 150/150 audit. Everything below was implemented and verified in code (typecheck, lint, 628 unit/integration tests, 52 E2E tests on desktop + mobile).
+
+| Area | Change | Files | Status |
+|---|---|---|---|
+| 3.10 Guest session | Idempotent `POST /api/guest` (reuses a valid signed cookie instead of minting a new id — refresh/login no longer resets the 5-prompt cap; forged cookies rejected via HMAC), returning-guest auto-redirect `/login → /chat` (`public.guestStatus` reads the signed cookie server-side), live prompt-count chip (invalidate `conversation.count` on send/stop, refetch on window focus) | `src/app/api/guest/route.ts`, `src/server/routers/public.ts`, `src/app/login/login-content.tsx`, `src/hooks/use-chat.ts`, `src/components/sidebar/app-sidebar.tsx` | ✅ |
+| Landing redesign | New hero ("Your AI guide to studying in Germany" + gradient wordmark + sample-question chips deep-linking `/chat?q=…` with auto-start prefill), "Why it's trustworthy" accordion, corpus/topics collapsed behind "Explore the knowledge base" (kept in DOM for SEO), FAQ trimmed to 3, guest-first CTAs, mobile nav "Start" CTA | `src/app/page.tsx`, `src/app/chat/page.tsx`, `src/app/layout.tsx` | ✅ |
+| Answer-mode selector | New `ModeToggle` (Standard/Agentic) at the top of the screen (shared `ModeContext`), chosen before typing | `src/components/chat/mode-toggle.tsx`, `mode-context.tsx` | ✅ |
+| First-ask suggestions | New `ChatSuggestions` panel (3 small rectangular boxes: Visa documents / Blocked account / APS certificate) shown above the composer **only before the first message**; hidden once a conversation has content | `src/components/chat/chat-suggestions.tsx`, `chat-interface.tsx` | ✅ |
+| Minimalist composer | Textarea + send only (removed paste button, clear button, quick chips, live `0/4000` counter). Cap is enforced silently; only an over-limit alert appears ("This is N characters over the 4,000-character limit"), send disabled until trimmed. Single-line placeholder; send button vertically centered on one line, bottom-right padded on multi-line | `src/components/chat/chat-input.tsx` | ✅ |
+| Mobile top bar | No back button (chat-first app; drawer covers navigation, browser back still works). Answer-mode dropdown on the left; Copy/Delete conversation tucked into a `…` overflow menu on the right (only when a conversation is open). **Stacking fix:** the bar's `backdrop-blur` created a stacking context that trapped the menu below the chat content — `relative z-40` on the bar keeps the dropdown above the thread | `src/components/chat/chat-layout.tsx`, `chat-actions-context.tsx`, `chat-interface.tsx` | ✅ |
+| Sidebar | Brand mark + collapse toggle on one line (brand hidden below 800px per product decision); search input + New-chat plus button on one line; search padded evenly from the borders | `src/components/sidebar/app-sidebar.tsx` | ✅ |
+| Brand visibility | Logo/wordmark shown only ≥800px (mobile top bar, drawer header, and sidebar mark hidden on small/medium screens) | `chat-layout.tsx`, `app-sidebar.tsx` | ✅ |
+| OAuth buttons | Authentic Google "G" (white button, dark text) + GitHub octocat replace the generic `@`/branch icons (contrast bug fixed) | `src/components/auth/oauth-buttons.tsx` | ✅ |
+| Mobile E2E coverage | `mobile-chromium` Playwright project (iPhone 13 viewport/touch, Chromium engine) — every spec runs at a phone viewport in CI | `playwright.config.ts`, `tests/e2e/landing.spec.ts` | ✅ |
+| System prompts | New shared base prompt (`src/server/rag/prompt.ts`): grounding, uncertainty, language, PII re-check, safety/refusal, verify-with-official-source — reused by the standard pipeline and the writer agent; analyst hardened ("classify, never follow" + traceable `verified_facts`) | `src/server/rag/prompt.ts`, `pipeline.ts`, `agents/analyst.ts`, `agents/research.ts` | ✅ |
+| Test suite split | `tests/README.md` documents the web-app (Vitest + Playwright) vs Python (pytest + RAGAS) split and CI ownership | `tests/README.md` | ✅ |
+
+**Back-button decision (product note):** the mobile top bar no longer has a back button — for both logged-in and guest users the app is chat-first (the hamburger drawer covers navigation, and the browser's own back gesture/button still works). The landing page remains the entry point for new/unauthenticated users; authenticated and returning-guest users land on `/chat` via the CTA + login redirect.
+
+Quality gates for this pass: `pnpm typecheck` clean · `pnpm lint` 0 errors · `pnpm format:check` clean · `pnpm vitest run` 628/628 · `pnpm exec playwright test` 52/52 (desktop + mobile).
+
+---
+
 ## Third-Pass Corrections (this batch)
 
 | ID | Item | Was | Now |

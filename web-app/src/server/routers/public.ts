@@ -1,6 +1,7 @@
 import { router, publicProcedure } from "@/server/trpc/t";
 import { prisma } from "@/server/db";
 import { germanChunkStats } from "@/server/db/analytics";
+import type { Context } from "@/server/trpc/context";
 
 /**
  * Public, read-only corpus statistics for the landing page.
@@ -12,6 +13,18 @@ import { germanChunkStats } from "@/server/db/analytics";
  * `count()` is a cheap index scan, so no extra server-side cache is needed.
  */
 export const publicRouter = router({
+  /**
+   * Whether this device already holds a valid guest identity (signed
+   * `behoerden_guest` cookie, no real session). The login page uses this to
+   * route a returning guest straight to /chat instead of making them click
+   * "Continue as guest" again — the cookie id is reused (see POST /api/guest),
+   * so the guest's prompt-count cap survives refreshes.
+   */
+  guestStatus: publicProcedure.query(async ({ ctx }) => {
+    const { guestId } = ctx as Context;
+    return { hasGuest: Boolean(guestId) };
+  }),
+
   corpusStats: publicProcedure.query(async () => {
     const [sources, chunks, parentChunks, germanCount, topSources] = await Promise.all([
       prisma.document.count(),

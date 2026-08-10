@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { GraduationCap, LogIn, MessagesSquare } from "lucide-react";
 import { api } from "@/lib/trpc/client";
-import { ChatEmptyState, QUICK_PROMPTS } from "@/components/chat/chat-empty-state";
+import { ChatEmptyState } from "@/components/chat/chat-empty-state";
+import { ChatSuggestions } from "@/components/chat/chat-suggestions";
+import { ModeToggle } from "@/components/chat/mode-toggle";
+import { useMode } from "@/components/chat/mode-context";
 import { ChatInput } from "@/components/chat/chat-input";
 import type { ChatMode } from "@/lib/chat/types";
 import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/lib/guest";
@@ -19,9 +22,12 @@ import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/lib/guest";
  */
 export default function NewChatPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const utils = api.useUtils();
   const createMutation = api.conversation.create.useMutation();
-  const [mode, setMode] = useState<ChatMode>("agentic");
+  // Shared with the mobile top-bar dropdown (ModeProvider in ChatLayout).
+  const { mode, setMode } = useMode();
+  const startedPrefillRef = useRef(false);
 
   const limitReached = createMutation.error?.data?.code === GUEST_LIMIT_REACHED_CODE;
 
@@ -53,6 +59,19 @@ export default function NewChatPage() {
       // Guest limit / generic error surfaced via createMutation.error below.
     }
   };
+
+  // Landing-page sample chips deep-link here as /chat?q=<query> — start the
+  // conversation immediately with the prefilled question. Guarded so StrictMode's
+  // double-mount only starts it once.
+  useEffect(() => {
+    const query = searchParams.get("q")?.trim();
+    if (!query || startedPrefillRef.current) {
+      return;
+    }
+    startedPrefillRef.current = true;
+    void startConversation(query, "agentic");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   if (limitReached) {
     return (
@@ -101,19 +120,23 @@ export default function NewChatPage() {
 
   return (
     <div className="flex h-full flex-col">
+      {/* Answer mode is chosen at the top of the screen, before typing.
+          Desktop (md+) only — phones use the top-bar dropdown in ChatLayout. */}
+      <header className="hidden shrink-0 items-center justify-between gap-2 px-4 py-2 md:flex">
+        <ModeToggle mode={mode} onChange={setMode} />
+      </header>
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6">
-          <ChatEmptyState onSubmit={startConversation} />
+          <ChatEmptyState />
         </div>
       </div>
+      {/* Separate suggestions window above the composer. */}
+      <ChatSuggestions onSubmit={(query) => void startConversation(query, mode)} />
       <ChatInput
         onSubmit={(query) => void startConversation(query, mode)}
         onStop={() => undefined}
         isStreaming={false}
         disabled={createMutation.isPending}
-        mode={mode}
-        onModeChange={setMode}
-        suggestions={QUICK_PROMPTS}
       />
     </div>
   );

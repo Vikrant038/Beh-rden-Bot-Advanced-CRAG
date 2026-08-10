@@ -29,7 +29,7 @@ export const viewport: Viewport = {
 
 const APP_NAME = "Behörden-Bot";
 const APP_DESCRIPTION =
-  "AI assistant for German student visa, APS certification, university applications, blocked accounts, and immigration questions — built for Indian students.";
+  "Your AI guide to studying in Germany — student visas, APS certification, blocked accounts, and university applications, answered from official sources. Built for Indian students.";
 // Canonical public URL for metadataBase/OG/canonical. Derived from the
 // validated NEXTAUTH_URL so production (Vercel) and local builds both get the
 // correct origin without a hardcoded, rot-prone domain.

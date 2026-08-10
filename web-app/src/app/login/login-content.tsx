@@ -15,6 +15,7 @@ import {
   Download,
 } from "lucide-react";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
+import { api } from "@/lib/trpc/client";
 import { GUEST_PROMPT_LIMIT } from "@/lib/guest";
 
 const BENEFITS = [
@@ -47,17 +48,27 @@ export function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { status: sessionStatus } = useSession();
+  const { data: guestStatus } = api.public.guestStatus.useQuery();
 
-  // Already signed in? Skip the login card entirely. The home page CTAs now
-  // route signed-in users straight to /chat, and a direct /login visit while
-  // authenticated should land in chat too — not on a redundant login form.
+  // Returning user? Skip the login card entirely.
+  //  - Signed in → straight to /chat.
+  //  - Valid guest cookie (device-scoped, survives refresh) → straight to
+  //    /chat too, reusing the same identity so the 5-prompt cap is preserved
+  //    instead of minting a fresh guest id on every "Continue as guest" click.
   // Exception: when an OAuth `error` param is present (e.g. AccessDenied from
   // the callback error flow), keep the page so the error banner stays visible.
   useEffect(() => {
-    if (sessionStatus === "authenticated" && !searchParams.get("error")) {
+    if (searchParams.get("error")) {
+      return;
+    }
+    if (sessionStatus === "authenticated") {
+      router.replace("/chat");
+      return;
+    }
+    if (sessionStatus === "unauthenticated" && guestStatus?.hasGuest) {
       router.replace("/chat");
     }
-  }, [sessionStatus, searchParams, router]);
+  }, [sessionStatus, guestStatus, searchParams, router]);
 
   const [guestOpen, setGuestOpen] = useState(false);
   const [startingGuest, setStartingGuest] = useState(false);

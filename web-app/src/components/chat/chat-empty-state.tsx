@@ -1,41 +1,7 @@
 "use client";
 
-import { ArrowUpRight, BadgeCheck, FileText, Landmark, MessageCircle, Scale } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
-import type { ChatMode } from "@/lib/chat/types";
-
-const SUGGESTED_PROMPTS = [
-  {
-    title: "Visa documents",
-    description: "What do I need for a German student visa?",
-    query: "What documents do I need for a German student visa?",
-    icon: FileText,
-  },
-  {
-    title: "Blocked account",
-    description: "How much for 2026?",
-    query: "How much do I need in a blocked account for 2026?",
-    icon: Landmark,
-  },
-  {
-    title: "APS certificate",
-    description: "What is it and how long does it take?",
-    query: "What is the APS certificate and how long does it take?",
-    icon: BadgeCheck,
-  },
-  {
-    title: "Funding options",
-    description: "Blocked account vs scholarship",
-    query: "Compare blocked account vs scholarship funding options.",
-    icon: Scale,
-  },
-];
-
-export const QUICK_PROMPTS = [
-  "APS verification timeline",
-  "Blocked account amount needed for the Germany visa for 2026",
-  "Student visa appointment checklist",
-];
 
 function ChatEmptyIllustration() {
   const reduceMotion = useReducedMotion();
@@ -69,18 +35,13 @@ function ChatEmptyIllustration() {
   );
 }
 
-interface ChatEmptyStateProps {
-  onSubmit: (query: string, mode: ChatMode) => void;
-}
-
 /**
- * The "How can I help you today?" landing used both on the standalone `/chat`
- * composer (no conversation exists yet — creates one on first send) and inside
- * an empty loaded conversation. `onSubmit` carries the chosen mode so the
- * caller controls whether the prompt goes through the agentic or standard
- * pipeline.
+ * The friendly "How can I help you today?" landing shown on the /chat composer
+ * and inside an empty loaded conversation. Deliberately minimal: the suggested
+ * questions live in the separate ChatSuggestions panel above the composer so
+ * this view never competes with the input.
  */
-export function ChatEmptyState({ onSubmit }: ChatEmptyStateProps) {
+export function ChatEmptyState() {
   return (
     // Ambient aurora behind the empty state — the Gemini-style "alive, not
     // empty" background. Dim orbs drift slowly; reduced-motion-safe via CSS.
@@ -99,28 +60,6 @@ export function ChatEmptyState({ onSubmit }: ChatEmptyStateProps) {
           Ask about German student visas, APS certification, blocked accounts, or university
           applications.
         </p>
-        <div className="mt-7 grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
-          {SUGGESTED_PROMPTS.map((prompt) => {
-            const Icon = prompt.icon;
-            return (
-              <button
-                key={prompt.title}
-                type="button"
-                onClick={() => onSubmit(prompt.query, "agentic")}
-                className="group flex min-h-11 items-start gap-3 rounded-xl border border-glass-border bg-glass px-4 py-3.5 text-left shadow-glass backdrop-blur transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-surface hover:shadow-[0_8px_24px_-8px_var(--color-primary)]"
-              >
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary shadow-[0_0_14px_-4px_var(--color-primary)]">
-                  <Icon className="h-4 w-4" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium">{prompt.title}</span>
-                  <span className="mt-0.5 block text-xs text-muted">{prompt.description}</span>
-                </span>
-                <ArrowUpRight className="mt-1 h-4 w-4 shrink-0 text-muted opacity-0 transition group-hover:opacity-100" />
-              </button>
-            );
-          })}
-        </div>
       </div>
     </div>
   );

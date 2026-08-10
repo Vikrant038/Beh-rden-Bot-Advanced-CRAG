@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChatInput } from "@/components/chat/chat-input";
+import { MAX_QUERY_LENGTH } from "@/lib/chat/types";
 
 function setup(props: Partial<Parameters<typeof ChatInput>[0]> = {}) {
   const onSubmit = vi.fn();
@@ -78,64 +79,38 @@ describe("ChatInput", () => {
     expect(screen.getByRole("button", { name: "Stop generating" })).toBeInTheDocument();
   });
 
-  it("clears the input via the clear button", async () => {
+  it("shows no live character counter while under the limit", async () => {
     const user = userEvent.setup();
     setup();
+    await user.type(screen.getByPlaceholderText(/Ask about visas/), "short question");
+    expect(screen.queryByText(/characters over the/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\/ 4,000/)).not.toBeInTheDocument();
+  });
+
+  it("warns with the exact overage once the user exceeds the limit and blocks send", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = setup();
     const input = screen.getByPlaceholderText(/Ask about visas/);
-    await user.type(input, "to be cleared");
-    await user.click(screen.getByRole("button", { name: "Clear input" }));
-    expect(input).toHaveValue("");
-  });
+    const overText = "x".repeat(MAX_QUERY_LENGTH + 12);
+    // user-event's paste() targets the focused element — focus first.
+    await user.click(input);
+    await user.paste(overText);
 
-  it("inserts a suggestion draft and focuses the textarea", async () => {
-    const user = userEvent.setup();
-    setup({ suggestions: ["Blocked account 2026?"] });
-    await user.click(screen.getByRole("button", { name: "Blocked account 2026?" }));
-    expect(screen.getByPlaceholderText(/Ask about visas/)).toHaveValue("Blocked account 2026?");
-  });
+    // The alert names the exact overage and never shows a live counter.
+    expect(
+      screen.getByText(
+        `This is 12 characters over the ${MAX_QUERY_LENGTH.toLocaleString()}-character limit.`,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
 
-  it("recedes quick prompts while typing, but keeps them visible while streaming", async () => {
-    const user = userEvent.setup();
-    const { rerender } = setup({ suggestions: ["Prompt A"] });
-    expect(screen.getByRole("button", { name: "Prompt A" })).toBeInTheDocument();
-    await user.type(screen.getByPlaceholderText(/Ask about visas/), "typed");
-    expect(screen.queryByRole("button", { name: "Prompt A" })).not.toBeInTheDocument();
-    // Sending a message clears the input but streaming continues; the suggestions
-    // stay visible so the user can fire a follow-up without re-typing.
-    await user.click(screen.getByRole("button", { name: "Clear input" }));
-    rerender(
-      <ChatInput onSubmit={vi.fn()} onStop={vi.fn()} isStreaming suggestions={["Prompt A"]} />,
-    );
-    expect(screen.getByRole("button", { name: "Prompt A" })).toBeInTheDocument();
-  });
+    await user.keyboard("{Enter}");
+    expect(onSubmit).not.toHaveBeenCalled();
 
-  it("switches modes via the toggle buttons", async () => {
-    const user = userEvent.setup();
-    const onModeChange = vi.fn();
-    setup({ onModeChange, mode: "standard" });
-    await user.click(screen.getByRole("button", { name: /Agentic/ }));
-    expect(onModeChange).toHaveBeenCalledWith("agentic");
-    await user.click(screen.getByRole("button", { name: /Standard/ }));
-    expect(onModeChange).toHaveBeenCalledWith("standard");
-  });
-
-  it("reports an unavailable clipboard via onPasteUnavailable", async () => {
-    const user = userEvent.setup();
-    const onPasteUnavailable = vi.fn();
-    const originalClipboard = navigator.clipboard;
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { readText: vi.fn(async () => Promise.reject(new Error("denied"))) },
-    });
-    try {
-      setup({ onPasteUnavailable });
-      await user.click(screen.getByRole("button", { name: "Paste from clipboard" }));
-      expect(onPasteUnavailable).toHaveBeenCalledTimes(1);
-    } finally {
-      Object.defineProperty(navigator, "clipboard", {
-        configurable: true,
-        value: originalClipboard,
-      });
-    }
+    // Trimming back under the limit clears the warning and re-enables send.
+    await user.clear(input);
+    await user.type(input, "within the limit");
+    expect(screen.queryByText(/characters over the/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
   });
 });

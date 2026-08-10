@@ -8,6 +8,7 @@ import { maskPii } from "@/server/pii/masker";
 import { formatChunksForPrompt } from "@/server/rag/tools/web-search";
 import type { SemanticCache } from "@/server/rag/cache/semantic-cache";
 import { SummaryBufferMemory } from "@/server/rag/memory/summary-buffer";
+import { buildStandardSystemPrompt } from "@/server/rag/prompt";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("standard-crag");
@@ -35,10 +36,8 @@ export interface StandardRagResult {
   isCached: boolean;
 }
 
-const SYSTEM_PROMPT =
-  "You are Behoerden-Bot, an official expert assistant for German university admissions, " +
-  "student visa processes, APS certification, and blocked accounts.\n" +
-  "Your answers must be clear, factual, well-structured, and strictly grounded in the provided official context.";
+// Shared, unit-tested generation contract (src/server/rag/prompt.ts).
+const SYSTEM_PROMPT = buildStandardSystemPrompt();
 
 /**
  * Standard CRAG pipeline (ported from `src/rag.py:rag_answer`):

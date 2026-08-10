@@ -63,7 +63,11 @@ export function mockTrpc(page: Page, handlers: Record<string, TrpcHandler>) {
     }
 
     const results = parsed.procedures.map((procedure, index) => {
-      const handler = handlers[procedure];
+      // public.guestStatus is an ambient read every page shell performs (login,
+      // landing); default it so specs don't each have to duplicate the handler.
+      const handler = handlers[procedure] ?? (procedure === "public.guestStatus"
+        ? () => ({ hasGuest: false })
+        : undefined);
       if (!handler) {
         throw new Error(`E2E tRPC mock: no handler for "${procedure}"`);
       }
