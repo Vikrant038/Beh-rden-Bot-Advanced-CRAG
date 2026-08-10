@@ -148,6 +148,30 @@ export function ChatInterface({
   }, [initialMode, setMode]);
   const [showScrollButton, setShowScrollButton] = useState(false);
 
+  // Hydrate saved feedback so thumbs stay colored after a reload / when
+  // switching conversations. Seeded once per (conversation, message-set) and
+  // never overwrites an in-session click (existing keys are skipped).
+  const seededFeedbackKeyRef = useRef<string>("");
+  useEffect(() => {
+    if (messages.length === 0) {
+      return;
+    }
+    const key = `${conversationId}:${messages[0]?.id ?? ""}:${messages[messages.length - 1]?.id ?? ""}`;
+    if (seededFeedbackKeyRef.current === key) {
+      return;
+    }
+    seededFeedbackKeyRef.current = key;
+    setFeedbackState((prev) => {
+      const seeded = { ...prev };
+      for (const message of messages) {
+        if (message.feedback && !(message.id in seeded)) {
+          seeded[message.id] = message.feedback;
+        }
+      }
+      return seeded;
+    });
+  }, [conversationId, messages]);
+
   // ── First-message handoff from the /chat composer ───────────────────────
   // /chat creates the conversation and redirects with ?q=<query>. Auto-send it
   // exactly once once the conversation has loaded, then strip the param so a

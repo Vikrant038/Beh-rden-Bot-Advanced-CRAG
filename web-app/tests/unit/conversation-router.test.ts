@@ -245,6 +245,50 @@ describe("conversation router", () => {
     expect(result.readOnly).toBe(false);
   });
 
+  it("getById: maps the viewer's saved feedback onto messages", async () => {
+    prismaMock.conversation.findUnique.mockResolvedValue({
+      ...ownerConversation,
+      messages: [
+        {
+          id: "m1",
+          role: "ASSISTANT",
+          content: "hello",
+          sources: null,
+          metadata: null,
+          createdAt: new Date("2026-01-01"),
+          feedback: [{ rating: "UP" }],
+        },
+        {
+          id: "m2",
+          role: "ASSISTANT",
+          content: "again",
+          sources: null,
+          metadata: null,
+          createdAt: new Date("2026-01-01"),
+          feedback: [],
+        },
+      ],
+    } as never);
+
+    const caller = makeCaller();
+    const result = await caller.conversation.getById({ id: "conv-1" });
+
+    expect(result.messages[0].feedback).toBe("up");
+    expect(result.messages[1].feedback).toBeNull();
+    // The feedback sub-query is scoped to the requesting user.
+    expect(prismaMock.conversation.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          messages: expect.objectContaining({
+            select: expect.objectContaining({
+              feedback: { where: { userId: "user-1" }, select: { rating: true }, take: 1 },
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
   it("getById: rejects access to another user's conversation for non-admins", async () => {
     prismaMock.conversation.findUnique.mockResolvedValue({
       id: "conv-x",

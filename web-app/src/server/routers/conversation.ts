@@ -95,6 +95,7 @@ function toChatMessage(row: {
   sources: unknown;
   metadata: unknown;
   createdAt: Date;
+  feedback: Array<{ rating: string }> | null;
 }): ChatMessage {
   return {
     id: row.id,
@@ -103,6 +104,14 @@ function toChatMessage(row: {
     sources: parseSourcesJson(row.sources),
     metadata: parseJsonObject(row.metadata) as ChatMessage["metadata"],
     createdAt: row.createdAt.toISOString(),
+    // Feedback is per-user: the query filters it to the requesting user, so an
+    // admin viewing someone else's conversation gets null here (their own
+    // ratings, if any, belong to their own messages only).
+    feedback: row.feedback?.[0]
+      ? row.feedback[0].rating === "UP"
+        ? "up"
+        : "down"
+      : null,
   };
 }
 
@@ -218,6 +227,11 @@ export const conversationRouter = router({
               sources: true,
               metadata: true,
               createdAt: true,
+              feedback: {
+                where: { userId: user.id },
+                select: { rating: true },
+                take: 1,
+              },
             },
           },
         },

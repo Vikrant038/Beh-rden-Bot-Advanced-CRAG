@@ -33,6 +33,8 @@ export interface ChatMessage {
   sources?: ChatSource[];
   metadata?: ChatMetadata | null;
   createdAt: string;
+  /** The viewing user's saved feedback rating (null/absent = unset). */
+  feedback?: "up" | "down" | null;
 }
 
 /**
