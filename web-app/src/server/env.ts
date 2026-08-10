@@ -29,6 +29,9 @@ const serverEnvSchema = z.object({
   GROQ_API_KEY: z.string().optional(),
   GROQ_MODEL: z.string().default("llama-3.1-8b-instant"),
   HF_TOKEN: z.string().optional(),
+  /** Bearer token for the Cloudflare embeddings/reranker worker
+   * (its EMBED_TOKEN secret). Falls back to HF_TOKEN for backward compat. */
+  EMBED_TOKEN: z.string().optional(),
   HF_LLM_MODEL: z.string().default("meta-llama/Llama-3.1-8B-Instruct"),
   /** HF Inference API base for the LLM fallback — separate from
    * HF_INFERENCE_URL, which now points at the Cloudflare embeddings worker. */
@@ -54,7 +57,8 @@ const serverEnvSchema = z.object({
       : val;
     return normalizeUrl(raw);
   }, z.string().url()),
-  /** Token for the reranker endpoint; falls back to HF_TOKEN when unset. */
+  /** Token for the reranker endpoint; falls back to EMBED_TOKEN, then
+   * HF_TOKEN when unset. */
   RERANKER_TOKEN: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   EMBEDDING_MODEL: z.string().default("BAAI/bge-m3"),

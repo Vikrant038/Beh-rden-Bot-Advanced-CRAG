@@ -101,7 +101,7 @@ export class HfEmbeddingClient implements EmbeddingClient {
   constructor(
     private readonly model: string = env.EMBEDDING_MODEL,
     private readonly inferenceUrl: string = env.HF_INFERENCE_URL,
-    private readonly apiToken: string = env.HF_TOKEN ?? "",
+    private readonly apiToken: string = env.EMBED_TOKEN ?? env.HF_TOKEN ?? "",
   ) {}
 
   async embedTexts(texts: string[]): Promise<number[][]> {
@@ -109,7 +109,7 @@ export class HfEmbeddingClient implements EmbeddingClient {
       return [];
     }
     if (!this.apiToken) {
-      throw new LLMProviderError("HF_TOKEN not configured; cannot embed");
+      throw new LLMProviderError("EMBED_TOKEN/HF_TOKEN not configured; cannot embed");
     }
 
     const cached = this.cache.get(texts);

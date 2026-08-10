@@ -27,7 +27,7 @@ export class HfReranker implements Reranker {
   constructor(
     private readonly model: string = env.RERANKER_MODEL ?? "@cf/baai/bge-reranker-base",
     private readonly inferenceUrl: string = env.RERANKER_URL,
-    private readonly apiToken: string = env.RERANKER_TOKEN ?? env.HF_TOKEN ?? "",
+    private readonly apiToken: string = env.RERANKER_TOKEN ?? env.EMBED_TOKEN ?? env.HF_TOKEN ?? "",
   ) {}
 
   async rerank(query: string, chunks: Chunk[], topK: number = RERANK_TOP_K): Promise<Chunk[]> {
