@@ -21,8 +21,7 @@ export interface Env {
       model: string,
       inputs: { text: string | string[] } | { query: string; contexts: Array<{ text: string }> },
     ): Promise<
-      | { shape: number[]; data: number[][] }
-      | { result: { response: Array<{ id: number; score: number }> } }
+      { shape: number[]; data: number[][] } | { response: Array<{ id: number; score: number }> }
     >;
   };
   EMBED_TOKEN: string;
@@ -152,10 +151,11 @@ export default {
  *   → [[{label, score}], ...]  (one row per pair, in input order)
  *
  * Workers AI's only reranker (@cf/baai/bge-reranker-base) speaks a different
- * shape: `{query, contexts: [{text}]}` in, `{result: {response: [{id, score}]}}`
- * out (`id` = position in the input array, relevance order). This handler
- * translates both ways and returns the HF shape so the app's `extractScores`
- * keeps working unchanged.
+ * shape: `{query, contexts: [{text}]}` in, `{response: [{id, score}]}` out
+ * (`id` = position in the input array, relevance order — verified live via
+ * `wrangler dev`: the binding unwraps the REST API's `result` wrapper). This
+ * handler translates both ways and returns the HF shape so the app's
+ * `extractScores` keeps working unchanged.
  */
 async function handleRerank(request: Request, env: Env): Promise<Response> {
   // Token auth — same secret as the embedding route.
@@ -225,13 +225,13 @@ async function handleRerank(request: Request, env: Env): Promise<Response> {
       { status: 502 },
     );
   }
-  // The binding returns { result: { response: [{ id, score }] } } — scores
-  // live under `response`, keyed by `id` (position in the input array).
-  const ranked = (
-    raw as {
-      result?: { response?: Array<{ id?: number; score?: number }> };
-    }
-  )?.result?.response;
+  // Verified live via `wrangler dev`: the binding returns { response: [...] }
+  // directly — the REST API wraps it in `result`, so accept both shapes.
+  const parsed = raw as {
+    response?: Array<{ id?: number; score?: number }>;
+    result?: { response?: Array<{ id?: number; score?: number }> };
+  };
+  const ranked = parsed?.response ?? parsed?.result?.response;
   if (!Array.isArray(ranked)) {
     return Response.json({ error: "unexpected reranker response" }, { status: 502 });
   }
