@@ -68,18 +68,22 @@ embeddings. The per-commit gate stays `ci-web-app.yml`.
 
 Two corpus modes:
 
-- **small** (default) — fully self-contained. The job boots a
+- **small** (manual-dispatch default) — fully self-contained. The job boots a
   `pgvector/pgvector:pg16` Postgres, applies migrations, ingests the small
   corpus subset (`web-app/data/ingest-pdfs-small.json`, ~10 official PDFs
-  that ship in the repo), then evaluates. Acts as a **regression gate**: it
-  will not match the production scorecard exactly, but it catches pipeline
-  breakage (guardrail regressions, retrieval failures, judge/generation
-  faults).
-- **full** — evaluates against the **production corpus**. Requires the
-  `EVAL_DATABASE_URL` secret: a Postgres URL pointing at a seeded copy of the
-  corpus (produce it with `web-app/scripts/seed-corpus.sh` — dump the local
-  seeded Postgres, ship the vectors, no re-embedding). This mode produces the
-  authoritative quality numbers.
+  that ship in the repo), then evaluates. Acts as a **smoke/regression run**:
+  its quality gates are **informational** (exit 0 as long as the pipeline
+  runs end-to-end — the CI subset cannot meet full-corpus thresholds; a
+  small-corpus recall of ~20% with precision ~96% is expected because most
+  expected keywords simply are not in the subset). Watch the *delta* from the
+  previous small-mode run, not the absolute numbers.
+- **full** — evaluates against the **production corpus** (the weekly
+  scheduled run). Requires the `EVAL_DATABASE_URL` secret: a Postgres URL
+  pointing at a seeded copy of the corpus (produce it with
+  `web-app/scripts/seed-corpus.sh` — dump the local seeded Postgres, ship
+  the vectors, no re-embedding). This mode produces the **authoritative
+  quality numbers** and its gates **are enforced** (a gate miss fails the
+  run).
 
 ## Secrets you must configure
 
@@ -91,7 +95,57 @@ Two corpus modes:
 | `EMBEDDING_MODEL` | optional | default `BAAI/bge-m3` (must match the corpus space) |
 | `HF_INFERENCE_URL` | ✅ | the BGE-M3 feature-extraction endpoint (your deployed Cloudflare embeddings worker, e.g. `https://<worker>.workers.dev`). Required — the HF Inference API default is unreachable from many networks (DNS/geo blocks) and fails every ingest with "Hugging Face API is unreachable". The workflow fails fast if this secret is missing. |
 | `RERANKER_MODEL` | optional | default `BAAI/bge-reranker-v2-m3` |
-| `EVAL_DATABASE_URL` | full mode only | seeded corpus Postgres URL |
+| `EVAL_DATABASE_URL` | full mode only | seeded corpus Postgres URL — see "Setting up full-corpus mode" below |
+
+## Setting up full-corpus mode (`EVAL_DATABASE_URL`)
+
+The weekly schedule evaluates the FULL corpus, so the workflow needs a
+Postgres URL the GitHub runner can read that contains the seeded corpus
+(documents + parent/child chunks with the 1024-dim bge-m3 vectors). It only
+**reads** — the eval never writes to that database.
+
+### 1. Produce the seeded corpus (one-time)
+
+You already have the embedded corpus locally (docker Postgres, produced by
+`pnpm ingest`). Ship the vectors to a Postgres the CI can reach — typically
+your Neon database:
+
+```bash
+cd web-app
+docker compose up -d postgres
+# Apply migrations on the target first (the script verifies the schema):
+pnpm db:deploy   # needs DATABASE_URL pointed at the target, or use psql directly
+NEON_DATABASE_URL="postgresql://behoerden_app:...@ep-xxx-pooler.eu-central-1.aws.neon.tech/behoerden_bot?sslmode=require" \
+  ./scripts/seed-corpus.sh --replace
+```
+
+This dumps `documents` / `document_parent_chunks` / `document_chunks` from
+the local docker Postgres and loads them into the target, then ensures the
+FTS GIN + pgvector HNSW indexes exist. Run it once after the corpus changes;
+re-runs with `--replace` wipe and reload the corpus tables only.
+
+### 2. Add the secret
+
+In GitHub → **Settings → Secrets and variables → Actions → New repository
+secret**:
+
+| Secret | Value |
+|--------|-------|
+| `EVAL_DATABASE_URL` | the same Postgres URL (use Neon's **pooled** connection string — the runner's IP is dynamic; the pooler endpoint avoids IP-allowlist blocks) |
+
+Add it as a **secret** (not a variable) — the workflow reads it via
+`secrets.EVAL_DATABASE_URL`.
+
+### 3. Troubleshooting
+
+- **Connection timeout / refused** — Neon IP allowlists block GitHub runner
+  IPs. Use the pooled connection URL, or add GitHub's runner ranges, or
+  disable the allowlist for this database.
+- **"target has no 'documents' table"** — run `pnpm db:deploy` against the
+  target first.
+- **Migrations missing on the target** — `prisma migrate deploy` must run
+  against the target before seeding (the eval expects the current schema,
+  including `blockedAt`).
 
 ## Gate calibration
 

@@ -11,18 +11,26 @@ name: Web App CRAG Evaluation
 # it is triggerd manually (workflow_dispatch) or weekly (schedule). The
 # pipeline's per-commit gate is ci-web-app.yml (lint/typecheck/test/build).
 #
-# Two corpus modes (workflow_dispatch input):
-#   small (default) — fully self-contained: spins up a pgvector Postgres,
-#                     migrates, ingests the small corpus subset
-#                     (data/ingest-pdfs-small.json), then evaluates. No
-#                     production data needed; a regression gate.
+# Two corpus modes:
+#   small (manual dispatch default) — fully self-contained: spins up a
+#                     pgvector Postgres, migrates, ingests the small corpus
+#                     subset (data/ingest-pdfs-small.json), then evaluates. No
+#                     production data needed. A SMOKE/regression run: its
+#                     quality gates are informational (the CI subset cannot
+#                     meet full-corpus thresholds), so it exits 0 as long as
+#                     the pipeline runs end-to-end.
 #   full            — evaluates against the production corpus. Requires the
 #                     EVAL_DATABASE_URL secret (a Postgres URL pointing at a
 #                     seeded copy of the corpus — see web-app/docs/EVALUATION.md
 #                     and scripts/seed-corpus.sh for how to produce it). The
-#                     authoritative quality numbers come from this mode.
+#                     authoritative quality numbers come from this mode, and
+#                     its gates ARE enforced (the run fails on a gate miss).
 #
-# Required secrets (small mode): GROQ_API_KEY, HF_TOKEN, HF_INFERENCE_URL.
+# The weekly schedule (Monday 04:00 UTC) always runs FULL; the manual dispatch
+# defaults to small unless overridden.
+#
+# Required secrets: GROQ_API_KEY, HF_TOKEN, HF_INFERENCE_URL (all modes),
+# EVAL_DATABASE_URL (full mode).
 # HF_INFERENCE_URL is REQUIRED — it must point at a reachable BGE-M3
 # feature-extraction endpoint (the deployed Cloudflare embeddings worker). The
 # Hugging Face Inference API default is unreachable from many networks (DNS/
@@ -36,16 +44,16 @@ on:
     inputs:
       corpus:
         description: >-
-          Corpus to evaluate against — small = CI-seeded subset
-          (self-contained regression gate), full = production corpus via the
-          EVAL_DATABASE_URL secret.
+          Corpus to evaluate against — small = CI-seeded subset (smoke run,
+          gates informational), full = production corpus via the
+          EVAL_DATABASE_URL secret (gates enforced).
         type: choice
         default: small
         options:
           - small
           - full
   schedule:
-    - cron: "0 4 * * 1" # weekly, Monday 04:00 UTC
+    - cron: "0 4 * * 1" # weekly, Monday 04:00 UTC — always runs FULL
 
 permissions:
   contents: read
@@ -108,6 +116,19 @@ jobs:
       - name: Generate Prisma client
         run: pnpm prisma generate
 
+      - name: Resolve corpus mode
+        id: corpus
+        run: |
+          # Scheduled (weekly) runs evaluate the FULL production corpus — that
+          # is the authoritative scorecard and the only mode whose gates fail
+          # the run. Manual dispatch defaults to small unless overridden.
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            echo "corpus=full" >> "$GITHUB_OUTPUT"
+          else
+            echo "corpus=${{ inputs.corpus || 'small' }}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Resolved corpus mode: $(grep '^corpus=' "$GITHUB_OUTPUT" | cut -d= -f2)"
+
       - name: Require + verify the embedding endpoint
         # The ingest + eval both embed with BGE-M3. HF_INFERENCE_URL must point
         # at the DEPLOYED Cloudflare embeddings worker; the HF Inference API
@@ -133,7 +154,7 @@ jobs:
           echo "Embedding endpoint verified: $(cat /tmp/healthz.json)"
 
       - name: Seed CI corpus (migrate + ingest small subset)
-        if: ${{ inputs.corpus != 'full' }}
+        if: ${{ steps.corpus.outputs.corpus != 'full' }}
         # Embedding-only step: it needs the model + HF endpoint + token.
         env:
           EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL || 'BAAI/bge-m3' }}
@@ -165,7 +186,7 @@ jobs:
           pnpm ingest --file data/ingest-pdfs-small.json
 
       - name: Point at production corpus
-        if: ${{ inputs.corpus == 'full' }}
+        if: ${{ steps.corpus.outputs.corpus == 'full' }}
         run: |
           if [[ -z "${{ secrets.EVAL_DATABASE_URL }}" ]]; then
             echo "::error::full-corpus mode requires the EVAL_DATABASE_URL secret (a Postgres URL to a seeded copy of the corpus). See web-app/docs/EVALUATION.md."
@@ -177,7 +198,8 @@ jobs:
       - name: Run 30-question evaluation
         # The only step that calls the LLM: generation (GROQ) + judge, BGE-M3
         # embeddings + cross-encoder reranker (HF). Everything is scoped here
-        # so no other step can read these secrets.
+        # so no other step can read these secrets. CORPUS_MODE=small makes the
+        # quality gates informational; full enforces them.
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'llama-3.1-8b-instant' }}
@@ -185,12 +207,13 @@ jobs:
           HF_INFERENCE_URL: ${{ secrets.HF_INFERENCE_URL }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           RERANKER_MODEL: ${{ secrets.RERANKER_MODEL || 'BAAI/bge-reranker-v2-m3' }}
+          CORPUS_MODE: ${{ steps.corpus.outputs.corpus }}
         run: pnpm exec tsx scripts/eval-crag-webapp.ts
 
       - name: Upload evaluation results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: crag-eval-results-${{ inputs.corpus || 'small' }}
+          name: crag-eval-results-${{ steps.corpus.outputs.corpus || 'small' }}
           path: web-app/data/processed/webapp_crag_30_results.json
           if-no-files-found: warn
