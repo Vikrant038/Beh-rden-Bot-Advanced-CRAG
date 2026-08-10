@@ -13,6 +13,7 @@ const PERSISTED_CONVERSATION = {
   mode: "AGENTIC",
   createdAt: ISO,
   updatedAt: ISO,
+  readOnly: false,
   messages: [
     {
       id: "assistant-e2e",
@@ -31,6 +32,7 @@ const EMPTY_CONVERSATION = {
   mode: "AGENTIC",
   createdAt: ISO,
   updatedAt: ISO,
+  readOnly: false,
   messages: [],
 };
 
@@ -83,6 +85,7 @@ test("sends the first message, creates the conversation, and renders the streame
   let streamed = false;
   const POST_STREAM_CONVERSATION = {
     ...PERSISTED_CONVERSATION,
+    readOnly: false,
     messages: [
       {
         id: "user-e2e",

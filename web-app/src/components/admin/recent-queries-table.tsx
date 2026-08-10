@@ -2,7 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Clock, Eye, ExternalLink, GitFork, Loader2, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock,
+  Eye,
+  ExternalLink,
+  GitFork,
+  Library,
+  Loader2,
+  XCircle,
+} from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -22,7 +31,7 @@ interface RecentQueryRow {
   mode: string;
   latencyMs: number;
   isCached: boolean;
-  retrievalPath: string | null;
+  sourceCount: number;
 }
 
 interface RecentQueriesTableProps {
@@ -182,7 +191,7 @@ export function RecentQueriesTable({
               <th className="py-2 pr-4 font-medium">Mode</th>
               <th className="py-2 pr-4 font-medium">Latency</th>
               <th className="py-2 pr-4 font-medium">Cached</th>
-              <th className="py-2 pr-4 font-medium">Path</th>
+              <th className="py-2 pr-4 font-medium">Sources</th>
               <th className="py-2 pr-4 font-medium">When</th>
               <th className="py-2 font-medium">
                 <span className="sr-only">Actions</span>
@@ -231,8 +240,11 @@ export function RecentQueriesTable({
                     </span>
                   )}
                 </td>
-                <td className="max-w-[160px] py-2.5 pr-4">
-                  <p className="truncate text-xs text-muted">{query.retrievalPath ?? "—"}</p>
+                <td className="py-2.5 pr-4">
+                  <span className="inline-flex items-center gap-1 text-xs text-muted">
+                    <Library className="h-3 w-3" />
+                    {query.sourceCount}
+                  </span>
                 </td>
                 <td className="whitespace-nowrap py-2.5 text-xs text-muted">
                   {formatRelativeTime(query.createdAt)}

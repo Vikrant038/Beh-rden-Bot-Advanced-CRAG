@@ -60,7 +60,7 @@ export interface RecentQueryRow {
   mode: string;
   latencyMs: number;
   isCached: boolean;
-  retrievalPath: string | null;
+  sourceCount: number;
 }
 
 export type RecentQueriesCursor = { createdAt: Date; id: string };

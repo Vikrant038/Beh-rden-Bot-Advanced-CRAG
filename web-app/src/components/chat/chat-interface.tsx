@@ -121,6 +121,7 @@ export function ChatInterface({
     isStreaming,
     isLoading,
     notFound,
+    readOnly,
     status,
     error,
     notice,
@@ -268,13 +269,18 @@ export function ChatInterface({
   // The desktop header shows these inline; on phones they live in the overflow
   // menu in ChatLayout's top bar. Register the handlers here so the menu only
   // appears while a conversation is open (the new-chat page registers none).
-  const actionsRef = useRef<ChatActions>({ onCopy: () => undefined, onClear: () => undefined });
-  actionsRef.current = { onCopy: copyConversation, onClear: () => setConfirmClearOpen(true) };
+  // Read-only views (admin inspecting another user's conversation) keep copy
+  // but drop the clear/delete entry — the server would reject it anyway.
+  const actionsRef = useRef<ChatActions>({ onCopy: () => undefined });
+  actionsRef.current = {
+    onCopy: copyConversation,
+    onClear: readOnly ? undefined : () => setConfirmClearOpen(true),
+  };
   const { setActions } = useChatActions();
   useEffect(() => {
     setActions({
       onCopy: () => actionsRef.current.onCopy(),
-      onClear: () => actionsRef.current.onClear(),
+      ...(actionsRef.current.onClear ? { onClear: () => actionsRef.current.onClear?.() } : {}),
     });
     return () => setActions(null);
   }, [setActions]);
@@ -308,9 +314,13 @@ export function ChatInterface({
           <button
             type="button"
             onClick={() => setConfirmClearOpen(true)}
-            disabled={clearMutation.isPending || messages.length === 0}
+            disabled={clearMutation.isPending || messages.length === 0 || readOnly}
             aria-label="Clear conversation"
-            title="Clear conversation"
+            title={
+              readOnly
+                ? "Read-only view — you cannot modify this conversation"
+                : "Clear conversation"
+            }
             className="grid h-11 w-11 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground disabled:opacity-50 sm:h-9 sm:w-9"
           >
             <Trash2 className="h-4 w-4" />
@@ -330,6 +340,7 @@ export function ChatInterface({
       </header>
 
       <div ref={scrollRef} className="touch-pan-y flex-1 overflow-y-auto">
+        {" "}
         <div
           className="chat-column flex flex-col gap-4 px-4 py-6"
           role="log"
@@ -337,6 +348,16 @@ export function ChatInterface({
           aria-relevant="additions text"
           aria-label="Conversation"
         >
+          {readOnly && !isEmpty && (
+            <div
+              role="note"
+              className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-center text-xs text-muted"
+            >
+              Read-only view — this conversation belongs to another user. You can read and copy it,
+              but sending messages is disabled.
+            </div>
+          )}
+
           {isEmpty && <ChatEmptyState />}
 
           {messages.map((message, index) => {
@@ -361,7 +382,9 @@ export function ChatInterface({
                     message={message}
                     streaming={message.id === STREAMING_ID}
                     feedback={feedbackState[message.id] ?? null}
-                    onRegenerate={isLastAssistant ? () => void regenerate(mode) : undefined}
+                    onRegenerate={
+                      isLastAssistant && !readOnly ? () => void regenerate(mode) : undefined
+                    }
                     onFeedback={(rating) => {
                       setFeedbackState((prev) => ({ ...prev, [message.id]: rating }));
                       feedbackMutation.mutate(
@@ -397,7 +420,7 @@ export function ChatInterface({
             );
           })}
 
-          {disambiguationOptions.length > 0 && (
+          {!readOnly && disambiguationOptions.length > 0 && (
             <DisambiguationCards
               options={disambiguationOptions}
               onSelect={(option) => void sendMessage(option, mode)}
@@ -408,7 +431,7 @@ export function ChatInterface({
 
           {isStreaming && !isThinking && <PipelineStatus status={status} />}
 
-          {followUps.length > 0 && lastAssistant && (
+          {!readOnly && followUps.length > 0 && lastAssistant && (
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <span className="text-[10px] uppercase tracking-wider text-muted">Follow up</span>
               {followUps.map((followUp) => (
@@ -480,7 +503,7 @@ export function ChatInterface({
         </button>
       )}
 
-      {!notFound && (
+      {!notFound && !readOnly && (
         <>
           {/* Separate suggestions window above the composer — never inside the
               conversation view, and only BEFORE the first ask: once the first

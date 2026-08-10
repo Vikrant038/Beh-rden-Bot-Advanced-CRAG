@@ -115,7 +115,7 @@ export interface RecentQueryRow {
   mode: string;
   latencyMs: number;
   isCached: boolean;
-  retrievalPath: string | null;
+  sourceCount: number;
 }
 
 export interface RecentQueriesCursor {
@@ -142,10 +142,11 @@ export async function recentQueries(
            COALESCE(a.metadata->>'mode', 'standard') AS mode,
            COALESCE((a.metadata->>'latencyMs')::float, 0) AS "latencyMs",
            COALESCE(a.metadata->>'isCached', 'false') = 'true' AS "isCached",
-           a.metadata->>'retrievalPath' AS "retrievalPath"
+           -- How many sources the answer cited (0 for refusals/blocked).
+           COALESCE(jsonb_array_length(a.sources), 0)::int AS "sourceCount"
     FROM messages m
     CROSS JOIN LATERAL (
-      SELECT "metadata"
+      SELECT "metadata", "sources"
       FROM messages a
       WHERE a."conversationId" = m."conversationId"
         AND a.role = 'ASSISTANT'
@@ -175,7 +176,7 @@ export async function recentQueries(
     mode: row.mode,
     latencyMs: Number(row.latencyMs ?? 0),
     isCached: Boolean(row.isCached),
-    retrievalPath: row.retrievalPath ?? null,
+    sourceCount: Number(row.sourceCount ?? 0),
   }));
   const lastItem = rows.length > limit ? rows[limit - 1] : undefined;
   const nextCursor =

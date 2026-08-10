@@ -24,6 +24,9 @@ export interface UseChatReturn {
   isLoading: boolean;
   /** True when the conversation 404'd or the user lacks access. */
   notFound: boolean;
+  /** True when the conversation may be read but not written (admins viewing
+   * another user's conversation from the dashboard). Composer is disabled. */
+  readOnly: boolean;
   status: PipelineStage;
   error: string | null;
   /** Transient, non-fatal progress text (e.g. an automatic retry in flight). */
@@ -85,6 +88,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
   const [disambiguationOptions, setDisambiguationOptions] = useState<string[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [readOnly, setReadOnly] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const currentConvIdRef = useRef<string | null>(null);
   // The server persists the user message and bumps updatedAt before the first
@@ -116,6 +120,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
         currentConvIdRef.current = conversation.id;
       }
       setNotFound(false);
+      setReadOnly(Boolean(conversation.readOnly));
       setGuestLimitReached(false);
       setStatus("idle");
     }
@@ -309,7 +314,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
   const sendMessage = useCallback(
     async (query: string, mode: ChatMode = "agentic") => {
       const trimmed = query.trim();
-      if (!trimmed || !conversationId || isStreaming) {
+      if (!trimmed || !conversationId || isStreaming || readOnly) {
         return;
       }
 
@@ -387,12 +392,12 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
 
       await invalidateConversation();
     },
-    [conversationId, consumeStream, invalidateConversation, isStreaming],
+    [conversationId, consumeStream, invalidateConversation, isStreaming, readOnly],
   );
 
   const regenerate = useCallback(
     async (mode?: ChatMode) => {
-      if (!conversationId || isStreaming) {
+      if (!conversationId || isStreaming || readOnly) {
         return;
       }
 
@@ -442,6 +447,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
       invalidateConversation,
       isStreaming,
       messages,
+      readOnly,
       regenerateMutation,
     ],
   );
@@ -480,6 +486,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     isStreaming,
     isLoading,
     notFound,
+    readOnly,
     status,
     error,
     notice,

@@ -48,6 +48,7 @@ export default function NewChatPage() {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           messages: [],
+          readOnly: false,
         },
       );
 

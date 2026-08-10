@@ -158,7 +158,7 @@ describe("admin router", () => {
         mode: "agentic",
         latencyMs: 812.5,
         isCached: false,
-        retrievalPath: "AGENTIC_3_AGENT_REACT",
+        sourceCount: 4,
       },
       {
         id: "m2",
@@ -168,7 +168,7 @@ describe("admin router", () => {
         mode: "standard",
         latencyMs: 1.2,
         isCached: true,
-        retrievalPath: "TIER_2_VECTOR_CACHE_HIT (Sim: 0.980)",
+        sourceCount: 0,
       },
     ] as never);
     const caller = makeCaller();
@@ -189,7 +189,7 @@ describe("admin router", () => {
         mode: "agentic",
         latencyMs: 1,
         isCached: false,
-        retrievalPath: "p",
+        sourceCount: 1,
       },
       {
         id: "m2",
@@ -199,7 +199,7 @@ describe("admin router", () => {
         mode: "standard",
         latencyMs: 1,
         isCached: false,
-        retrievalPath: "p",
+        sourceCount: 2,
       },
       {
         id: "m3",
@@ -209,7 +209,7 @@ describe("admin router", () => {
         mode: "agentic",
         latencyMs: 1,
         isCached: false,
-        retrievalPath: "p",
+        sourceCount: 0,
       },
     ] as never);
     const caller = makeCaller();

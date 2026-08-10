@@ -39,6 +39,7 @@ await mockTrpc(page, {
     mode: "AGENTIC",
     createdAt: ISO,
     updatedAt: ISO,
+    readOnly: false,
     messages: [],
   }),
   "conversation.list": () => ({ items: [], nextCursor: null }),

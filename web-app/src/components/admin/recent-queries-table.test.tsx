@@ -33,7 +33,7 @@ const row = {
   mode: "AGENTIC",
   latencyMs: 2500,
   isCached: true,
-  retrievalPath: "HYBRID_RRF_CROSS_ENCODER",
+  sourceCount: 3,
 };
 
 describe("RecentQueriesTable", () => {
@@ -62,7 +62,7 @@ describe("RecentQueriesTable", () => {
     expect(screen.getByText("Test query")).toBeDefined();
     expect(screen.getByText("AGENTIC")).toBeDefined();
     expect(screen.getByText("yes")).toBeDefined();
-    expect(screen.getByText("HYBRID_RRF_CROSS_ENCODER")).toBeDefined();
+    expect(screen.getByText("3")).toBeDefined();
 
     const loadMoreBtn = screen.getByRole("button", { name: /Load more/i });
     fireEvent.click(loadMoreBtn);
@@ -97,9 +97,9 @@ describe("RecentQueriesTable", () => {
     expect((loadMoreBtn as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("shows a dash for a null retrieval path", () => {
-    render(<RecentQueriesTable queries={[{ ...row, retrievalPath: null }]} loading={false} />);
-    expect(screen.getByText("—")).toBeDefined();
+  it("shows zero sources when the answer cited none", () => {
+    render(<RecentQueriesTable queries={[{ ...row, sourceCount: 0 }]} loading={false} />);
+    expect(screen.getByText("0")).toBeDefined();
   });
 
   it("opens the details drawer with metadata-driven stats", async () => {

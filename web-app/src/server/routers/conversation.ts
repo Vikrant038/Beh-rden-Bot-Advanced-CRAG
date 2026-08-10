@@ -73,6 +73,13 @@ export interface ConversationWithMessages {
   createdAt: Date;
   updatedAt: Date;
   messages: ChatMessage[];
+  /**
+   * True when the viewer may read but not write. Owners get `false`; admins
+   * opening another user's conversation (admin dashboard drill-in) get `true`
+   * so the UI disables the composer. The write paths (stream route,
+   * regenerate, clear, delete) enforce ownership independently.
+   */
+  readOnly: boolean;
 }
 
 function parseJsonObject(value: unknown): Record<string, unknown> | null {
@@ -198,7 +205,6 @@ export const conversationRouter = router({
     .input(z.object({ id: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       const user = ctx.user as AuthedUser;
-      await ensureConversationOwnership(prisma, user, input.id);
 
       const conversation = await prisma.conversation.findUnique({
         where: { id: input.id },
@@ -221,6 +227,17 @@ export const conversationRouter = router({
         throw new NotFoundError("Conversation", input.id);
       }
 
+      // Ownership: a user may only open their own conversations. Admins may
+      // open ANY conversation — the admin dashboard drills into all users'
+      // recent queries — but the returned `readOnly` flag tells the UI to
+      // disable writes. The write paths (SSE stream route, regenerate, clear,
+      // delete, rename, pin) enforce ownership independently, so read-only is
+      // a UX guard, not the security boundary.
+      const isOwner = conversation.userId === user.id;
+      if (!isOwner && user.role !== "ADMIN") {
+        throw new NotFoundError("Conversation", input.id);
+      }
+
       const result: ConversationWithMessages = {
         id: conversation.id,
         title: conversation.title,
@@ -228,6 +245,7 @@ export const conversationRouter = router({
         createdAt: conversation.createdAt,
         updatedAt: conversation.updatedAt,
         messages: conversation.messages.map((message) => toChatMessage(message)),
+        readOnly: !isOwner,
       };
       return result;
     }),

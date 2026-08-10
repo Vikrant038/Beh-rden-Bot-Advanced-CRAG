@@ -210,30 +210,28 @@ describe("conversation router", () => {
     );
   });
 
-  it("getById: returns conversation with ordered messages", async () => {
-    prismaMock.conversation.findUnique
-      .mockResolvedValueOnce({ id: "conv-1", userId: "user-1" } as never)
-      .mockResolvedValueOnce({
-        ...ownerConversation,
-        messages: [
-          {
-            id: "m1",
-            role: "USER",
-            content: "hi",
-            sources: null,
-            metadata: null,
-            createdAt: new Date("2026-01-01"),
-          },
-          {
-            id: "m2",
-            role: "ASSISTANT",
-            content: "hello",
-            sources: [{ name: "doc", url: "u", score: 1 }],
-            metadata: { latencyMs: 5 },
-            createdAt: new Date("2026-01-01"),
-          },
-        ],
-      } as never);
+  it("getById: returns conversation with ordered messages (readOnly: false for owner)", async () => {
+    prismaMock.conversation.findUnique.mockResolvedValue({
+      ...ownerConversation,
+      messages: [
+        {
+          id: "m1",
+          role: "USER",
+          content: "hi",
+          sources: null,
+          metadata: null,
+          createdAt: new Date("2026-01-01"),
+        },
+        {
+          id: "m2",
+          role: "ASSISTANT",
+          content: "hello",
+          sources: [{ name: "doc", url: "u", score: 1 }],
+          metadata: { latencyMs: 5 },
+          createdAt: new Date("2026-01-01"),
+        },
+      ],
+    } as never);
 
     const caller = makeCaller();
     const result = await caller.conversation.getById({ id: "conv-1" });
@@ -241,15 +239,39 @@ describe("conversation router", () => {
     expect(result.messages).toHaveLength(2);
     expect(result.messages[1].sources?.[0].name).toBe("doc");
     expect(result.messages[1].metadata?.latencyMs).toBe(5);
+    expect(result.readOnly).toBe(false);
   });
 
-  it("getById: rejects access to another user's conversation", async () => {
+  it("getById: rejects access to another user's conversation for non-admins", async () => {
     prismaMock.conversation.findUnique.mockResolvedValue({
       id: "conv-x",
       userId: "other",
     } as never);
-    const caller = makeCaller();
+    const caller = makeCaller("USER");
     await expect(caller.conversation.getById({ id: "conv-x" })).rejects.toThrow();
+  });
+
+  it("getById: lets an admin read another user's conversation as readOnly", async () => {
+    prismaMock.conversation.findUnique.mockResolvedValue({
+      ...ownerConversation,
+      id: "conv-x",
+      userId: "other",
+      messages: [
+        {
+          id: "m1",
+          role: "USER",
+          content: "what is aps",
+          sources: null,
+          metadata: null,
+          createdAt: new Date("2026-01-01"),
+        },
+      ],
+    } as never);
+    const caller = makeCaller("ADMIN");
+    const result = await caller.conversation.getById({ id: "conv-x" });
+    expect(result.id).toBe("conv-x");
+    expect(result.readOnly).toBe(true);
+    expect(result.messages).toHaveLength(1);
   });
 
   it("updateTitle: renames a conversation the user owns", async () => {

@@ -22,9 +22,14 @@ name: Web App CRAG Evaluation
 #                     and scripts/seed-corpus.sh for how to produce it). The
 #                     authoritative quality numbers come from this mode.
 #
-# Required secrets (small mode): GROQ_API_KEY, HF_TOKEN.
-# Optional overrides: GROQ_MODEL, HF_INFERENCE_URL, EMBEDDING_MODEL,
-#                     RERANKER_MODEL, EVAL_DATABASE_URL (full mode).
+# Required secrets (small mode): GROQ_API_KEY, HF_TOKEN, HF_INFERENCE_URL.
+# HF_INFERENCE_URL is REQUIRED — it must point at a reachable BGE-M3
+# feature-extraction endpoint (the deployed Cloudflare embeddings worker). The
+# Hugging Face Inference API default is unreachable from many networks (DNS/
+# geo blocks), which fails every ingest as "Hugging Face API is unreachable"
+# — the workflow now fails fast with this message instead of per-PDF errors.
+# Optional overrides: GROQ_MODEL, EMBEDDING_MODEL, RERANKER_MODEL,
+#                     EVAL_DATABASE_URL (full mode).
 
 on:
   workflow_dispatch:
@@ -103,12 +108,24 @@ jobs:
       - name: Generate Prisma client
         run: pnpm prisma generate
 
+      - name: Require the embedding endpoint
+        # The ingest + eval both embed with BGE-M3. HF_INFERENCE_URL must point
+        # at a reachable endpoint (the Cloudflare worker); the HF Inference API
+        # default is unreachable from many networks and produces cryptic
+        # per-PDF "Hugging Face API is unreachable" failures. Fail fast here
+        # instead.
+        run: |
+          if [[ -z "${{ secrets.HF_INFERENCE_URL }}" ]]; then
+            echo "::error::HF_INFERENCE_URL secret is required — set it to your Cloudflare embeddings worker URL (https://<worker>.workers.dev). See web-app/docs/EVALUATION.md."
+            exit 1
+          fi
+
       - name: Seed CI corpus (migrate + ingest small subset)
         if: ${{ inputs.corpus != 'full' }}
         # Embedding-only step: it needs the model + HF endpoint + token.
         env:
           EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL || 'BAAI/bge-m3' }}
-          HF_INFERENCE_URL: ${{ secrets.HF_INFERENCE_URL || 'https://api-inference.huggingface.co' }}
+          HF_INFERENCE_URL: ${{ secrets.HF_INFERENCE_URL }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           set -euo pipefail
@@ -153,7 +170,7 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'llama-3.1-8b-instant' }}
           EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL || 'BAAI/bge-m3' }}
-          HF_INFERENCE_URL: ${{ secrets.HF_INFERENCE_URL || 'https://api-inference.huggingface.co' }}
+          HF_INFERENCE_URL: ${{ secrets.HF_INFERENCE_URL }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           RERANKER_MODEL: ${{ secrets.RERANKER_MODEL || 'BAAI/bge-reranker-v2-m3' }}
         run: pnpm exec tsx scripts/eval-crag-webapp.ts

@@ -5,8 +5,9 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 export interface ChatActions {
   /** Copy the conversation transcript to the clipboard. */
   onCopy: () => void;
-  /** Open the clear/delete confirmation. */
-  onClear: () => void;
+  /** Open the clear/delete confirmation. Absent for read-only views (an admin
+   * inspecting another user's conversation cannot modify it). */
+  onClear?: () => void;
 }
 
 interface ChatActionsContextValue {

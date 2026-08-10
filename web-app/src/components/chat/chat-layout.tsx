@@ -73,18 +73,20 @@ function MobileActionsMenu() {
             <Copy className="h-4 w-4 text-muted" />
             Copy conversation
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              actions.onClear();
-              setOpen(false);
-            }}
-            className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive transition hover:bg-destructive/10"
-          >
-            <Trash2 className="h-4 w-4 text-muted" />
-            Delete conversation
-          </button>
+          {actions.onClear && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                actions.onClear?.();
+                setOpen(false);
+              }}
+              className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive transition hover:bg-destructive/10"
+            >
+              <Trash2 className="h-4 w-4 text-muted" />
+              Delete conversation
+            </button>
+          )}
         </div>
       )}
     </div>

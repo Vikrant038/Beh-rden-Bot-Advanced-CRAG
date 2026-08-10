@@ -89,7 +89,7 @@ Two corpus modes:
 | `HF_TOKEN` | ✅ | BGE-M3 embeddings + cross-encoder reranker |
 | `GROQ_MODEL` | optional | default `llama-3.1-8b-instant` |
 | `EMBEDDING_MODEL` | optional | default `BAAI/bge-m3` (must match the corpus space) |
-| `HF_INFERENCE_URL` | optional | default `https://api-inference.huggingface.co`; set to your deployed Cloudflare embeddings worker to avoid cold starts |
+| `HF_INFERENCE_URL` | ✅ | the BGE-M3 feature-extraction endpoint (your deployed Cloudflare embeddings worker, e.g. `https://<worker>.workers.dev`). Required — the HF Inference API default is unreachable from many networks (DNS/geo blocks) and fails every ingest with "Hugging Face API is unreachable". The workflow fails fast if this secret is missing. |
 | `RERANKER_MODEL` | optional | default `BAAI/bge-reranker-v2-m3` |
 | `EVAL_DATABASE_URL` | full mode only | seeded corpus Postgres URL |
 
@@ -107,6 +107,12 @@ honest workflow:
 
 ## Troubleshooting
 
+- **"Hugging Face API is unreachable (Network/DNS error)" on every ingest** —
+  `HF_INFERENCE_URL` is missing or points at the HF Inference API default,
+  which many networks cannot reach. Set the `HF_INFERENCE_URL` secret to your
+  Cloudflare embeddings worker URL (`https://<worker>.workers.dev`) — the
+  same value `web-app/.env` uses locally. The workflow now fails fast with
+  this guidance instead of emitting one cryptic error per PDF.
 - **HF cold start > 20 s** — the embed client aborts sockets after 20 s; the
   workflow warms the model first and retries ingest. If CI ingest keeps
   timing out, point `HF_INFERENCE_URL` at a warm endpoint (Cloudflare worker).

@@ -140,8 +140,15 @@ export class HfEmbeddingClient implements EmbeddingClient {
     } catch (error) {
       logger.warn({ error: String(error) }, "[EMBED] HF API fetch failed");
       generation.endError(error);
+      // The HF Inference API default is unreachable from many networks (DNS/
+      // geo blocks). When it is in use, point the operator at HF_INFERENCE_URL
+      // (the Cloudflare embeddings worker) instead of leaving a dead-end error.
+      const defaultEndpoint = this.inferenceUrl.includes("api-inference.huggingface.co");
+      const hint = defaultEndpoint
+        ? " Set HF_INFERENCE_URL to a reachable BGE-M3 endpoint (e.g. your Cloudflare embeddings worker URL) — see docs/EVALUATION.md."
+        : "";
       throw new LLMProviderError(
-        `Hugging Face API is unreachable (Network/DNS error). Please check your connection to ${this.inferenceUrl}`,
+        `Hugging Face API is unreachable (Network/DNS error). Please check your connection to ${this.inferenceUrl}.${hint}`,
       );
     }
 
