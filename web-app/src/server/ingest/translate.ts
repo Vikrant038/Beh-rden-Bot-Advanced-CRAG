@@ -158,6 +158,16 @@ export class GroqRateLimiter {
     return 1;
   }
 
+  /** Model chain in fallback order (a single model for this limiter). */
+  get modelsList(): string[] {
+    return [this.model];
+  }
+
+  /** Total daily token budget across the chain (this limiter's tpd). */
+  get totalTpd(): number {
+    return this.tpd;
+  }
+
   /**
    * Current token-bucket capacity (refilled to TPM). Lets the pool pick the
    * least-loaded key without mutating the bucket.
@@ -165,6 +175,42 @@ export class GroqRateLimiter {
   get availableTokens(): number {
     this.refillBucket();
     return this.tokens;
+  }
+
+  /**
+   * Synchronously reserves `tokens` when the TPM bucket has capacity and the
+   * RPM pacing interval has elapsed. Returns false (reserving nothing) when
+   * the bucket is momentarily drained or it is too soon since the last
+   * request — the caller can then wait for a refill or move to another
+   * (key, model) combination. Used by GroqRateLimiterPool to pick a ready
+   * combo without blocking.
+   */
+  tryReserve(tokens: number): boolean {
+    const now = Date.now();
+    const today = new Date().getDate();
+    if (today !== this.rpdResetDay) {
+      this.requestsToday = 0;
+      this.rpdResetDay = today;
+    }
+    if (today !== this.tpdResetDay) {
+      this.tokensToday = 0;
+      this.tpdResetDay = today;
+    }
+    this.refillBucket();
+    const minInterval = (60 / this.rpm) * 1000;
+    if (this.lastRequestTime > 0 && now - this.lastRequestTime < minInterval) {
+      return false;
+    }
+    if (this.tokens < tokens) {
+      return false;
+    }
+    this.tokens -= tokens;
+    this.lastRequestTime = now;
+    this.requestsToday++;
+    if (this.tpd > 0) {
+      this.tokensToday += tokens;
+    }
+    return true;
   }
 
   /**
@@ -258,78 +304,220 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// ─── Model config (limits per Groq free-tier model) ─────────────────────────
+
+/** Per-model free-tier limits (RPM / RPD / TPM / TPD) as shown in the Groq console. */
+export interface GroqModelConfig {
+  model: string;
+  rpm: number;
+  rpd: number;
+  tpm: number;
+  tpd: number;
+}
+
+const MODEL_LIMITS: Record<string, Omit<GroqModelConfig, "model">> = {
+  "llama-3.1-8b-instant": { rpm: 30, rpd: 14400, tpm: 6000, tpd: 500000 },
+  "llama-3.3-70b-versatile": { rpm: 30, rpd: 1000, tpm: 12000, tpd: 100000 },
+  "meta-llama/llama-4-scout-17b-16e-instruct": { rpm: 30, rpd: 1000, tpm: 30000, tpd: 500000 },
+  "qwen/qwen3-32b": { rpm: 60, rpd: 1000, tpm: 6000, tpd: 500000 },
+  "openai/gpt-oss-20b": { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 },
+  "openai/gpt-oss-120b": { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 },
+  "moonshotai/kimi-k2-instruct": { rpm: 60, rpd: 1000, tpm: 10000, tpd: 300000 },
+};
+
 /**
- * Multi-key rate limiter: spreads translation requests across several Groq
- * API keys so each key's free-tier bucket is consumed independently.
+ * Default translation chain — quality-first. When a model's daily TPD budget
+ * is spent, the pool falls back to the next model, so the combined daily
+ * budget (≈2.3M tokens) can finish the whole corpus in about a day.
+ */
+const DEFAULT_MODEL_CHAIN = [
+  "llama-3.3-70b-versatile",
+  "meta-llama/llama-4-scout-17b-16e-instruct",
+  "qwen/qwen3-32b",
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
+  "moonshotai/kimi-k2-instruct",
+  "llama-3.1-8b-instant",
+];
+
+/** Resolves model ids to full configs; unknown ids get conservative defaults. */
+export function resolveModelConfigs(modelIds: string[]): GroqModelConfig[] {
+  const ids = modelIds.map((m) => m.trim()).filter(Boolean);
+  if (ids.length === 0) {
+    return resolveModelConfigs(DEFAULT_MODEL_CHAIN);
+  }
+  return ids.map((id) => {
+    const limits = MODEL_LIMITS[id];
+    return limits
+      ? { model: id, ...limits }
+      : { model: id, rpm: 30, rpd: 1000, tpm: 6000, tpd: 500000 };
+  });
+}
+
+function msUntilMidnight(): number {
+  const now = new Date();
+  const reset = new Date(now);
+  reset.setDate(now.getDate() + 1);
+  reset.setHours(0, 0, 0, 0);
+  return Math.max(1_000, reset.getTime() - now.getTime());
+}
+
+/**
+ * Multi-key × multi-model rate limiter.
  *
- * ⚠️ Only helps when the keys belong to DIFFERENT Groq organizations. Groq's
- * free-tier limits (30 RPM / 6,000 TPM / 14,400 RPD) are per organization, so
- * multiple keys on one account share a single bucket and gain nothing.
+ * Maintains a grid of limiters — one per (key, model) pair — each with its
+ * own TPM bucket and RPM pacing. The **daily token budget (TPD) is shared per
+ * model across all keys**, which matches Groq's reality: free-tier limits are
+ * per organization, so several keys on one account share the model's daily
+ * bucket. When a model's TPD is exhausted on every key, `waitForTokens` falls
+ * back to the next model in the chain; when every model is exhausted it waits
+ * for the midnight reset and resumes.
  */
 export class GroqRateLimiterPool {
-  readonly limiters: GroqRateLimiter[];
+  readonly keys: string[];
+  readonly models: GroqModelConfig[];
+  /** Grid of limiters: `grid[keyIndex][modelIndex]` (TPD lives in the pool). */
+  private readonly grid: GroqRateLimiter[][];
+  /** Per-model daily token usage shared across all keys. */
+  private readonly tokensToday: number[];
+  private readonly tpdResetDays: number[];
 
-  constructor(keys: string[], options: { model?: string; tpd?: number } = {}) {
-    const resolved = keys.map((k) => k.trim()).filter((k) => k.length > 0);
-    if (resolved.length === 0) {
+  constructor(keys: string[], models: GroqModelConfig[] = []) {
+    const resolvedKeys = keys.map((k) => k.trim()).filter((k) => k.length > 0);
+    if (resolvedKeys.length === 0) {
       throw new Error("GroqRateLimiterPool requires at least one API key");
     }
-    this.limiters = resolved.map((apiKey) => new GroqRateLimiter({ apiKey, ...options }));
+    this.keys = resolvedKeys;
+    this.models = models.length > 0 ? models : resolveModelConfigs(DEFAULT_MODEL_CHAIN);
+    // tpd=0 on the grid limiters: the pool owns the daily budget (shared per
+    // model across keys), so individual limiters never midnight-block.
+    this.grid = this.keys.map((apiKey) =>
+      this.models.map(
+        (m) =>
+          new GroqRateLimiter({
+            apiKey,
+            model: m.model,
+            rpm: m.rpm,
+            tpm: m.tpm,
+            rpd: m.rpd,
+            tpd: 0,
+          }),
+      ),
+    );
+    this.tokensToday = this.models.map(() => 0);
+    this.tpdResetDays = this.models.map(() => new Date().getDate());
   }
 
   /** Number of API keys in the pool. */
   get size(): number {
-    return this.limiters.length;
+    return this.keys.length;
   }
 
-  /** Model used by every key (they all translate with the same model). */
+  /** First (preferred) model id. */
   get model(): string {
-    return this.limiters[0]?.model ?? "";
+    return this.models[0]?.model ?? "";
   }
 
-  /** Per-key requests/minute (all keys share the same config). */
+  /** All model ids in fallback order. */
+  get modelsList(): string[] {
+    return this.models.map((m) => m.model);
+  }
+
+  /** Total daily token budget across the whole chain (per org). */
+  get totalTpd(): number {
+    return this.models.reduce((sum, m) => sum + m.tpd, 0);
+  }
+
+  /** Preferred model's requests/minute. */
   get rpm(): number {
-    return this.limiters[0]?.rpm ?? 0;
+    return this.models[0]?.rpm ?? 0;
   }
 
-  /** Per-key tokens/minute (all keys share the same config). */
+  /** Preferred model's tokens/minute. */
   get tpm(): number {
-    return this.limiters[0]?.tpm ?? 0;
+    return this.models[0]?.tpm ?? 0;
   }
 
-  /** Per-key requests/day (all keys share the same config). */
+  /** Preferred model's requests/day. */
   get rpd(): number {
-    return this.limiters[0]?.rpd ?? 0;
+    return this.models[0]?.rpd ?? 0;
   }
 
-  /** Per-key tokens/day (0 = unlimited; all keys share the same config). */
+  /** Preferred model's tokens/day. */
   get tpd(): number {
-    return this.limiters[0]?.tpd ?? 0;
+    return this.models[0]?.tpd ?? 0;
+  }
+
+  /** One limiter per key for the given model index (used by tests). */
+  keyLimiters(modelIndex: number): GroqRateLimiter[] {
+    return this.grid.map((row) => row[modelIndex]!);
   }
 
   /**
-   * Reserves `tokens` on the least-loaded key (most available bucket tokens)
-   * and returns that key's limiter. Blocks until one key has capacity, so
-   * parallel workers never 429 the account.
+   * Reserves `tokens` on the best available (key, model): the preferred model
+   * that still has daily budget, on its least-loaded key. When a model's TPD
+   * is spent on all keys it falls back to the next model; when every model is
+   * spent it waits for the midnight reset. Returns the limiter the caller
+   * should use for its API call (its `.client` and `.model` are set).
    */
   async waitForTokens(tokens: number): Promise<GroqRateLimiter> {
-    const chosen = this.pickBest();
-    await chosen.waitForTokens(tokens);
-    return chosen;
+    for (let mi = 0; mi < this.models.length; mi++) {
+      if (!this.hasModelBudget(mi, tokens)) {
+        logger.warn(
+          { model: this.models[mi]!.model, used: this.tokensToday[mi] },
+          "[TRANSLATE] model daily budget exhausted on all keys — falling back",
+        );
+        continue;
+      }
+      // Least-loaded key first for this model.
+      const order = this.keyOrder(mi);
+      for (const ki of order) {
+        const limiter = this.grid[ki]![mi]!;
+        if (limiter.tryReserve(tokens)) {
+          this.consumeModelBudget(mi, tokens);
+          return limiter;
+        }
+      }
+      // Every key's TPM bucket is momentarily drained but the model still has
+      // daily budget — wait for the fastest refill instead of switching models.
+      const limiter = this.grid[order[0]!]![mi]!;
+      await limiter.waitForTokens(tokens);
+      this.consumeModelBudget(mi, tokens);
+      return limiter;
+    }
+
+    logger.warn(
+      { models: this.modelsList, waitMs: msUntilMidnight() },
+      "[TRANSLATE] all model daily budgets exhausted — waiting for midnight reset",
+    );
+    await sleep(msUntilMidnight());
+    return this.waitForTokens(tokens);
   }
 
-  /** Picks the key with the most available tokens (ties → first). */
-  private pickBest(): GroqRateLimiter {
-    let best = this.limiters[0]!;
-    let bestTokens = -1;
-    for (const limiter of this.limiters) {
-      const available = limiter.availableTokens;
-      if (available > bestTokens) {
-        best = limiter;
-        bestTokens = available;
-      }
+  /** True when the model's shared daily budget still fits `tokens`. */
+  private hasModelBudget(modelIndex: number, tokens: number): boolean {
+    const today = new Date().getDate();
+    if (today !== this.tpdResetDays[modelIndex]) {
+      this.tokensToday[modelIndex] = 0;
+      this.tpdResetDays[modelIndex] = today;
     }
-    return best;
+    const tpd = this.models[modelIndex]!.tpd;
+    return tpd === 0 || this.tokensToday[modelIndex]! + tokens <= tpd;
+  }
+
+  private consumeModelBudget(modelIndex: number, tokens: number): void {
+    this.tokensToday[modelIndex] = (this.tokensToday[modelIndex] ?? 0) + tokens;
+  }
+
+  /** Key indices for a model, least-loaded (most bucket tokens) first. */
+  private keyOrder(modelIndex: number): number[] {
+    return this.keys
+      .map((_, ki) => ki)
+      .sort((a, b) => {
+        const availA = this.grid[a]![modelIndex]!.availableTokens;
+        const availB = this.grid[b]![modelIndex]!.availableTokens;
+        return availB - availA;
+      });
   }
 }
 
@@ -337,22 +525,51 @@ export class GroqRateLimiterPool {
 export type TranslationRateLimiter = GroqRateLimiter | GroqRateLimiterPool;
 
 /**
- * Builds the translation rate limiter: a multi-key pool when several keys are
- * configured, otherwise a single limiter. Keys come from `GROQ_API_KEYS`
- * (comma-separated, from DIFFERENT Groq accounts — see GroqRateLimiterPool)
- * with `GROQ_API_KEY` as the fallback. The translation model comes from
- * `GROQ_TRANSLATE_MODEL` (default llama-3.3-70b-versatile) and its daily
- * token cap from `GROQ_TPD` (0 = unknown/unlimited).
+ * Builds the translation rate limiter.
+ *
+ * Keys: `GROQ_API_KEYS` (comma-separated, 1–N; 3 keys → a 3-key pool, 2 → 2,
+ * 1 → a single limiter) with `GROQ_API_KEY` as the fallback.
+ *
+ * Models: `GROQ_TRANSLATE_MODELS` (comma-separated chain, quality-first by
+ * default) overrides; `GROQ_TRANSLATE_MODEL` selects a single model;
+ * `GROQ_TPD` overrides the daily token cap of every model in the chain.
  */
 export function createTranslationRateLimiter(
-  options: { keys?: string[]; model?: string; tpd?: number } = {},
+  options: {
+    keys?: string[];
+    models?: string[];
+    model?: string;
+    tpd?: number;
+  } = {},
 ): TranslationRateLimiter {
   const explicit = options.keys && options.keys.length > 0;
   const raw = explicit ? (options.keys as string[]) : (process.env.GROQ_API_KEYS ?? "").split(",");
   const keys = raw.map((k) => k.trim()).filter((k) => k.length > 0);
-  const model = options.model ?? (process.env.GROQ_TRANSLATE_MODEL?.trim() || undefined);
-  const tpd = options.tpd ?? (process.env.GROQ_TPD ? Number(process.env.GROQ_TPD) : undefined);
-  const limiterOptions = { model, tpd };
+
+  const envChain = (process.env.GROQ_TRANSLATE_MODELS ?? "")
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
+  const envSingle = process.env.GROQ_TRANSLATE_MODEL?.trim();
+  // Explicit options win over env; GROQ_TRANSLATE_MODELS (chain) wins over
+  // GROQ_TRANSLATE_MODEL (single); the default quality-first chain is last.
+  const chainIds =
+    options.models && options.models.length > 0
+      ? options.models
+      : options.model
+        ? [options.model]
+        : envChain.length > 0
+          ? envChain
+          : envSingle
+            ? [envSingle]
+            : [];
+  const tpdOverride =
+    options.tpd ?? (process.env.GROQ_TPD ? Number(process.env.GROQ_TPD) : undefined);
+  let models = resolveModelConfigs(chainIds);
+  if (tpdOverride !== undefined) {
+    models = models.map((m) => ({ ...m, tpd: tpdOverride }));
+  }
+
   if (keys.length === 0) {
     const fallback = process.env.GROQ_API_KEY?.trim();
     if (!fallback) {
@@ -360,12 +577,12 @@ export function createTranslationRateLimiter(
         "No Groq API key configured — set GROQ_API_KEYS (comma-separated) or GROQ_API_KEY",
       );
     }
-    return new GroqRateLimiter({ apiKey: fallback, ...limiterOptions });
+    return new GroqRateLimiter({ apiKey: fallback, ...models[0]! });
   }
   if (keys.length === 1) {
-    return new GroqRateLimiter({ apiKey: keys[0], ...limiterOptions });
+    return new GroqRateLimiter({ apiKey: keys[0]!, ...models[0]! });
   }
-  return new GroqRateLimiterPool(keys, limiterOptions);
+  return new GroqRateLimiterPool(keys, models);
 }
 
 // ─── Translation checkpoint cache ───────────────────────────────────────────

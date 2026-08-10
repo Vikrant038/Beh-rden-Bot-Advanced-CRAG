@@ -15,16 +15,20 @@
  *   pnpm tsx scripts/translate-corpus.ts
  *
  * ⚠️  Free-tier daily token caps dominate runtime. The ~260K tokens of German
- * text need ~800K–1.2M tokens in+out total:
- *   - llama-3.3-70b-versatile: 100K TPD → ~9–12 days (default)
- *   - meta-llama/llama-4-scout-17b-16e-instruct: 500K TPD → ~2 days
- *   Set GROQ_TRANSLATE_MODEL + GROQ_TPD to switch. The limiter now waits for
- *   the midnight reset instead of 429-looping, so a run can span days.
+ * text need ~800K–1.2M tokens in+out total. The rate limiter now runs a
+ * quality-first MODEL CHAIN (llama-3.3-70b → llama-4-scout → qwen3-32b →
+ * gpt-oss-120b → gpt-oss-20b → kimi-k2 → llama-3.1-8b): when a model's daily
+ * TPD budget is spent on all keys it falls back to the next model, and when
+ * every model is spent it waits for the midnight reset (checkpoint-cached, so
+ * a run resumes across days). The chain's combined budget is ~2.3M tokens/day,
+ * so the whole corpus typically finishes within a day or two.
+ *   Override: GROQ_TRANSLATE_MODELS="a,b,c" (chain order), or
+ *   GROQ_TRANSLATE_MODEL="x" (single) — GROQ_TPD overrides the daily cap.
  *
- * Set GROQ_API_KEYS to a comma-separated list of keys from DIFFERENT Groq
- * accounts to translate in parallel (one worker per key, each key's free-tier
- * bucket used independently — free-tier limits are per organization, so
- * same-account keys share one bucket and gain nothing).
+ * Set GROQ_API_KEYS to a comma-separated list of keys (1–N; 3 keys → a
+ * 3-key pool, 2 → 2, 1 → a single limiter). Keys from DIFFERENT Groq
+ * accounts each bring their own quota; same-account keys share the org
+ * bucket, so the pool degrades gracefully to one effective quota.
  *
  * Prerequisites:
  *   - GROQ_API_KEY set (translation)
@@ -131,14 +135,11 @@ async function main(): Promise<void> {
 
   logger.info("[MIGRATE] Re-ingesting all documents through the English-first pipeline…");
   logger.info(
-    "[MIGRATE] Rate-limiter: model=%s, keys=%d, concurrency=%d, rpm=%d/key, tpm=%d/key, rpd=%d/key, tpd=%d/key/day",
-    limiter.model,
+    "[MIGRATE] Rate-limiter: keys=%d, concurrency=%d, models=%s, totalTpd=%d/day",
     limiter.size,
     concurrency,
-    limiter.rpm,
-    limiter.tpm,
-    limiter.rpd,
-    limiter.tpd,
+    limiter.modelsList.join(" → "),
+    limiter.totalTpd,
   );
 
   const results = await syncAllDocuments(opts, { concurrency });

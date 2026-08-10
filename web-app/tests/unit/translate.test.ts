@@ -60,14 +60,34 @@ describe("splitIntoChunks", () => {
   });
 });
 
+const SEVENTY_B = {
+  model: "llama-3.3-70b-versatile",
+  rpm: 30,
+  rpd: 1000,
+  tpm: 12000,
+  tpd: 100000,
+};
+
+const SCOUT = {
+  model: "meta-llama/llama-4-scout-17b-16e-instruct",
+  rpm: 30,
+  rpd: 1000,
+  tpm: 30000,
+  tpd: 500000,
+};
+
 describe("GroqRateLimiterPool", () => {
-  it("exposes the key count as size and the first key's limits", () => {
+  it("exposes the key count as size and the preferred model's limits", () => {
     const pool = new GroqRateLimiterPool(["key-1", "key-2"]);
     expect(pool.size).toBe(2);
-    expect(pool.limiters).toHaveLength(2);
+    expect(pool.keyLimiters(0)).toHaveLength(2);
+    expect(pool.model).toBe("llama-3.3-70b-versatile");
+    expect(pool.modelsList).toHaveLength(7);
     expect(pool.rpm).toBe(30);
-    expect(pool.tpm).toBe(6000);
-    expect(pool.rpd).toBe(14400);
+    expect(pool.tpm).toBe(12000);
+    expect(pool.rpd).toBe(1000);
+    expect(pool.tpd).toBe(100000);
+    expect(pool.totalTpd).toBeGreaterThan(1_000_000);
   });
 
   it("rejects an empty key list", () => {
@@ -77,28 +97,58 @@ describe("GroqRateLimiterPool", () => {
   });
 
   it("picks the key with the most available tokens", async () => {
-    const pool = new GroqRateLimiterPool(["key-1", "key-2"]);
+    const pool = new GroqRateLimiterPool(["key-1", "key-2"], [SEVENTY_B]);
+    const [k1, k2] = pool.keyLimiters(0);
     // Drain key-1's bucket so key-2 is clearly the least-loaded.
-    await pool.limiters[0]!.waitForTokens(pool.limiters[0]!.tpm);
+    await k1.waitForTokens(k1.tpm);
     const chosen = await pool.waitForTokens(10);
-    expect(chosen).toBe(pool.limiters[1]);
-    expect(pool.limiters[0]!.availableTokens).toBeLessThan(pool.limiters[1]!.availableTokens);
+    expect(chosen).toBe(k2);
+    expect(k1.availableTokens).toBeLessThan(k2.availableTokens);
   });
 
   it("returns a limiter when both keys have capacity", async () => {
-    const pool = new GroqRateLimiterPool(["key-1", "key-2"]);
+    const pool = new GroqRateLimiterPool(["key-1", "key-2"], [SEVENTY_B]);
     const chosen = await pool.waitForTokens(10);
-    expect(pool.limiters).toContain(chosen);
+    expect(pool.keyLimiters(0)).toContain(chosen);
+  });
+
+  it("falls back to the next model when the first model's daily budget is exhausted", async () => {
+    const pool = new GroqRateLimiterPool(["key-1"], [{ ...SEVENTY_B, tpd: 50 }, SCOUT]);
+    const first = await pool.waitForTokens(40);
+    expect(first.model).toBe("llama-3.3-70b-versatile");
+    // 40 + 40 = 80 > 50 → the 70b daily budget is spent → fall back to scout.
+    const second = await pool.waitForTokens(40);
+    expect(second.model).toBe("meta-llama/llama-4-scout-17b-16e-instruct");
+  });
+
+  it("shares a model's daily budget across keys", async () => {
+    const pool = new GroqRateLimiterPool(["key-1", "key-2"], [{ ...SEVENTY_B, tpd: 90 }]);
+    const [k1, k2] = pool.keyLimiters(0);
+    const first = await pool.waitForTokens(40);
+    const second = await pool.waitForTokens(40);
+    expect(first.model).toBe("llama-3.3-70b-versatile");
+    expect(second.model).toBe("llama-3.3-70b-versatile");
+    // Both requests fit the shared 90-token budget (40 + 40 ≤ 90) and the
+    // second goes to the other key (least-loaded).
+    expect([k1, k2]).toContain(first);
+    expect([k1, k2]).toContain(second);
+    expect(first).not.toBe(second);
   });
 });
 
 describe("createTranslationRateLimiter", () => {
   const originalKeys = process.env.GROQ_API_KEYS;
   const originalKey = process.env.GROQ_API_KEY;
+  const originalModels = process.env.GROQ_TRANSLATE_MODELS;
+  const originalModel = process.env.GROQ_TRANSLATE_MODEL;
+  const originalTpd = process.env.GROQ_TPD;
 
   beforeEach(() => {
     delete process.env.GROQ_API_KEYS;
     delete process.env.GROQ_API_KEY;
+    delete process.env.GROQ_TRANSLATE_MODELS;
+    delete process.env.GROQ_TRANSLATE_MODEL;
+    delete process.env.GROQ_TPD;
   });
 
   afterEach(() => {
@@ -106,6 +156,12 @@ describe("createTranslationRateLimiter", () => {
     else process.env.GROQ_API_KEYS = originalKeys;
     if (originalKey === undefined) delete process.env.GROQ_API_KEY;
     else process.env.GROQ_API_KEY = originalKey;
+    if (originalModels === undefined) delete process.env.GROQ_TRANSLATE_MODELS;
+    else process.env.GROQ_TRANSLATE_MODELS = originalModels;
+    if (originalModel === undefined) delete process.env.GROQ_TRANSLATE_MODEL;
+    else process.env.GROQ_TRANSLATE_MODEL = originalModel;
+    if (originalTpd === undefined) delete process.env.GROQ_TPD;
+    else process.env.GROQ_TPD = originalTpd;
   });
 
   it("builds a pool from GROQ_API_KEYS", () => {
@@ -136,7 +192,21 @@ describe("createTranslationRateLimiter", () => {
     const limiter = createTranslationRateLimiter();
     expect(limiter).toBeInstanceOf(GroqRateLimiter);
     expect(limiter.model).toBe("meta-llama/llama-4-scout-17b-16e-instruct");
+    expect(limiter.tpm).toBe(30000);
     expect(limiter.tpd).toBe(500000);
+  });
+
+  it("reads GROQ_TRANSLATE_MODELS as the fallback chain", () => {
+    process.env.GROQ_API_KEYS = "k1,k2";
+    process.env.GROQ_TRANSLATE_MODELS =
+      "llama-3.1-8b-instant,meta-llama/llama-4-scout-17b-16e-instruct";
+    const limiter = createTranslationRateLimiter();
+    expect(limiter).toBeInstanceOf(GroqRateLimiterPool);
+    expect(limiter.modelsList).toEqual([
+      "llama-3.1-8b-instant",
+      "meta-llama/llama-4-scout-17b-16e-instruct",
+    ]);
+    expect(limiter.totalTpd).toBe(1_000_000);
   });
 
   it("applies model and tpd overrides to a pool", () => {
