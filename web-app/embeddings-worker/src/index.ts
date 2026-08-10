@@ -21,7 +21,8 @@ export interface Env {
       model: string,
       inputs: { text: string | string[] } | { query: string; contexts: Array<{ text: string }> },
     ): Promise<
-      { shape: number[]; data: number[][] } | { result: Array<{ index: number; score: number }> }
+      | { shape: number[]; data: number[][] }
+      | { result: { response: Array<{ id: number; score: number }> } }
     >;
   };
   EMBED_TOKEN: string;
@@ -151,9 +152,10 @@ export default {
  *   → [[{label, score}], ...]  (one row per pair, in input order)
  *
  * Workers AI's only reranker (@cf/baai/bge-reranker-base) speaks a different
- * shape: `{query, contexts}` in, `{result: [{index, score}]}` out (indices in
- * relevance order). This handler translates both ways and returns the HF shape
- * so the app's `extractScores` keeps working unchanged.
+ * shape: `{query, contexts: [{text}]}` in, `{result: {response: [{id, score}]}}`
+ * out (`id` = position in the input array, relevance order). This handler
+ * translates both ways and returns the HF shape so the app's `extractScores`
+ * keeps working unchanged.
  */
 async function handleRerank(request: Request, env: Env): Promise<Response> {
   // Token auth — same secret as the embedding route.
@@ -205,15 +207,16 @@ async function handleRerank(request: Request, env: Env): Promise<Response> {
     .slice(0, RERANK_MAX_DOCS)
     .map((doc) => doc.slice(0, RERANK_MAX_DOC_CHARS));
 
-  let result: { result: Array<{ index: number; score: number }> };
+  let raw: unknown;
   try {
     // The Workers AI reranker contract is { query, contexts: [{ text }] } —
     // plain strings are rejected (5006 for `documents`, 8001 for bare
     // strings); each context must be wrapped in an object with a `text` key.
-    result = (await env.AI.run(RERANKER_MODEL, {
+    // Verified against the REST API: this exact payload returns HTTP 200.
+    raw = await env.AI.run(RERANKER_MODEL, {
       query,
       contexts: capped.map((text) => ({ text })),
-    })) as { result: Array<{ index: number; score: number }> };
+    });
   } catch (error) {
     // Surface the real Workers AI error — a bare 1101 tells the operator
     // nothing (that was exactly the failure mode being debugged).
@@ -222,16 +225,24 @@ async function handleRerank(request: Request, env: Env): Promise<Response> {
       { status: 502 },
     );
   }
-  if (!("result" in result)) {
+  // The binding returns { result: { response: [{ id, score }] } } — scores
+  // live under `response`, keyed by `id` (position in the input array).
+  const ranked = (
+    raw as {
+      result?: { response?: Array<{ id?: number; score?: number }> };
+    }
+  )?.result?.response;
+  if (!Array.isArray(ranked)) {
     return Response.json({ error: "unexpected reranker response" }, { status: 502 });
   }
 
-  // Workers AI returns {index, score} sorted by relevance — map back to input
-  // order and wrap each in the HF single-label shape the client parses.
+  // Map back to input order and wrap each in the HF single-label shape the
+  // app's extractScores parses.
   const scores = new Array<number>(capped.length).fill(0);
-  for (const entry of result.result) {
-    if (entry.index >= 0 && entry.index < scores.length) {
-      scores[entry.index] = entry.score;
+  for (const entry of ranked) {
+    const idx = entry.id;
+    if (typeof idx === "number" && idx >= 0 && idx < scores.length) {
+      scores[idx] = entry.score ?? 0;
     }
   }
   return Response.json(scores.map((score) => [{ label: "RELEVANT", score }]));
