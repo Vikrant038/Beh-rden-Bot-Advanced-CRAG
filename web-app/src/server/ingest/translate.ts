@@ -381,6 +381,8 @@ export class GroqRateLimiterPool {
   /** Per-model daily token usage shared across all keys. */
   private readonly tokensToday: number[];
   private readonly tpdResetDays: number[];
+  /** Models blacklisted this run after a hard error (404/403/401). */
+  private readonly deadModels: Set<string>;
 
   constructor(keys: string[], models: GroqModelConfig[] = []) {
     const resolvedKeys = keys.map((k) => k.trim()).filter((k) => k.length > 0);
@@ -406,6 +408,7 @@ export class GroqRateLimiterPool {
     );
     this.tokensToday = this.models.map(() => 0);
     this.tpdResetDays = this.models.map(() => new Date().getDate());
+    this.deadModels = new Set<string>();
   }
 
   /** Number of API keys in the pool. */
@@ -453,6 +456,30 @@ export class GroqRateLimiterPool {
     return this.grid.map((row) => row[modelIndex]!);
   }
 
+  /** Model ids still usable this run (not blacklisted after a hard error). */
+  get liveModels(): string[] {
+    return this.models.map((m) => m.model).filter((id) => !this.deadModels.has(id));
+  }
+
+  /**
+   * Removes a model from the rotation after a hard, non-transient failure
+   * (404 model-not-found / 403 / 401). The caller retries the segment on the
+   * next available model instead of wasting every future segment on a dead
+   * model — this is what let a single unavailable model stall the whole chain
+   * (llama-4-scout 404s while 70b's daily budget is spent → everything falls
+   * back to original text and the corpus never migrates).
+   */
+  blacklistModel(modelId: string): void {
+    if (!this.models.some((m) => m.model === modelId)) {
+      return;
+    }
+    this.deadModels.add(modelId);
+    logger.warn(
+      { model: modelId, remaining: this.liveModels },
+      "[TRANSLATE] model blacklisted (unusable on this account) — skipping for this run",
+    );
+  }
+
   /**
    * Reserves `tokens` on the best available (key, model): the preferred model
    * that still has daily budget, on its least-loaded key. When a model's TPD
@@ -462,6 +489,9 @@ export class GroqRateLimiterPool {
    */
   async waitForTokens(tokens: number): Promise<GroqRateLimiter> {
     for (let mi = 0; mi < this.models.length; mi++) {
+      if (this.deadModels.has(this.models[mi]!.model)) {
+        continue; // blacklisted (404/403/401) — never usable this run
+      }
       if (!this.hasModelBudget(mi, tokens)) {
         logger.warn(
           { model: this.models[mi]!.model, used: this.tokensToday[mi] },
@@ -486,8 +516,13 @@ export class GroqRateLimiterPool {
       return limiter;
     }
 
+    if (this.liveModels.length === 0) {
+      throw new Error(
+        `All translation models are unavailable on this account: ${this.modelsList.join(", ")}`,
+      );
+    }
     logger.warn(
-      { models: this.modelsList, waitMs: msUntilMidnight() },
+      { models: this.liveModels, waitMs: msUntilMidnight() },
       "[TRANSLATE] all model daily budgets exhausted — waiting for midnight reset",
     );
     await sleep(msUntilMidnight());
@@ -653,6 +688,21 @@ const TRANSLATION_SYSTEM_PROMPT =
   "Do not add any commentary, explanation, or notes — output only the translation.";
 
 /**
+ * True when an API error means the model will never work on this account
+ * (404 model-not-found, 403/401 auth) — as opposed to transient 429/5xx/
+ * network errors that a retry on the same model could succeed on.
+ */
+function isHardModelError(error: unknown): boolean {
+  const err = error as { status?: number; message?: string };
+  if (typeof err?.status === "number" && [401, 403, 404].includes(err.status)) {
+    return true;
+  }
+  return /does not exist or you do not have access|model.*not (found|available)|no access to it/i.test(
+    String(err?.message ?? error),
+  );
+}
+
+/**
  * Result of a translation operation.
  */
 export interface TranslationResult {
@@ -716,31 +766,57 @@ export async function translateToEnglish(
     }
 
     const translation = (async (): Promise<string> => {
-      const limiter = await rateLimiter.waitForTokens(requestTokens);
-      const response = await limiter.client.chat.completions.create({
-        model: limiter.model,
-        messages: [
-          { role: "system", content: TRANSLATION_SYSTEM_PROMPT },
-          { role: "user", content: segment },
-        ],
-        max_tokens: outputTokens * 2,
-        temperature: 0.1,
-      });
+      // On a hard model error (404/401/403 — model not on the account) the
+      // pool blacklists that model and we retry the segment on the next one,
+      // so one dead model in the chain no longer stalls the whole migration.
+      // Transient errors (429/5xx/network) are surfaced so the doc falls back
+      // to original text and the checkpoint cache resumes it next run.
+      const maxAttempts =
+        rateLimiter instanceof GroqRateLimiterPool ? rateLimiter.modelsList.length : 1;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const limiter = await rateLimiter.waitForTokens(requestTokens);
+        try {
+          const response = await limiter.client.chat.completions.create({
+            model: limiter.model,
+            messages: [
+              { role: "system", content: TRANSLATION_SYSTEM_PROMPT },
+              { role: "user", content: segment },
+            ],
+            // One input-length cap is plenty for a translation (output ≈ source
+            // length). Keeps Groq's reservation accounting (input + max_tokens)
+            // under the pool's 2×-input estimate so the TPD guard doesn't leak.
+            max_tokens: outputTokens,
+            temperature: 0.1,
+          });
 
-      const translated = response.choices[0]?.message?.content?.trim() ?? "";
-      if (!translated) {
-        throw new Error("Empty translation response");
+          const translated = response.choices[0]?.message?.content?.trim() ?? "";
+          if (!translated) {
+            throw new Error("Empty translation response");
+          }
+
+          cacheStore(hash, translated, limiter.model, language);
+          totalTokens += requestTokens;
+          logger.info(
+            "[TRANSLATE] segment %d/%d done (%d tokens used)",
+            i + 1,
+            segments.length,
+            requestTokens,
+          );
+          return translated;
+        } catch (error) {
+          if (isHardModelError(error) && rateLimiter instanceof GroqRateLimiterPool) {
+            logger.warn(
+              { model: limiter.model, error: String(error) },
+              "[TRANSLATE] hard model error — blacklisting and retrying next model",
+            );
+            rateLimiter.blacklistModel(limiter.model);
+            continue;
+          }
+          // Transient — surface so the caller can fall back to original text.
+          throw error;
+        }
       }
-
-      cacheStore(hash, translated, limiter.model, language);
-      totalTokens += requestTokens;
-      logger.info(
-        "[TRANSLATE] segment %d/%d done (%d tokens used)",
-        i + 1,
-        segments.length,
-        requestTokens,
-      );
-      return translated;
+      throw new Error("All translation models failed for this segment");
     })();
 
     inflightSegments.set(hash, translation);

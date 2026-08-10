@@ -119,20 +119,40 @@ describe("GroqRateLimiterPool", () => {
     // 40 + 40 = 80 > 50 → the 70b daily budget is spent → fall back to scout.
     const second = await pool.waitForTokens(40);
     expect(second.model).toBe("meta-llama/llama-4-scout-17b-16e-instruct");
-  });
-
-  it("shares a model's daily budget across keys", async () => {
+  });  it("shares a model's daily budget across keys", async () => {
     const pool = new GroqRateLimiterPool(["key-1", "key-2"], [{ ...SEVENTY_B, tpd: 90 }]);
     const [k1, k2] = pool.keyLimiters(0);
     const first = await pool.waitForTokens(40);
     const second = await pool.waitForTokens(40);
     expect(first.model).toBe("llama-3.3-70b-versatile");
     expect(second.model).toBe("llama-3.3-70b-versatile");
+
     // Both requests fit the shared 90-token budget (40 + 40 ≤ 90) and the
     // second goes to the other key (least-loaded).
     expect([k1, k2]).toContain(first);
     expect([k1, k2]).toContain(second);
     expect(first).not.toBe(second);
+  });
+
+  it("skips a blacklisted model and returns the next one", async () => {
+    const pool = new GroqRateLimiterPool(["key-1"], [SEVENTY_B, SCOUT]);
+    pool.blacklistModel("llama-3.3-70b-versatile");
+    const chosen = await pool.waitForTokens(10);
+    expect(chosen.model).toBe("meta-llama/llama-4-scout-17b-16e-instruct");
+    expect(pool.liveModels).toEqual(["meta-llama/llama-4-scout-17b-16e-instruct"]);
+  });
+
+  it("throws when every model is blacklisted", async () => {
+    const pool = new GroqRateLimiterPool(["key-1"], [SEVENTY_B, SCOUT]);
+    pool.blacklistModel("llama-3.3-70b-versatile");
+    pool.blacklistModel("meta-llama/llama-4-scout-17b-16e-instruct");
+    await expect(pool.waitForTokens(10)).rejects.toThrow(/All translation models are unavailable/);
+  });
+
+  it("blacklisting an unknown model is a no-op", async () => {
+    const pool = new GroqRateLimiterPool(["key-1"], [SEVENTY_B]);
+    pool.blacklistModel("not-a-model");
+    expect(pool.liveModels).toEqual(["llama-3.3-70b-versatile"]);
   });
 });
 
@@ -269,6 +289,60 @@ describe("translateToEnglish parallel dedupe", () => {
     expect(r2.englishText).toBe("The translated segment.");
     // Only one API call despite two concurrent callers.
     expect(createSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries the segment on the next model after a hard model error", async () => {
+    const pool = new GroqRateLimiterPool(["key-1"], [SEVENTY_B, SCOUT]);
+    const [seventyB] = pool.keyLimiters(0);
+    const [scout] = pool.keyLimiters(1);
+
+    // 404 model-not-found is exactly what llama-4-scout returned on the user's
+    // account — the run must move past it, not stall the whole chain.
+    const hardError = Object.assign(
+      new Error("The model `x` does not exist or you do not have access to it."),
+      { status: 404 },
+    );
+    vi.spyOn(seventyB.client.chat.completions, "create").mockRejectedValue(hardError as never);
+    vi.spyOn(scout.client.chat.completions, "create").mockResolvedValue({
+      choices: [{ message: { content: "Translated by scout." } }],
+    } as never);
+
+    const germanText = "Die Aufenthaltserlaubnis ist eine Aufenthaltsgenehmigung für Studierende.";
+    const segmentHash = createHash("sha256").update(germanText).digest("hex");
+    rmSync(join(process.cwd(), "data", "translation-cache", `${segmentHash}.json`), {
+      force: true,
+    });
+
+    const result = await translateToEnglish(germanText, pool);
+    expect(result.englishText).toBe("Translated by scout.");
+    // Exactly one attempt on the dead model, then one on the fallback.
+    expect(seventyB.client.chat.completions.create).toHaveBeenCalledTimes(1);
+    expect(scout.client.chat.completions.create).toHaveBeenCalledTimes(1);
+    // The dead model is out of rotation for the rest of the run.
+    expect(pool.liveModels).toEqual(["meta-llama/llama-4-scout-17b-16e-instruct"]);
+  });
+
+  it("does not retry on transient errors (429/5xx)", async () => {
+    const pool = new GroqRateLimiterPool(["key-1"], [SEVENTY_B, SCOUT]);
+    const [seventyB] = pool.keyLimiters(0);
+    const [scout] = pool.keyLimiters(1);
+
+    const transient = Object.assign(new Error("over capacity"), { status: 503 });
+    vi.spyOn(seventyB.client.chat.completions, "create").mockRejectedValue(transient as never);
+    vi.spyOn(scout.client.chat.completions, "create").mockResolvedValue({
+      choices: [{ message: { content: "Translated by scout." } }],
+    } as never);
+
+    const germanText = "Die Anmeldung muss bei der Meldebehörde erfolgen.";
+    const segmentHash = createHash("sha256").update(germanText).digest("hex");
+    rmSync(join(process.cwd(), "data", "translation-cache", `${segmentHash}.json`), {
+      force: true,
+    });
+
+    // A transient error is surfaced to the caller (which falls back to the
+    // original text) — the chain must NOT burn the next model's budget on it.
+    await expect(translateToEnglish(germanText, pool)).rejects.toThrow("over capacity");
+    expect(scout.client.chat.completions.create).not.toHaveBeenCalled();
   });
 });
 
