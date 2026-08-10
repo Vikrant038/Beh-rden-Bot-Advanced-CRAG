@@ -17,5 +17,6 @@ scratch/*.mjs
 scratch/*.html
 scratch/verify-rag-german.ts
 
-# CRAG-eval harness for the web-app pipeline (not pushed)
-scripts/eval-crag-webapp.ts
+# Generated eval checkpoints only — the eval harness + testset are committed
+# so the eval workflow can run in CI.
+data/processed/

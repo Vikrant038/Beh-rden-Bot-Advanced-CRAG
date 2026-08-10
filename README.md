@@ -92,7 +92,7 @@ The defining move: **the pipeline now judges its own retrieval before answering.
 | Faithfulness (groundedness) | 3.43 / 5.0 | **3.93 / 5.0** | **+14.6%** |
 | Answer relevance | 3.71 / 5.0 | **4.71 / 5.0** | **+26.9%** |
 
-**Embedding fine-tuning — the single biggest accuracy lever** (`docs/FineTuning_and_Evaluation_Guide.md`):
+**Embedding fine-tuning — the single biggest accuracy lever** (`mvp-python/docs/FineTuning_and_Evaluation_Guide.md`):
 
 | Model | Training | Hardware | MRR@10 | Change |
 |---|---|---|---|---|
@@ -234,9 +234,9 @@ The user-facing product: Next.js 15 + React 19 + tRPC + Prisma, with the **entir
 - `src/components/` — the modern dark chat UI, landing page, admin dashboard, pipeline visualizer.
 - Storage: **PostgreSQL + pgvector** (~24k BGE-M3 chunks), Prisma ORM, principle-of-least-privilege DB roles.
 
-### 2. Repository root — the research & evaluation reference (Python)
+### 2. `mvp-python/` — the research & evaluation reference (Python)
 
-The original Python implementation (FastAPI + Streamlit era): fine-tuned embeddings, FAISS + BM25 retrieval, the 3-Agent ReAct orchestrator, and — critically — **the RAGAS-style evaluation harness** (`tests/eval_ragas_30.py`) that scores a 30-question multilingual testset on faithfulness, relevance, precision, recall, and refusal safety.
+The original Python implementation (FastAPI + Streamlit era): fine-tuned embeddings, FAISS + BM25 retrieval, the 3-Agent ReAct orchestrator, and — critically — **the RAGAS-style evaluation harness** (`mvp-python/tests/eval_ragas_30.py`) that scores a 30-question multilingual testset on faithfulness, relevance, precision, recall, and refusal safety.
 
 > **Key point:** the web app does **not** call Python at runtime. The two sides share a design lineage (the TS pipeline is *ported from* the Python one, and hardening ports back) but share zero runtime code — which is exactly why each side also has its own evaluation.
 
@@ -249,9 +249,9 @@ The original Python implementation (FastAPI + Streamlit era): fine-tuned embeddi
 └───────────────────────────────┬─────────────────────────────┘
                                 │ same design lineage
 ┌───────────────────────────────▼─────────────────────────────┐
-│  REFERENCE & EVAL  (repo root)                              │
+│  REFERENCE & EVAL  (mvp-python/)                            │
 │  Python: ingest · fine-tune · FAISS/BM25 · 3-agent ReAct    │
-│  tests/eval_ragas_30.py — 30-question multilingual eval     │
+│  eval_ragas_30.py — 30-question multilingual eval           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -259,7 +259,7 @@ The original Python implementation (FastAPI + Streamlit era): fine-tuned embeddi
 
 ## 🧰 Tech Stack
 
-| Layer | Production (`web-app/`) | Reference (`repo root`) |
+| Layer | Production (`web-app/`) | Reference (`mvp-python/`) |
 |---|---|---|
 | **Framework** | Next.js 15 (App Router), React 19, TypeScript 5 | FastAPI, Streamlit |
 | **UI** | Tailwind CSS 4, framer-motion 12, lucide-react, recharts | Streamlit |
@@ -293,32 +293,21 @@ Repo-2/
 │   │   │   └── llm/                #   Provider abstraction + circuit breaker
 │   │   └── hooks/                  #   Client-side hooks
 │   ├── prisma/                     #   Schema + migrations
-│   ├── scripts/                    #   eval-crag-webapp, embed-server, launch helpers
+│   ├── scripts/                    #   eval-crag-webapp, seed-corpus, ingest helpers
 │   ├── docs/                       #   Phase docs, security exceptions, test design
 │   └── tests/                      #   Unit + integration + E2E (Playwright)
 │
-├── src/                            # Reference RAG (Python)
-│   ├── rag.py                      #   Standard CRAG path
-│   ├── agentic_rag.py              #   3-Agent ReAct orchestrator
-│   ├── advanced_retrieval.py       #   Guardrail, sub-queries, RRF, rerank
-│   ├── run_comparative_benchmark.py#   Baseline vs CRAG benchmark engine
-│   ├── finetune_embeddings.py      #   MNRL + hard-negative fine-tuning
-│   ├── retrieval.py / embed.py / ingest.py
-│   ├── semantic_cache.py / memory.py / pii_masker.py
-│   └── tracing.py                  #   Langfuse observability
+├── mvp-python/                     # ★ Research & eval reference (Python MVP)
+│   ├── src/                        #   rag.py · agentic_rag.py · advanced_retrieval.py
+│   │                               #   finetune_embeddings.py · retrieval/embed/ingest
+│   ├── tests/                      #   pytest suite + eval_ragas_30.py (30-question eval)
+│   ├── scripts/                    #   embed-server, launch helpers
+│   ├── models/                     #   Fine-tuned BGE embedding model (gitignored)
+│   ├── data/                       #   Python-side corpus artifacts (gitignored)
+│   └── docs/                       #   MVP docs: fine-tuning guide, 30-phase plan, …
 │
-├── tests/                          # Python tests + eval harness
-│   ├── eval_ragas_30.py            #   30-question multilingual CRAG eval (resumable)
-│   ├── eval_ragas.py / eval_trulens.py
-│   └── test_*.py                   #   Unit + behavioral tests
-│
-├── data/                           # Corpus, FAISS index, eval results
-│   ├── eval/crag_30_questions.json #   The 30-question testset
-│   └── processed/                  #   Embeddings, scorecards, checkpoints
-│
-├── models/                         # Fine-tuned BGE embedding model (437 MB)
-├── docs/                           # ★ Design + engineering docs (see map)
-└── .github/workflows/              # CI, E2E, deploy, security, RAG-eval gates
+├── docs/                           # ★ Project design + engineering docs (see map)
+└── .github/workflows/              # CI, E2E, security, CRAG-eval gates
 ```
 
 ---
@@ -341,12 +330,12 @@ We treat quality as a **four-layer system** — not a single test command (detai
 
 The eval harness is a **first-class product artifact**, not a script bolted on at the end:
 
-- **`tests/eval_ragas_30.py`** (Python reference) and **`web-app/scripts/eval-crag-webapp.ts`** (production TS pipeline) run the **same 30 questions** through both implementations.
+- **`mvp-python/tests/eval_ragas_30.py`** (Python reference) and **`web-app/scripts/eval-crag-webapp.ts`** (production TS pipeline) run the **same 30 questions** through both implementations.
 - **Resumable atomic checkpoint** — interrupted runs skip finished items, so Groq rate limits can no longer kill a multi-hour eval.
 - **Judge context fidelity** — the judge receives the *real* generator context (this was a bug: a truncated 5×400-char summary made perfect answers score 2.0; identical answers scored 2.0 → 5.0 once fixed).
 - **BGE-M3 + LLM-judge scoring** for answer relevance, with a bilingual judge.
 
-**The testset** — `data/eval/crag_30_questions.json`: 30 hand-built questions grounded in the *actual corpus*, covering **18 real topics** (blocked account, APS, uni-assist, Goethe-Zertifikat, TestDaF, Residence Act/Ordinance, Anmeldung, visa documents, Fintiba, recognition, tax, EU Blue Card, health insurance, universities, BAMF/KMK) in **24 EN + 6 DE**, including **2 adversarial traps** (a recipe request, and a fraud request) that test the safety guardrail.
+**The testset** — `web-app/data/eval/crag_30_questions.json`: 30 hand-built questions grounded in the *actual corpus*, covering **18 real topics** (blocked account, APS, uni-assist, Goethe-Zertifikat, TestDaF, Residence Act/Ordinance, Anmeldung, visa documents, Fintiba, recognition, tax, EU Blue Card, health insurance, universities, BAMF/KMK) in **24 EN + 6 DE**, including **2 adversarial traps** (a recipe request, and a fraud request) that test the safety guardrail.
 
 **The metrics & gates:**
 
@@ -397,7 +386,7 @@ pnpm dev                                      # → http://localhost:3000
 For local embedding/rerank during development, the repo ships two small servers that speak the exact contracts of the production embedding client and reranker:
 
 ```bash
-.venv/bin/python web-app/scripts/embed-server.py     # BGE-M3 on :8765
+.venv/bin/python mvp-python/scripts/embed-server.py # BGE-M3 on :8765
 .venv/bin/python scratch/rerank-server.py            # bge-reranker on :8766
 ```
 
@@ -413,14 +402,16 @@ pnpm test:e2e            # Playwright
 pnpm build               # production build
 ```
 
-### Python research & evals
+### Python research & evals (reference implementation)
 
 ```bash
-.venv/bin/python -m tests.eval_ragas_30       # 30-question eval (resumes from checkpoint)
-.venv/bin/python src/run_comparative_benchmark.py   # Baseline vs CRAG benchmark
-.venv/bin/python src/finetune_embeddings.py  # MNRL + hard-negative fine-tuning
-pnpm tsx scripts/eval-crag-webapp.ts          # eval the production TS pipeline (from web-app/)
+cd mvp-python                              # MVP tree; the venv lives at the repo root
+../.venv/bin/python -m tests.eval_ragas_30         # 30-question eval (resumes from checkpoint)
+../.venv/bin/python src/run_comparative_benchmark.py   # Baseline vs CRAG benchmark
+../.venv/bin/python src/finetune_embeddings.py    # MNRL + hard-negative fine-tuning
 ```
+
+The production-pipeline eval runs from `web-app/` — see `web-app/docs/EVALUATION.md` for the full runbook.
 
 ---
 
@@ -432,11 +423,10 @@ pnpm tsx scripts/eval-crag-webapp.ts          # eval the production TS pipeline 
 | [`docs/FIRST_PRINCIPLES.md`](docs/FIRST_PRINCIPLES.md) | First-principles engineering — why every major decision was made |
 | [`docs/ENGINEERING_JOURNEY.md`](docs/ENGINEERING_JOURNEY.md) | The story: phases, problems encountered, deployment war stories |
 | [`docs/TESTING_AND_QUALITY.md`](docs/TESTING_AND_QUALITY.md) | The four-layer quality system + the eval harness, in depth |
-| [`docs/FineTuning_and_Evaluation_Guide.md`](docs/FineTuning_and_Evaluation_Guide.md) | Embedding fine-tuning, hard-negative mining, MRR/NDCG methodology |
-| [`docs/EXISTING_PROJECT_ANALYSIS.md`](docs/EXISTING_PROJECT_ANALYSIS.md) | The original system analysis — the baseline we evolved from |
 | [`web-app/README.md`](web-app/README.md) | Web-app quickstart + DB role model |
 | [`web-app/docs/`](web-app/docs/) | Phase-by-phase design & status docs for the web app |
-| [`docs/`](docs/) | Design & engineering docs — 30-phase plan, fine-tuning guide, feasibility |
+| [`docs/`](docs/) | Project-level design + engineering docs — architecture summary, first principles, journey, testing & quality |
+| [`mvp-python/docs/`](mvp-python/docs/) | MVP (Python reference) docs — fine-tuning guide, 30-phase plan, feasibility, Postgres setup, existing-project analysis |
 
 ---
 

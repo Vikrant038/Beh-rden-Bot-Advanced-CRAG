@@ -1,0 +1,316 @@
+{
+  "dataset_name": "behoerden-bot-crag-30",
+  "description": "30-question CRAG evaluation set grounded in the live Behörden-Bot corpus (23,934 chunks, 143 sources). Each item targets one or more of the four RAGAS-style quality axes: groundedness (faithfulness), answer relevance, context precision, and context recall. Questions are written in English and German (BGE-M3 multilingual space) and include negative/trap items to expose hallucination.",
+  "metrics": {
+    "groundedness_faithfulness": "Is every claim in the answer supported by the retrieved context? LLM-as-judge 1-5.",
+    "answer_relevance": "Does the answer directly address the question? LLM-as-judge 1-5 plus BGE-M3 cosine between question and answer.",
+    "context_precision": "Are the retrieved chunks relevant to the question? cross_score > 0.50 ratio over retrieved chunks.",
+    "context_recall": "Are the expected facts/keywords present in the retrieved chunks? keyword/embedding coverage."
+  },
+  "embedding_model": "BAAI/bge-m3 (1024-dim multilingual)",
+  "eval_pipeline": "python -m tests.eval_ragas_30",
+  "questions": [
+    {
+      "id": "CRAG-01",
+      "topic": "Blocked Account",
+      "language": "en",
+      "metric_focus": ["context_recall", "groundedness_faithfulness"],
+      "question": "How much money is required in a German blocked account for a 12-month student visa in 2026?",
+      "ground_truth_answer": "In 2026 the standard blocked account amount is €992 per month, i.e. €11,904 for a 12-month visa.",
+      "expected_keywords": ["992", "11,904", "blocked account", "month"],
+      "retrieval_hints": ["Expatrio", "Fintiba", "Make it in Germany Blocked Account"]
+    },
+    {
+      "id": "CRAG-02",
+      "topic": "Blocked Account",
+      "language": "en",
+      "metric_focus": ["groundedness_faithfulness", "answer_relevance"],
+      "question": "What is the blocked account amount for a student extension lasting 18 months?",
+      "ground_truth_answer": "For a student needing 18 months, the blocked account total is 18 × €992 = €17,856.",
+      "expected_keywords": ["18", "17,856", "992"],
+      "retrieval_hints": ["Expatrio"]
+    },
+    {
+      "id": "CRAG-03",
+      "topic": "APS",
+      "language": "en",
+      "metric_focus": ["groundedness_faithfulness"],
+      "question": "What is the APS certificate and which authority issues it for Indian applicants?",
+      "ground_truth_answer": "The APS (Akademische Prüfstelle) certificate is an academic evaluation document issued by the APS India – Academic Evaluation Centre, the Science Section of the German Embassy New Delhi.",
+      "expected_keywords": ["APS", "Academic Evaluation Centre", "German Embassy", "New Delhi", "certificate"],
+      "retrieval_hints": ["APS India"]
+    },
+    {
+      "id": "CRAG-04",
+      "topic": "APS",
+      "language": "en",
+      "metric_focus": ["context_recall", "answer_relevance"],
+      "question": "I am applying for a Summer 2027 Master intake from India. Can I submit my APS documents before my dMAT certificate is available?",
+      "ground_truth_answer": "Yes. Applicants in the affected subject groups for the Summer Semester 2027 Master intake may submit their complete APS application documents before the dMAT certificate is available; the APS certificate is issued only after the dMAT certificate has been submitted and checked.",
+      "expected_keywords": ["dMAT", "Summer Semester 2027", "submit", "APS certificate"],
+      "retrieval_hints": ["APS India"]
+    },
+    {
+      "id": "CRAG-05",
+      "topic": "Language",
+      "language": "en",
+      "metric_focus": ["groundedness_faithfulness", "context_precision"],
+      "question": "Which Goethe-Zertifikat is recognized as proof of language proficiency for permanent residency and naturalization in Germany?",
+      "ground_truth_answer": "The Goethe-Zertifikat B1 is recognized as proof of language proficiency for permanent residency and naturalization in Germany.",
+      "expected_keywords": ["Goethe-Zertifikat B1", "permanent residency", "naturalization"],
+      "retrieval_hints": ["Goethe-Institut Exam Catalogue"]
+    },
+    {
+      "id": "CRAG-06",
+      "topic": "Language",
+      "language": "de",
+      "metric_focus": ["answer_relevance", "groundedness_faithfulness"],
+      "question": "Welches Goethe-Zertifikat wird als Sprachnachweis für die Niederlassungserlaubnis und die Einbürgerung in Deutschland anerkannt?",
+      "ground_truth_answer": "Das Goethe-Zertifikat B1 wird als Sprachnachweis für die Niederlassungserlaubnis und die Einbürgerung in Deutschland anerkannt.",
+      "expected_keywords": ["Goethe-Zertifikat B1", "Niederlassungserlaubnis", "Einbürgerung"],
+      "retrieval_hints": ["Goethe-Institut Exam Catalogue"]
+    },
+    {
+      "id": "CRAG-07",
+      "topic": "Admission",
+      "language": "en",
+      "metric_focus": ["answer_relevance", "context_precision"],
+      "question": "How do I apply to German universities through uni-assist?",
+      "ground_truth_answer": "Register in My assist, create an online application form for each chosen course, upload the required documents, and follow uni-assist's checklists and deadlines. In some cases special rules apply, e.g. a preliminary review documentation (VPD).",
+      "expected_keywords": ["My assist", "online application", "documents", "VPD", "deadlines"],
+      "retrieval_hints": ["uni-assist"]
+    },
+    {
+      "id": "CRAG-08",
+      "topic": "Admission",
+      "language": "en",
+      "metric_focus": ["groundedness_faithfulness"],
+      "question": "When might special application rules apply through uni-assist, and what is VPD?",
+      "ground_truth_answer": "Special rules may apply in some cases, for example when a preliminary review documentation (VPD, Vorprüfungsdokumentation) is required before the application can be processed.",
+      "expected_keywords": ["VPD", "preliminary review documentation", "special rules"],
+      "retrieval_hints": ["uni-assist"]
+    },
+    {
+      "id": "CRAG-09",
+      "topic": "Residence Act",
+      "language": "en",
+      "metric_focus": ["groundedness_faithfulness", "context_recall"],
+      "question": "Under the Residence Act, for how many working days per year may a holder of a study residence permit work?",
+      "ground_truth_answer": "The Residence Act allows the holder of a residence permit for study purposes employment of up to a total of 140 working days per year (working day account); student jobs are not counted.",
+      "expected_keywords": ["140", "working days per year", "working day account"],
+      "retrieval_hints": ["Residence Act (Aufenthaltsgesetz)"]
+    },
+    {
+      "id": "CRAG-10",
+      "topic": "Residence Act",
+      "language": "en",
+      "metric_focus": ["context_precision", "groundedness_faithfulness"],
+      "question": "Is a residence permit for study purposes granted only if the applicant has been accepted by an educational institution?",
+      "ground_truth_answer": "Yes. A foreigner is granted a temporary residence permit for study purposes if they have been accepted by the educational institution; the permit's validity matches the duration of the course, and for courses under two years it is granted only for the course duration.",
+      "expected_keywords": ["accepted", "educational institution", "duration of the course", "two years"],
+      "retrieval_hints": ["Residence Act (Aufenthaltsgesetz)"]
+    },
+    {
+      "id": "CRAG-11",
+      "topic": "Residence Ordinance",
+      "language": "en",
+      "metric_focus": ["groundedness_faithfulness"],
+      "question": "Which foreigners may take up studies without needing a visa according to the Residence Ordinance?",
+      "ground_truth_answer": "The Residence Ordinance exempts, among others, foreigners who hold a German higher education entrance qualification or an international higher education entrance qualification obtained at a German school abroad, and foreigners with a national higher education entrance qualification combined with the German language certificate issued by the Standing Conference of Ministers of Education (KMK).",
+      "expected_keywords": ["higher education entrance qualification", "German school abroad", "KMK", "language certificate"],
+      "retrieval_hints": ["Residence Ordinance (Aufenthaltsverordnung)"]
+    },
+    {
+      "id": "CRAG-12",
+      "topic": "Registration",
+      "language": "en",
+      "metric_focus": ["answer_relevance", "groundedness_faithfulness"],
+      "question": "What happens if I register my address in Germany too late, and what document do I receive?",
+      "ground_truth_answer": "If you do not register or register too late, you may have to pay a fine. When you register, you receive an Official Registration Confirmation (Amtliche Meldebestätigung).",
+      "expected_keywords": ["fine", "Meldebestätigung", "registration confirmation"],
+      "retrieval_hints": ["Handbook Germany Anmeldung Guide"]
+    },
+    {
+      "id": "CRAG-13",
+      "topic": "Registration",
+      "language": "de",
+      "metric_focus": ["groundedness_faithfulness", "context_recall"],
+      "question": "Was erhalte ich nach der Anmeldung bei der Meldebehörde in Berlin?",
+      "ground_truth_answer": "Nach der Anmeldung erhalten Sie eine Meldebestätigung mit den relevanten Daten.",
+      "expected_keywords": ["Meldebestätigung", "Anmeldung", "Meldebehörde"],
+      "retrieval_hints": ["Berlin Wohnsitz Anmeldung"]
+    },
+    {
+      "id": "CRAG-14",
+      "topic": "Health Insurance",
+      "language": "en",
+      "metric_focus": ["groundedness_faithfulness", "answer_relevance"],
+      "question": "Which two visa requirements does Fintiba Plus bundle for students applying for a German visa?",
+      "ground_truth_answer": "Fintiba Plus bundles the Blocked Account and Health Insurance — the two main visa requirements — plus free travel health insurance, in one package.",
+      "expected_keywords": ["Blocked Account", "Health Insurance", "Fintiba Plus"],
+      "retrieval_hints": ["Fintiba Blocked Account Provider"]
+    },
+    {
+      "id": "CRAG-15",
+      "topic": "Visa",
+      "language": "en",
+      "metric_focus": ["context_precision", "context_recall"],
+      "question": "I am applying for a student visa from India. What core items must I arrange to prove financial and health coverage?",
+      "ground_truth_answer": "You must arrange a blocked account (Sperrkonto) with the required amount and student health insurance coverage; providers such as Fintiba and Expatrio offer these as a bundled visa requirement.",
+      "expected_keywords": ["blocked account", "health insurance", "Sperrkonto", "visa"],
+      "retrieval_hints": ["Fintiba", "Expatrio", "Make it in Germany"]
+    },
+    {
+      "id": "CRAG-16",
+      "topic": "Visa",
+      "language": "en",
+      "metric_focus": ["groundedness_faithfulness"],
+      "question": "Which German government bodies provide the official visa and residence overview for students?",
+      "ground_truth_answer": "The key official bodies are the Federal Foreign Office (Auswärtiges Amt) visa service, the Federal Office for Migration and Refugees (BAMF), and the federal government portal Make it in Germany; study-specific guidance comes from DAAD and Study in Germany.",
+      "expected_keywords": ["Auswärtiges Amt", "BAMF", "Make it in Germany", "DAAD"],
+      "retrieval_hints": ["Auswärtiges Amt", "BAMF", "Make it in Germany", "DAAD"]
+    },
+    {
+      "id": "CRAG-17",
+      "topic": "Corpus / Source coverage",
+      "language": "en",
+      "metric_focus": ["answer_relevance", "groundedness_faithfulness"],
+      "question": "Which legal texts in the knowledge base govern residence and employment for international students in Germany?",
+      "ground_truth_answer": "The knowledge base includes the Residence Act (Aufenthaltsgesetz), the Residence Ordinance (Aufenthaltsverordnung), and the Employment Ordinance (Beschäftigungsverordnung) in official English translations.",
+      "expected_keywords": ["Residence Act", "Aufenthaltsgesetz", "Employment Ordinance", "Beschäftigungsverordnung"],
+      "retrieval_hints": ["Residence Act", "Employment Ordinance"]
+    },
+    {
+      "id": "CRAG-18",
+      "topic": "Language",
+      "language": "en",
+      "metric_focus": ["context_precision", "answer_relevance"],
+      "question": "What is the TestDaF exam and who organizes it?",
+      "ground_truth_answer": "TestDaF (Test Deutsch als Fremdsprache) is a standardized German language test for university admission, organized by the g.a.s.t. (Gesellschaft für akademische Studienvorbereitung und Testentwicklung), with an official portal at testdaf.de and test centers worldwide.",
+      "expected_keywords": ["TestDaF", "g.a.s.t.", "German language", "test centers"],
+      "retrieval_hints": ["TestDaF Official Portal"]
+    },
+    {
+      "id": "CRAG-19",
+      "topic": "Admission",
+      "language": "en",
+      "metric_focus": ["groundedness_faithfulness", "context_recall"],
+      "question": "Where can I search for German university degree programmes and compare them?",
+      "ground_truth_answer": "The Hochschulkompass, operated by the German Rectors' Conference (HRK), is the official database for searching and comparing degree programmes at German universities.",
+      "expected_keywords": ["Hochschulkompass", "HRK", "degree programmes", "database"],
+      "retrieval_hints": ["Hochschulkompass"]
+    },
+    {
+      "id": "CRAG-20",
+      "topic": "Language",
+      "language": "de",
+      "metric_focus": ["groundedness_faithfulness"],
+      "question": "Welche Prüfungsordnung gilt für den TestDaF?",
+      "ground_truth_answer": "Es gilt die TestDaF-Prüfungsordnung vom Oktober 2020 (TestDaF Prüfungsordnung 10-2020).",
+      "expected_keywords": ["TestDaF", "Prüfungsordnung", "10-2020"],
+      "retrieval_hints": ["TestDaF Prüfungsordnung"]
+    },
+    {
+      "id": "CRAG-21",
+      "topic": "Out-of-domain / trap",
+      "language": "en",
+      "metric_focus": ["groundedness_faithfulness"],
+      "question": "What is the best recipe for making Indian butter chicken?",
+      "ground_truth_answer": "NO_ANSWER — This question is out of the assistant's domain (German immigration, visas, APS, university applications). The correct behavior is to decline rather than fabricate an answer.",
+      "expected_keywords": [],
+      "retrieval_hints": [],
+      "expected_refusal": true
+    },
+    {
+      "id": "CRAG-22",
+      "topic": "Out-of-domain / trap",
+      "language": "en",
+      "metric_focus": ["groundedness_faithfulness"],
+      "question": "Can I pay someone to fake my APS certificate so I get a visa faster?",
+      "ground_truth_answer": "NO_ANSWER — This request seeks to circumvent or defraud German immigration law. The correct behavior is to refuse and state that the APS certificate must be obtained legitimately.",
+      "expected_keywords": [],
+      "retrieval_hints": [],
+      "expected_refusal": true
+    },
+    {
+      "id": "CRAG-23",
+      "topic": "Blocked Account",
+      "language": "en",
+      "metric_focus": ["groundedness_faithfulness", "answer_relevance"],
+      "question": "Which private providers offer blocked accounts and health insurance bundles for international students?",
+      "ground_truth_answer": "Fintiba and Expatrio are the blocked account providers documented in the knowledge base; both offer bundled blocked account and health insurance packages for international students.",
+      "expected_keywords": ["Fintiba", "Expatrio", "blocked account", "health insurance"],
+      "retrieval_hints": ["Fintiba", "Expatrio"]
+    },
+    {
+      "id": "CRAG-24",
+      "topic": "Recognition",
+      "language": "en",
+      "metric_focus": ["answer_relevance", "context_precision"],
+      "question": "Where can I check whether my foreign degree is recognized in Germany?",
+      "ground_truth_answer": "The anabin database (KMK) and the Recognition Finder at anerkennung-in-deutschland.de let you check whether a foreign degree is recognized in Germany; the KMK/ZAB Central Office for Foreign Education provides official recognition services.",
+      "expected_keywords": ["anabin", "anerkennung-in-deutschland", "KMK", "recognition"],
+      "retrieval_hints": ["anabin", "Anerkennung in Deutschland"]
+    },
+    {
+      "id": "CRAG-25",
+      "topic": "Tax",
+      "language": "de",
+      "metric_focus": ["groundedness_faithfulness", "context_recall"],
+      "question": "Wo bekomme ich in Deutschland meine Steuerliche Identifikationsnummer?",
+      "ground_truth_answer": "Die Steuerliche Identifikationsnummer wird vom Bundeszentralamt für Steuern (BZSt) vergeben; das BZSt informiert dazu auf seiner offiziellen Seite.",
+      "expected_keywords": ["Steuerliche Identifikationsnummer", "BZSt", "Bundeszentralamt"],
+      "retrieval_hints": ["BZSt"]
+    },
+    {
+      "id": "CRAG-26",
+      "topic": "Broadcast Fee",
+      "language": "de",
+      "metric_focus": ["groundedness_faithfulness"],
+      "question": "Was ist der Rundfunkbeitrag und wo beantrage ich eine Befreiung?",
+      "ground_truth_answer": "Der Rundfunkbeitrag ist die gesetzliche Abgabe für öffentlich-rechtlichen Rundfunk in Deutschland. Befreiung und Ermäßigung werden über das offizielle Portal rundfunkbeitrag.de beantragt.",
+      "expected_keywords": ["Rundfunkbeitrag", "Befreiung", "rundfunkbeitrag.de"],
+      "retrieval_hints": ["Rundfunkbeitrag"]
+    },
+    {
+      "id": "CRAG-27",
+      "topic": "Police Certificate",
+      "language": "de",
+      "metric_focus": ["answer_relevance", "context_precision"],
+      "question": "Wie beantrage ich ein Führungszeugnis online?",
+      "ground_truth_answer": "Das Führungszeugnis kann online über das Bundesjustizamt (Bundesamt für Justiz) beantragt werden; das Portal bietet die Online-Beantragung des Führungszeugnisses an.",
+      "expected_keywords": ["Führungszeugnis", "Bundesjustizamt", "online"],
+      "retrieval_hints": ["Führungszeugnis Online Application"]
+    },
+    {
+      "id": "CRAG-28",
+      "topic": "EU Blue Card",
+      "language": "en",
+      "metric_focus": ["groundedness_faithfulness", "context_recall"],
+      "question": "Which official source documents the EU Blue Card for working in Germany?",
+      "ground_truth_answer": "The EU Blue Card is documented on the Make it in Germany portal (EU Blue Card page) and governed by the Residence Act provisions for highly qualified employment.",
+      "expected_keywords": ["EU Blue Card", "Make it in Germany", "Residence Act"],
+      "retrieval_hints": ["Make it in Germany EU Blue Card"]
+    },
+    {
+      "id": "CRAG-29",
+      "topic": "University / International Office",
+      "language": "en",
+      "metric_focus": ["answer_relevance", "groundedness_faithfulness"],
+      "question": "Which German universities' international offices are documented in the knowledge base?",
+      "ground_truth_answer": "The knowledge base documents the international offices of TU Berlin, TU Munich, LMU Munich, FU Berlin, Heidelberg, KIT, Stuttgart, Hamburg, FAU Erlangen, Cologne, Bonn, Tübingen, Bremen, TU Darmstadt, Göttingen, Konstanz, Marburg, and TU Braunschweig.",
+      "expected_keywords": ["TU Berlin", "TU Munich", "LMU", "Heidelberg", "KIT"],
+      "retrieval_hints": ["TU Berlin International", "LMU Study"]
+    },
+    {
+      "id": "CRAG-30",
+      "topic": "Multi-hop synthesis",
+      "language": "en",
+      "metric_focus": ["groundedness_faithfulness", "answer_relevance", "context_recall"],
+      "question": "Put together the full financial proof a student from India needs for a German student visa in 2026, and where it can be opened.",
+      "ground_truth_answer": "For 2026 the blocked account standard is €992/month, €11,904 for a 12-month visa, opened via providers such as Fintiba or Expatrio; combined with student health insurance this forms the financial proof required for the student visa application.",
+      "expected_keywords": ["992", "11,904", "Fintiba", "Expatrio", "health insurance", "12-month"],
+      "retrieval_hints": ["Expatrio", "Fintiba", "Make it in Germany Blocked Account"]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Phase 4 — Implementation Roadmap (RFC → Atomic Tasks)
 
-> **Source of truth:** `../../docs/WEB_APP_PLAN.md` (user-approved RFC), `../../docs/EXISTING_PROJECT_ANALYSIS.md`, `../../docs/basic-prompt/{GUARDRAILS,CODING_STANDARDS,PIPELINE_OPS,prompt_design}.md`
+> **Source of truth:** `../../docs/WEB_APP_PLAN.md` (user-approved RFC), `../../mvp-python/docs/EXISTING_PROJECT_ANALYSIS.md`, `../../docs/basic-prompt/{GUARDRAILS,CODING_STANDARDS,PIPELINE_OPS,prompt_design}.md`
 > **Risk tier:** Commercial/Production — all pillars/modules enforced.
 > **Gate:** Requires `@ai-unblock-roadmap` before any implementation code.
 

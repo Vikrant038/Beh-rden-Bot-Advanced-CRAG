@@ -5,7 +5,7 @@ The Freebuff/sandbox shell kills the whole process group on exit, and macOS
 has no `setsid`, so we use Python's start_new_session to put the server in its
 own session/process group. Usage:
 
-    .venv/bin/python web-app/scripts/launch-embed-server.py [--port 8765] [--model BAAI/bge-m3]
+    .venv/bin/python scripts/launch-embed-server.py [--port 8765] [--model BAAI/bge-m3]
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import os
 import subprocess
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root (script lives at <root>/web-app/scripts/)
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # repo root (script lives at <root>/scripts/)
 
 
 def main() -> None:
@@ -27,7 +27,7 @@ def main() -> None:
     proc = subprocess.Popen(
         [
             os.path.join(ROOT, ".venv", "bin", "python"),
-            os.path.join(ROOT, "web-app", "scripts", "embed-server.py"),
+            os.path.join(ROOT, "scripts", "embed-server.py"),
             "--port",
             str(args.port),
             "--model",

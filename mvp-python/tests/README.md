@@ -6,8 +6,8 @@ surfaces of the product and are owned by different CI pipelines.
 
 | Suite | Location | Stack | CI workflow | Covers |
 |-------|----------|-------|-------------|--------|
-| **Web app** | [`web-app/tests/`](../web-app/tests/) | Vitest (unit + integration) + Playwright (E2E) | `ci-web-app.yml`, `e2e-web-app.yml` | The production Next.js app: UI components, tRPC routers, the TypeScript CRAG pipeline, guest sessions, API routes |
-| **Python / Streamlit (reference + eval)** | [`tests/`](./) | pytest + RAGAS | `rag_eval_ci.yml` | The Python reference RAG implementation, fine-tuning eval, and the RAGAS quality harness (`eval_ragas*.py`) |
+| **Web app** | [`web-app/tests/`](../../web-app/tests/) | Vitest (unit + integration) + Playwright (E2E) | `ci-web-app.yml`, `e2e-web-app.yml` | The production Next.js app: UI components, tRPC routers, the TypeScript CRAG pipeline, guest sessions, API routes |
+| **Python / Streamlit (reference + eval)** | [`tests/`](./) | pytest + RAGAS | — (not CI-gated; reference only) | The Python reference RAG implementation, fine-tuning eval, and the RAGAS quality harness (`eval_ragas*.py`) |
 
 > **Why two suites?** The web app is the shipped product (TypeScript). The root
 > Python code is the research/reference implementation the TS side was ported
@@ -51,24 +51,26 @@ and Playwright browsers installed (`pnpm exec playwright install --with-deps chr
 ## Running the Python suite
 
 ```bash
-# From the repo root (use the project virtualenv)
-.venv/bin/python -m pytest tests/ -x -q
+# From mvp-python/ (the venv lives at the repo root)
+cd mvp-python
+../.venv/bin/python -m pytest tests/ -x -q
 
 # RAGAS quality evaluation (30-question multilingual harness + gate report)
-.venv/bin/python -m tests.eval_ragas_30
+../.venv/bin/python -m tests.eval_ragas_30
 ```
 
-Requires the root `requirements.txt` and `GROQ_API_KEY` / `HF_TOKEN` for the
-LLM-judged metrics.
+Requires `mvp-python/requirements.txt` and `GROQ_API_KEY` / `HF_TOKEN` for
+the LLM-judged metrics.
 
 ## CI ownership (verify with each change)
 
 - **Web app** changes under `web-app/**` trigger `ci-web-app.yml` (lint,
   typecheck, unit/integration, coverage, build) and `e2e-web-app.yml`
   (Playwright incl. the mobile viewport project). Neither touches Python.
-- **Python** changes trigger `rag_eval_ci.yml`, which runs the RAGAS gate and
-  never installs Node dependencies.
-- A change touching both sides runs both pipelines independently — that is
+- **Python** changes are **not** CI-gated — the MVP is a reference
+  implementation. The production pipeline's quality gate is the web-app
+  30-question eval (`eval-web-app.yml`, see `web-app/docs/EVALUATION.md`).
+- A change touching both sides only runs the web-app pipelines — that is
   expected, not a bug.
 
 ## Writing new tests
@@ -77,5 +79,6 @@ LLM-judged metrics.
   `web-app/tests/integration` (tRPC routers, API routes).
 - Web-app user flows → `web-app/tests/e2e` (Playwright; every spec also runs
   at a phone viewport via the `mobile-chromium` project).
-- Python retrieval/eval logic → `tests/test_*.py`; quality gates → extend
-  `tests/eval_ragas_30.py`.
+- Python retrieval/eval logic → `mvp-python/tests/test_*.py`; quality gates → extend
+  `mvp-python/tests/eval_ragas_30.py` (or the production harness
+  `web-app/scripts/eval-crag-webapp.ts`).

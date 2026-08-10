@@ -75,7 +75,7 @@ With the plumbing solid, the product needed to *feel* like a modern AI product (
 
 ## Phase 6: the evaluation journey — 30 questions, two pipelines
 
-The most instructive phase. We built a **30-question multilingual testset** (`data/eval/crag_30_questions.json`: 24 EN + 6 DE, 18 real topics, 2 adversarial traps) and a RAGAS-style evaluator scoring faithfulness, relevance, precision, recall, and refusal handling — first on the Python reference, then on the **production TS pipeline** itself.
+The most instructive phase. We built a **30-question multilingual testset** (`web-app/data/eval/crag_30_questions.json`: 24 EN + 6 DE, 18 real topics, 2 adversarial traps) and a RAGAS-style evaluator scoring faithfulness, relevance, precision, recall, and refusal handling — first on the Python reference, then on the **production TS pipeline** itself.
 
 What the evals taught us:
 

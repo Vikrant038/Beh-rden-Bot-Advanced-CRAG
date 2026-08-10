@@ -41,7 +41,7 @@ doesn't use it today; revisit only if retrieval quality demands it.
 |---|---|---|
 | Provider switch | `src/server/env.ts` (`EMBEDDING_PROVIDER`), `src/server/embeddings/client.ts` (`createDefaultEmbeddingClient()`) | One env decision selects the embed client for ingest **and** queries |
 | Wiring | `src/server/ingest/pipeline.ts`, `src/server/rag/instance.ts` | Replace hardcoded `new GeminiEmbeddingClient()` with the factory |
-| Local corpus embed server | `scripts/embed-server.py` | FastAPI + sentence-transformers `BAAI/bge-base-en-v1.5` on MPS; speaks the exact `HfEmbeddingClient` contract (`/pipeline/feature-extraction/{model}` → `number[][]`) so **zero ingest-code changes** |
+| Local corpus embed server | `mvp-python/scripts/embed-server.py` | FastAPI + sentence-transformers `BAAI/bge-base-en-v1.5` on MPS; speaks the exact `HfEmbeddingClient` contract (`/pipeline/feature-extraction/{model}` → `number[][]`) so **zero ingest-code changes** |
 | Cloudflare query worker | `embeddings-worker/` (wrangler.toml + src/index.ts + README) | Same contract; Workers AI `@cf/baai/bge-base-en-v1.5`; bearer-token auth with constant-time compare |
 | Neon seed script | `scripts/seed-corpus.sh` (existing, verified) | Ships the embedded corpus to Neon without re-embedding |
 | Docs | `.env.example`, `docs/DEPLOYMENT.md` §3/§4/§7/§8 | Env vars + provider decision + go-live checklist |
@@ -68,13 +68,13 @@ documents). The corpus is ready for a clean bge-base re-ingest.
 1. **Re-ingest the full corpus through the local server** (~30–60 min, $0):
    ```bash
    cd "/Users/vikranty/Documents/Project/OLD Lap Work/Repo-2"
-   .venv/bin/python web-app/scripts/embed-server.py --port 8765   # terminal 1
+   .venv/bin/python mvp-python/scripts/embed-server.py --port 8765   # terminal 1
 
    cd "/Users/vikranty/Documents/Project/OLD Lap Work/Repo-2/web-app"
    export EMBEDDING_PROVIDER=hf
    export HF_INFERENCE_URL=http://127.0.0.1:8765
    export HF_TOKEN=local
-   pnpm ingest --file ../data/sources.json --force
+   pnpm ingest --file data/sources.json --force
    ```
 2. **Deploy the Cloudflare worker** (query side):
    ```bash

@@ -1,0 +1,120 @@
+# CRAG Evaluation Harness (web-app)
+
+The production-quality gate for the **TypeScript** RAG pipeline. It runs a
+30-question multilingual testset through the *real* pipeline the chat app
+uses — guardrail → bilingual sub-query expansion → hybrid retrieval
+(pgvector dense + Postgres FTS sparse → RRF → cross-encoder rerank) → CRAG
+confidence gate → grounded LLM generation — and scores every answer on the
+same four axes the original Python eval (`tests/eval_ragas_30.py`) measured.
+
+This is the successor to the Python/Streamlit-era eval: it exercises the
+pipeline that actually ships, not the MVP.
+
+## What it measures
+
+| Axis | Metric | Gate (default) |
+|------|--------|----------------|
+| Groundedness / Faithfulness | LLM-as-judge, 1–5 (is every claim in the answer supported by the retrieved context?) | ≥ 3.5 |
+| Answer relevance (LLM judge) | 1–5 | ≥ 4.0 |
+| Answer relevance (BGE-M3) | cosine between question and answer vectors | ≥ 0.55 |
+| Answer relevance (blended) | `0.7 × judge + 0.3 × (1 + 4·cos)` | ≥ 4.0 |
+| Context precision | fraction of retrieved chunks with cross-encoder score > 0.5 | ≥ 0.75 |
+| Context recall | fraction of `expected_keywords` present in the retrieved chunks | ≥ 0.70 |
+
+Two **trap items** (a butter-chicken-recipe request and a forged-APS request)
+score on refusal behavior: a clean `GUARDRAIL_BLOCKED` refusal is 5.0/5.0;
+answering is 1.0/1.0. A guardrail false-positive on a legit question is
+scored 0 and flagged as `blocked_non_trap`.
+
+The judge sees **the same context the generator saw** (parent-expanded chunk
+text), so faithfulness measures the answer against what the pipeline
+actually retrieved — not a truncated proxy window.
+
+## Files
+
+- `web-app/scripts/eval-crag-webapp.ts` — the harness (resumable via
+  checkpoint, 3× retry with backoff per item, exits non-zero on gate failure
+  → CI-ready).
+- `web-app/data/eval/crag_30_questions.json` — the 30-question multilingual
+  testset (DE/EN, 2 traps).
+- `web-app/data/processed/webapp_crag_30_checkpoint.json` — per-item results
+  (resume point).
+- `web-app/data/processed/webapp_crag_30_results.json` — full report:
+  summary + per-item scores, retrieval path, latency, full answers and
+  judged context (diagnostics).
+- `.github/workflows/eval-web-app.yml` — CI gate.
+
+## Run locally
+
+Prerequisites: Postgres up with the corpus seeded (see
+`DEPLOYMENT.md`/`scripts/seed-corpus.sh`), and the API keys in `.env`
+(`GROQ_API_KEY`, `HF_TOKEN`, `HF_INFERENCE_URL`, `RERANKER_URL`/`RERANKER_TOKEN`).
+
+```bash
+cd web-app
+set -a && . ./.env && set +a
+pnpm tsx scripts/eval-crag-webapp.ts
+```
+
+A run is **resumable**: re-running skips items already in the checkpoint, so
+a rate-limited stall never loses completed work. `data/processed/` is
+gitignored (regenerable); `data/eval/` is committed.
+
+## CI workflow (`.github/workflows/eval-web-app.yml`)
+
+Runs **weekly (Monday 04:00 UTC)** or **manually** via `workflow_dispatch` —
+deliberately *not* on every push, because a run costs ~150 LLM calls plus
+embeddings. The per-commit gate stays `ci-web-app.yml`.
+
+Two corpus modes:
+
+- **small** (default) — fully self-contained. The job boots a
+  `pgvector/pgvector:pg16` Postgres, applies migrations, ingests the small
+  corpus subset (`web-app/data/ingest-pdfs-small.json`, ~10 official PDFs
+  that ship in the repo), then evaluates. Acts as a **regression gate**: it
+  will not match the production scorecard exactly, but it catches pipeline
+  breakage (guardrail regressions, retrieval failures, judge/generation
+  faults).
+- **full** — evaluates against the **production corpus**. Requires the
+  `EVAL_DATABASE_URL` secret: a Postgres URL pointing at a seeded copy of the
+  corpus (produce it with `web-app/scripts/seed-corpus.sh` — dump the local
+  seeded Postgres, ship the vectors, no re-embedding). This mode produces the
+  authoritative quality numbers.
+
+## Secrets you must configure
+
+| Secret | Required | Notes |
+|--------|----------|-------|
+| `GROQ_API_KEY` | ✅ | generation + judge LLM calls |
+| `HF_TOKEN` | ✅ | BGE-M3 embeddings + cross-encoder reranker |
+| `GROQ_MODEL` | optional | default `llama-3.1-8b-instant` |
+| `EMBEDDING_MODEL` | optional | default `BAAI/bge-m3` (must match the corpus space) |
+| `HF_INFERENCE_URL` | optional | default `https://api-inference.huggingface.co`; set to your deployed Cloudflare embeddings worker to avoid cold starts |
+| `RERANKER_MODEL` | optional | default `BAAI/bge-reranker-v2-m3` |
+| `EVAL_DATABASE_URL` | full mode only | seeded corpus Postgres URL |
+
+## Gate calibration
+
+The gates in the script (`MIN_*`) are the production targets. The **small**
+CI corpus is a subset, so expect variance on recall/precision there — if a
+legit pipeline change trips a small-corpus gate while the full-corpus run is
+healthy, the gate is calibrated for the full corpus, not the CI subset. The
+honest workflow:
+
+1. Run **full** mode for the authoritative scorecard.
+2. Treat **small** mode as "did anything break" — a large delta from the
+   previous small-mode run is the signal, not the absolute number.
+
+## Troubleshooting
+
+- **HF cold start > 20 s** — the embed client aborts sockets after 20 s; the
+  workflow warms the model first and retries ingest. If CI ingest keeps
+  timing out, point `HF_INFERENCE_URL` at a warm endpoint (Cloudflare worker).
+- **Groq rate limits (429)** — the harness retries each item 3× with backoff
+  (70 s for breaker-open, 15 s otherwise). A stalled item never hangs the
+  run (`ITEM_TIMEOUT_MS` caps it) and is checkpointed for resume.
+- **Judge context truncation** — the judge window is 8 000 chars
+  (`judgeFaithfulnessRelevance`); items whose parent-expanded context exceeds
+  that (large multi-entity synthesis questions) may score lower than the
+  generator's true grounding. Diagnostic `context_text` is stored per item
+  for re-judging.

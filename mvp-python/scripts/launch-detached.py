@@ -4,7 +4,7 @@
 The Freebuff/sandbox shell kills the whole process group on exit, and macOS
 has no `setsid`, so we use start_new_session. Usage:
 
-    .venv/bin/python web-app/scripts/launch-detached.py -- bash scripts/run-ingest-bgem3.sh
+    .venv/bin/python scripts/launch-detached.py -- bash web-app/scripts/seed-corpus.sh
 """
 from __future__ import annotations
 

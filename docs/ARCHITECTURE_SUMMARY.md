@@ -69,7 +69,7 @@ Persist to PostgreSQL Semantic Cache + Conversational Memory
 - `src/semantic_cache.py` — pgvector caching
 - `src/memory.py` — Conversation memory (LangChain)
 - `src/ingest.py` → `src/embed.py` → FAISS index
-- `tests/eval_ragas.py` — CI gate (Faithfulness ≥3.5, Relevance ≥4.0)
+- `mvp-python/tests/eval_ragas.py` — RAGAS-style reference eval (Faithfulness ≥3.5, Relevance ≥4.0)
 
 ---
 

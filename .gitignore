@@ -13,9 +13,11 @@ __pycache__/
 # Freebuff desktop app state (local-only, churns every session)
 .freebuff/
 
-# CRAG-eval harness + generated eval data (not pushed)
-tests/eval_ragas_30.py
-data/eval/
-data/processed/
+# Generated eval outputs + old Python CRAG-eval harness (not pushed)
+mvp-python/tests/eval_ragas_30.py
+mvp-python/data/processed/
 scratch/rerank-server.py
 scratch/run-webapp-eval.sh
+# Web-app eval checkpoints (regenerable) — the testset in web-app/data/eval is
+# committed so the eval workflow can run in CI; only the outputs are ignored.
+web-app/data/processed/

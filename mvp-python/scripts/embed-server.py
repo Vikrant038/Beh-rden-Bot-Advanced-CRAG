@@ -16,7 +16,7 @@ embedded properly (bge-base-en-v1.5 was English-only and scored German text
 poorly, which forced CRAG web-search fallbacks).
 
 Usage:
-    .venv/bin/python web-app/scripts/embed-server.py [--port 8765] [--model BAAI/bge-m3]
+    .venv/bin/python scripts/embed-server.py [--port 8765] [--model BAAI/bge-m3]
 
 Defaults: port 8765, model BAAI/bge-m3, device = MPS if available.
 """

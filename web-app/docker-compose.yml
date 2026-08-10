@@ -1,7 +1,7 @@
 # Local development Postgres for the web-app (Next.js + Prisma + pgvector).
 #
-# ⚠️  Do NOT run this together with the repo-root docker-compose.yml (the
-# Python/Streamlit app) — both map host port 5432. Use one or the other.
+# ⚠️  Do NOT run this together with the mvp-python/docker-compose.yml (the
+# Python/Streamlit reference app) — both map host port 5432. Use one or the other.
 #
 #   docker compose up -d postgres
 #

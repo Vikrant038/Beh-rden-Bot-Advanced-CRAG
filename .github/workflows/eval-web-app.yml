@@ -1,0 +1,158 @@
+name: Web App CRAG Evaluation
+
+# Quality gate for the production (TypeScript) RAG pipeline: runs the
+# 30-question multilingual testset (web-app/data/eval/crag_30_questions.json)
+# through the REAL pipeline (guardrail -> sub-queries -> hybrid retrieval ->
+# CRAG gate -> grounded generation) and scores it on the same four axes as the
+# Python-era eval: groundedness/faithfulness, answer relevance, context
+# precision, context recall — plus the two trap/refusal items.
+#
+# Deliberately NOT on every push: each run is ~150 LLM calls + embeddings, so
+# it is triggerd manually (workflow_dispatch) or weekly (schedule). The
+# pipeline's per-commit gate is ci-web-app.yml (lint/typecheck/test/build).
+#
+# Two corpus modes (workflow_dispatch input):
+#   small (default) — fully self-contained: spins up a pgvector Postgres,
+#                     migrates, ingests the small corpus subset
+#                     (data/ingest-pdfs-small.json), then evaluates. No
+#                     production data needed; a regression gate.
+#   full            — evaluates against the production corpus. Requires the
+#                     EVAL_DATABASE_URL secret (a Postgres URL pointing at a
+#                     seeded copy of the corpus — see web-app/docs/EVALUATION.md
+#                     and scripts/seed-corpus.sh for how to produce it). The
+#                     authoritative quality numbers come from this mode.
+#
+# Required secrets (small mode): GROQ_API_KEY, HF_TOKEN.
+# Optional overrides: GROQ_MODEL, HF_INFERENCE_URL, EMBEDDING_MODEL,
+#                     RERANKER_MODEL, EVAL_DATABASE_URL (full mode).
+
+on:
+  workflow_dispatch:
+    inputs:
+      corpus:
+        description: >-
+          Corpus to evaluate against — small = CI-seeded subset
+          (self-contained regression gate), full = production corpus via the
+          EVAL_DATABASE_URL secret.
+        type: choice
+        default: small
+        options:
+          - small
+          - full
+  schedule:
+    - cron: "0 4 * * 1" # weekly, Monday 04:00 UTC
+
+permissions:
+  contents: read
+
+env:
+  # Placeholders so env.ts zod validation passes; the eval hits the real APIs.
+  NEXTAUTH_SECRET: ci-placeholder-secret-not-used-by-eval
+  # pgvector service container (small-corpus path). Overridden by the
+  # EVAL_DATABASE_URL secret in full-corpus mode.
+  DATABASE_URL: postgresql://behoerden_app:behoerden_password@localhost:5432/behoerden_bot
+  MIGRATION_DATABASE_URL: postgresql://behoerden_app:behoerden_password@localhost:5432/behoerden_bot
+  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+  GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'llama-3.1-8b-instant' }}
+  # BGE-M3 embeddings + reranker. Default HF_INFERENCE_URL is the HF Inference
+  # API; a deployed Cloudflare embeddings worker (warmer, fewer cold starts)
+  # can be supplied via the HF_INFERENCE_URL secret.
+  EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL || 'BAAI/bge-m3' }}
+  HF_INFERENCE_URL: ${{ secrets.HF_INFERENCE_URL || 'https://api-inference.huggingface.co' }}
+  HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  RERANKER_MODEL: ${{ secrets.RERANKER_MODEL || 'BAAI/bge-reranker-v2-m3' }}
+  RERANKER_TOKEN: ${{ secrets.HF_TOKEN }}
+
+defaults:
+  run:
+    working-directory: web-app
+
+jobs:
+  eval:
+    name: 30-question multilingual CRAG eval
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: behoerden_app
+          POSTGRES_PASSWORD: behoerden_password
+          POSTGRES_DB: behoerden_bot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U behoerden_app -d behoerden_bot"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          # Explicit: `uses:` steps ignore `defaults.run.working-directory`, so
+          # the action cannot discover packageManager from web-app/package.json.
+          version: 11.20.0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-app/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm prisma generate
+
+      - name: Seed CI corpus (migrate + ingest small subset)
+        if: ${{ inputs.corpus != 'full' }}
+        run: |
+          set -euo pipefail
+          pnpm prisma migrate deploy
+          # Warm the embedding model before the real ingest: HF serverless cold
+          # starts can exceed the client's 20s socket timeout, and ingest is
+          # hash-based (unchanged documents are skipped), so a failed first
+          # pass is cheap to retry. IIFE form — the package is CommonJS, so
+          # top-level await is not available under tsx -e.
+          pnpm exec tsx -e "
+            const { config: loadEnv } = require('dotenv');
+            loadEnv();
+            const { createDefaultEmbeddingClient } = require('./src/server/embeddings/client');
+            (async () => {
+              try {
+                await createDefaultEmbeddingClient().embedTexts(['warm-up']);
+                console.log('[WARM] embedding model ready');
+              } catch (error) {
+                console.warn('[WARM] warm-up failed (ingest retry will handle it):', String(error).slice(0, 120));
+              }
+            })();
+          " || true
+          pnpm ingest --file data/ingest-pdfs-small.json || true
+          # Second pass retries only the documents that failed on a cold model.
+          pnpm ingest --file data/ingest-pdfs-small.json
+
+      - name: Point at production corpus
+        if: ${{ inputs.corpus == 'full' }}
+        run: |
+          if [[ -z "${{ secrets.EVAL_DATABASE_URL }}" ]]; then
+            echo "::error::full-corpus mode requires the EVAL_DATABASE_URL secret (a Postgres URL to a seeded copy of the corpus). See web-app/docs/EVALUATION.md."
+            exit 1
+          fi
+          # JSON-escape for GITHUB_ENV; the URL may contain special characters.
+          echo "DATABASE_URL=${{ secrets.EVAL_DATABASE_URL }}" >> "$GITHUB_ENV"
+
+      - name: Run 30-question evaluation
+        run: pnpm exec tsx scripts/eval-crag-webapp.ts
+
+      - name: Upload evaluation results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: crag-eval-results-${{ inputs.corpus || 'small' }}
+          path: web-app/data/processed/webapp_crag_30_results.json
+          if-no-files-found: warn

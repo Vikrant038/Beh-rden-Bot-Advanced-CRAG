@@ -16,13 +16,19 @@ from src.utils import get_data_dir, get_project_root
 from src.errors import NotFoundError
 
 FINE_TUNED_MODEL_PATH = os.path.join(get_project_root(), "models", "bge_base_german_visa_finetuned")
-DEFAULT_MODEL = "BAAI/bge-base-en-v1.5"
-EMBEDDING_DIM = 768
+# Default to BGE-M3 (1024-d) to match production: the web-app persists
+# document_chunks as vector(1024) and retrieval.py queries a 1024-d FAISS index.
+# The legacy 768-d fine-tuned model remains selectable via EMBEDDING_MODEL.
+DEFAULT_MODEL = "BAAI/bge-m3"
+EMBEDDING_DIM = 1024
 
 
 def load_embedding_model() -> SentenceTransformer:
-    """Load fine-tuned model if available, otherwise fallback to default BGE."""
-    model_name = FINE_TUNED_MODEL_PATH if os.path.exists(FINE_TUNED_MODEL_PATH) else DEFAULT_MODEL
+    """Load the embedding model — BGE-M3 (1024-d) by default, or a legacy
+    model when EMBEDDING_MODEL is set explicitly. The legacy 768-d fine-tuned
+    model is NOT auto-selected anymore: production persists vector(1024), so a
+    freshly built embed must land in the same 1024-d space as retrieval."""
+    model_name = os.environ.get("EMBEDDING_MODEL") or DEFAULT_MODEL
     logger.info(f"[EMBED] Loading embedding model from: {model_name}...")
     return SentenceTransformer(model_name)
 

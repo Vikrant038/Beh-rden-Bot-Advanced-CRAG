@@ -14,7 +14,7 @@
  *      completion, estimated background wall time
  *
  * Usage:
- *   pnpm exec tsx scripts/measure-ingest.ts [--file=../data/pdfs/laws/englisch_aufenthg.pdf]
+ *   pnpm exec tsx scripts/measure-ingest.ts [--file=data/pdfs/laws/englisch_aufenthg.pdf]
  *                                          [--provider=gemini|hf]
  *                                          [--max-blocks=N]   # cap embed loop (default: all)
  *                                          [--store-blocks=N] # real-DB sample size (default 10)
@@ -49,7 +49,7 @@ function parseArgs(argv: string[]) {
     return hit ? hit.slice(name.length + 3) : fallback;
   };
   return {
-    file: get("file", "../data/pdfs/laws/englisch_aufenthg.pdf"),
+    file: get("file", "data/pdfs/laws/englisch_aufenthg.pdf"),
     provider: get("provider", process.env.GEMINI_API_KEY ? "gemini" : "hf"),
     maxBlocks: Number(get("max-blocks", "0")), // 0 = all
     storeBlocks: Number(get("store-blocks", "10")),

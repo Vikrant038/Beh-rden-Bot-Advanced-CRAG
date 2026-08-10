@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 from src.retrieval import dense_retrieve, get_embedding_model
-from src.advanced_retrieval import is_query_out_of_domain, advanced_crag_retrieve
+from src.advanced_retrieval import is_query_out_of_domain, advanced_crag_retrieve, OUT_OF_DOMAIN_MESSAGE
 from src.llm_client import call_llm, call_llm_stream
 from src.pii_masker import mask_pii
 from src.semantic_cache import get_semantic_cache
@@ -320,7 +320,7 @@ async def run_agentic_rag_pipeline(user_query: str, session_id: str = "default",
         logger.info("[AGENT ORCHESTRATOR] Out-of-Domain query detected. Rejecting early.")
         return AgenticRAGResponse(
             user_query=user_query,
-            final_answer="**Out of Domain Detected:** I am a specialized assistant for German immigration, student visas, and university admissions. I cannot help with general queries such as programming, sports, or other out-of-scope topics.",
+            final_answer=OUT_OF_DOMAIN_MESSAGE,
             research_steps=[{"iteration": 1, "action": "Stage 0A Guardrail", "thought": "Check domain validity of the query.", "observation": "Query rejected as Out of Domain."}],
             analysis_matrix=AnalystComparisonMatrix(summary="Out of domain.", structured_table="", key_insights=[], verified_facts=[]),
             sources=[],
@@ -372,7 +372,7 @@ async def run_agentic_rag_pipeline_stream(user_query: str, session_id: str = "de
 
     # Stage 0A Entrypoint Domain Guardrail Check (Once at entry)
     if await is_query_out_of_domain(masked_query):
-        ood_msg = "**Out of Domain Detected:** I am a specialized assistant for German immigration, student visas, and university admissions. I cannot help with general queries such as programming, sports, or other out-of-scope topics."
+        ood_msg = OUT_OF_DOMAIN_MESSAGE
         yield f"data: {json.dumps({'text': ood_msg})}\n\n"
         yield f"data: {json.dumps({'done': True, 'sources': []})}\n\n"
         return

@@ -102,7 +102,7 @@ value is fine on Neon free).
 
 Once migrations are applied on Neon (§2), transfer the vectors with
 `web-app/scripts/seed-corpus.sh` — **no re-embedding**. The corpus is embedded
-locally with `BAAI/bge-m3` (1024-dim, multilingual) via `scripts/embed-server.py`,
+locally with `BAAI/bge-m3` (1024-dim, multilingual) via `mvp-python/scripts/embed-server.py`,
 so both sides share the bge-m3 space:
 
 ```bash
@@ -174,7 +174,7 @@ poorly and forced CRAG web-search fallbacks). Options that fit:
 | **Ollama (local)** | bge-m3 = 1024 | ✅ | ❌ needs a **self-hosted endpoint reachable from Vercel** (small VM/Railway/Fly) | $0/unlimited, best quality, but an always-on box to babysit. |
 
 **Decision: Cloudflare bge-m3 — the same model on both sides.** The corpus is embedded
-locally with `BAAI/bge-m3` via `web-app/scripts/embed-server.py` (FastAPI +
+locally with `BAAI/bge-m3` via `mvp-python/scripts/embed-server.py` (FastAPI +
 sentence-transformers, MPS GPU), and queries are embedded on Vercel by the deployed worker
 running the same weights. Same model = same vector space — the non-negotiable rule for
 pgvector cosine retrieval (a mix, e.g. Ollama corpus + Gemini queries, returns garbage

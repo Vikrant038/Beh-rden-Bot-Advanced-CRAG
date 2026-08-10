@@ -36,7 +36,7 @@ already spans both languages in one space — it was the **sparse path that need
 ### Cloudflare worker scope (confirmed)
 
 The Cloudflare Worker (`embeddings-worker/`) is used for **query-time embedding only**. Corpus
-embedding runs through the local `scripts/embed-server.py` (sentence-transformers) at ingest;
+embedding runs through the local `mvp-python/scripts/embed-server.py` (sentence-transformers) at ingest;
 reranking uses a separate HF endpoint; generation uses Groq. The batch change therefore collapses
 the worker traffic from **~6 sequential calls per turn to 1**.
 

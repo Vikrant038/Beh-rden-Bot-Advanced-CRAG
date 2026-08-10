@@ -96,9 +96,26 @@ def format_context_for_prompt(chunks: List[dict]) -> str:
 
 @observe(name="trace_standard_crag_pipeline")
 async def rag_answer(request: RAGQueryRequest) -> RAGResponse:
-    from src.advanced_retrieval import advanced_crag_retrieve
+    from src.advanced_retrieval import advanced_crag_retrieve, check_query_guardrail
     
     start_time = time.time()
+
+    # Stage 0A — deterministic term cache (spam + illegal-advice/safety terms)
+    # with an LLM classifier fallback. Blocked queries are refused up front:
+    # no retrieval, no cache write, no LLM answer generation.
+    guard = await check_query_guardrail(request.question)
+    if guard["blocked"]:
+        total_latency = (time.time() - start_time) * 1000
+        logger.info(f"[RAG] Guardrail blocked query ({guard['reason']}): {request.question[:60]}")
+        return RAGResponse(
+            question=request.question,
+            answer=guard["message"],
+            sources=[],
+            retrieval_path="GUARDRAIL_BLOCKED",
+            latency_ms=total_latency,
+            is_grounded=False,
+        )
+
     cache = get_semantic_cache()
     memory = get_session_memory(request.session_id)
 

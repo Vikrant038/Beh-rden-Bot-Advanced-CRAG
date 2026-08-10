@@ -552,7 +552,7 @@ const { mutate } = trpc.chat.useMutation()
 - `docs/security/SECURITY_EXCEPTIONS.md` — Known limitations
 - `../CHANGELOG.md` — Release history
 - `prisma/schema.prisma` — Database schema (source of truth)
-- [`tests/README.md`](../../tests/README.md) — Web-app vs Python test-suite split, how to run each, CI ownership
+- [`tests/README.md`](../../mvp-python/tests/README.md) — Web-app vs Python test-suite split, how to run each, CI ownership
 
 ---
 
