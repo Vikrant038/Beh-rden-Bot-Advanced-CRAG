@@ -52,16 +52,10 @@ env:
   # EVAL_DATABASE_URL secret in full-corpus mode.
   DATABASE_URL: postgresql://behoerden_app:behoerden_password@localhost:5432/behoerden_bot
   MIGRATION_DATABASE_URL: postgresql://behoerden_app:behoerden_password@localhost:5432/behoerden_bot
-  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-  GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'llama-3.1-8b-instant' }}
-  # BGE-M3 embeddings + reranker. Default HF_INFERENCE_URL is the HF Inference
-  # API; a deployed Cloudflare embeddings worker (warmer, fewer cold starts)
-  # can be supplied via the HF_INFERENCE_URL secret.
-  EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL || 'BAAI/bge-m3' }}
-  HF_INFERENCE_URL: ${{ secrets.HF_INFERENCE_URL || 'https://api-inference.huggingface.co' }}
-  HF_TOKEN: ${{ secrets.HF_TOKEN }}
-  RERANKER_MODEL: ${{ secrets.RERANKER_MODEL || 'BAAI/bge-reranker-v2-m3' }}
-  RERANKER_TOKEN: ${{ secrets.HF_TOKEN }}
+  # NOTE: API secrets are deliberately NOT in this workflow-level env — they
+  # are scoped to the individual steps that need them (step-level env) so a
+  # secret is never visible to unrelated steps/jobs (semgrep
+  # gha-workflow-env-secret).
 
 defaults:
   run:
@@ -111,6 +105,11 @@ jobs:
 
       - name: Seed CI corpus (migrate + ingest small subset)
         if: ${{ inputs.corpus != 'full' }}
+        # Embedding-only step: it needs the model + HF endpoint + token.
+        env:
+          EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL || 'BAAI/bge-m3' }}
+          HF_INFERENCE_URL: ${{ secrets.HF_INFERENCE_URL || 'https://api-inference.huggingface.co' }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           set -euo pipefail
           pnpm prisma migrate deploy
@@ -147,6 +146,16 @@ jobs:
           echo "DATABASE_URL=${{ secrets.EVAL_DATABASE_URL }}" >> "$GITHUB_ENV"
 
       - name: Run 30-question evaluation
+        # The only step that calls the LLM: generation (GROQ) + judge, BGE-M3
+        # embeddings + cross-encoder reranker (HF). Everything is scoped here
+        # so no other step can read these secrets.
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'llama-3.1-8b-instant' }}
+          EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL || 'BAAI/bge-m3' }}
+          HF_INFERENCE_URL: ${{ secrets.HF_INFERENCE_URL || 'https://api-inference.huggingface.co' }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          RERANKER_MODEL: ${{ secrets.RERANKER_MODEL || 'BAAI/bge-reranker-v2-m3' }}
         run: pnpm exec tsx scripts/eval-crag-webapp.ts
 
       - name: Upload evaluation results

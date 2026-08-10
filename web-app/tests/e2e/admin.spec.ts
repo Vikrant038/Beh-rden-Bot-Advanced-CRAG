@@ -11,6 +11,12 @@ test("redirects a non-admin user away from /admin", async ({ page }) => {
 
 test("allows an admin to view the dashboard", async ({ page }) => {
   await setSessionCookie(page.context(), { role: "ADMIN" });
+  // MetricCard counts up 0→value on load; under reduced motion it renders the
+  // final value immediately. Without this, getByText("12") transiently matches
+  // BOTH the Total-users card and the Total-messages counter mid-animation
+  // (strict-mode flake) — reduced motion makes the value assertions
+  // deterministic.
+  await page.emulateMedia({ reducedMotion: "reduce" });
 
   await mockTrpc(page, {
     "admin.metrics": () => ({

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useReducedMotion } from "framer-motion";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -73,10 +74,17 @@ const ACCENT_HEX: Record<NonNullable<MetricCardProps["accent"]>, string> = {
   warning: "#b45309",
 };
 
-function useAnimatedCount(target: number, durationMs = 600): number {
-  const [value, setValue] = useState(0);
+function useAnimatedCount(target: number, durationMs = 600, reduceMotion = false): number {
+  const [value, setValue] = useState(reduceMotion ? target : 0);
 
   useEffect(() => {
+    // Every animation in this codebase is reduced-motion-guarded; the count-up
+    // must render the final value immediately when the OS prefers reduced
+    // motion (also makes animated-value assertions deterministic in E2E).
+    if (reduceMotion) {
+      setValue(target);
+      return;
+    }
     let frame = 0;
     const start = performance.now();
     const tick = (now: number) => {
@@ -88,7 +96,7 @@ function useAnimatedCount(target: number, durationMs = 600): number {
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [target, durationMs]);
+  }, [target, durationMs, reduceMotion]);
 
   return value;
 }
@@ -104,7 +112,10 @@ export function MetricCard({
   sparkline,
   loading = false,
 }: MetricCardProps) {
-  const animated = useAnimatedCount(value);
+  // `useReducedMotion` returns null on the first render (SSR/hydration); treat
+  // null as "animate" so the count-up behaves normally outside of tests.
+  const reduceMotion = useReducedMotion() === true;
+  const animated = useAnimatedCount(value, 600, reduceMotion);
   const display = format ? format(animated) : animated.toLocaleString();
 
   const trendUp = (trend ?? 0) >= 0;
