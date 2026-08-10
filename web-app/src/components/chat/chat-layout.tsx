@@ -1,16 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  BookOpen,
-  ChevronDown,
-  Copy,
-  GraduationCap,
-  Menu,
-  MoreHorizontal,
-  Trash2,
-  Zap,
-} from "lucide-react";
+import { BookOpen, ChevronDown, Copy, Menu, MoreHorizontal, Trash2, Zap } from "lucide-react";
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
 import { ModeProvider, useMode } from "@/components/chat/mode-context";
 import { ChatActionsProvider, useChatActions } from "@/components/chat/chat-actions-context";
@@ -358,15 +349,10 @@ export function ChatLayout({ children }: { children: React.ReactNode }) {
                 <Menu className="h-5 w-5" />
               </button>
               <MobileModeDropdown />
-              {/* Brand mark + wordmark — visible at every width, centered
-                between the mode dropdown and the actions menu (truncates on
-                very narrow screens). */}
-              <span className="flex min-w-0 flex-1 items-center justify-center gap-1.5 px-1">
-                <span className="brand-gradient grid h-7 w-7 shrink-0 place-items-center rounded-lg text-white shadow-[0_4px_12px_-4px_var(--color-primary)]">
-                  <GraduationCap className="h-3.5 w-3.5" />
-                </span>
-                <span className="truncate text-sm font-semibold">Behörden-Bot</span>
-              </span>
+              {/* No brand in the top bar on smaller screens — it lives in the
+                sidebar (rail + drawer) instead. A spacer keeps the mode
+                dropdown on the left and the actions menu at the far right. */}
+              <span className="min-w-0 flex-1" aria-hidden="true" />
               <MobileActionsMenu />
             </header>
 
