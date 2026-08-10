@@ -19,7 +19,7 @@ export interface Env {
   AI: {
     run(
       model: string,
-      inputs: { text: string | string[] } | { query: string; documents: string[] },
+      inputs: { text: string | string[] } | { query: string; contexts: string[] },
     ): Promise<
       { shape: number[]; data: number[][] } | { result: Array<{ index: number; score: number }> }
     >;
@@ -67,7 +67,7 @@ export default {
   async scheduled(_event: ScheduledEventLike, env: Env): Promise<void> {
     try {
       await env.AI.run(MODEL, { text: "keep-warm" });
-      await env.AI.run(RERANKER_MODEL, { query: "keep-warm", documents: ["keep-warm"] });
+      await env.AI.run(RERANKER_MODEL, { query: "keep-warm", contexts: ["keep-warm"] });
     } catch (error) {
       // Best-effort: a failed tick must not crash the worker, but log it so a
       // silently broken keep-warm (wrong input shape, model evicted forever)
@@ -148,7 +148,7 @@ export default {
  *   → [[{label, score}], ...]  (one row per pair, in input order)
  *
  * Workers AI's only reranker (@cf/baai/bge-reranker-base) speaks a different
- * shape: `{query, documents}` in, `{result: [{index, score}]}` out (indices in
+ * shape: `{query, contexts}` in, `{result: [{index, score}]}` out (indices in
  * relevance order). This handler translates both ways and returns the HF shape
  * so the app's `extractScores` keeps working unchanged.
  */
@@ -204,9 +204,11 @@ async function handleRerank(request: Request, env: Env): Promise<Response> {
 
   let result: { result: Array<{ index: number; score: number }> };
   try {
+    // The Workers AI reranker contract is { query, contexts } — `documents`
+    // is rejected with a 5006 schema error (the exact failure we hit).
     result = (await env.AI.run(RERANKER_MODEL, {
       query,
-      documents: capped,
+      contexts: capped,
     })) as { result: Array<{ index: number; score: number }> };
   } catch (error) {
     // Surface the real Workers AI error — a bare 1101 tells the operator
