@@ -165,6 +165,114 @@ export const CACHE_TTL_SECONDS = 7 * 24 * 60 * 60;
  */
 export const QUERY_EMBEDDING_PREFIX = "Represent this sentence for searching relevant passages: ";
 
+// ─── Guardrail & safety ─────────────────────────────────────────────────────
+
+/**
+ * Max chars of the user query kept for the LLM guardrail classifier (and the
+ * <user_query> delimiter block). Longer queries are truncated so an attacker
+ * cannot smuggle a large instruction-override payload.
+ */
+export const GUARDRAIL_MAX_QUERY_CHARS = 500;
+
+/** Temperature for the guardrail's JSON verdict (0 = deterministic). */
+export const GUARDRAIL_LLM_TEMPERATURE = 0;
+
+/**
+ * Canonical out-of-domain rejection message, shared by the agentic
+ * orchestrator and the chat stream pipeline.
+ */
+export const OUT_OF_DOMAIN_MESSAGE =
+  "**Out of Domain Detected:** I am a specialized assistant for German immigration, " +
+  "student visas, and university admissions. I cannot help with general queries such as " +
+  "programming, sports, or other out-of-scope topics.";
+
+/**
+ * Deterministic off-topic term cache — instant rejection BEFORE the LLM
+ * classifier (mirrors the TS prod guardrail's negative-term list).
+ */
+export const NEGATIVE_TERMS = [
+  "japan",
+  "stock trading",
+  "algorithmic",
+  "crypto",
+  "recipe",
+  "cooking",
+  "nba",
+  "football",
+  "cricket",
+  "python script for trading",
+];
+
+/**
+ * Safety-intent class: immigration-adjacent queries that seek to defraud or
+ * illegally circumvent the law. Checked deterministically BEFORE the LLM
+ * classifier and fail CLOSED (never depends on an LLM verdict that could fail
+ * open on a transport error). Includes German equivalents — the corpus and
+ * eval testset are bilingual.
+ */
+export const SAFETY_TERMS = [
+  // English
+  "fake",
+  "forgery",
+  "forge",
+  "forged",
+  "forging",
+  "fraud",
+  "bribe",
+  "pay someone",
+  "counterfeit",
+  // German
+  "fälschung",
+  "fälschen",
+  "gefälscht",
+  "bestechung",
+  "bestechen",
+  "bestechungsgeld",
+  "erschleichen",
+  "erschlichen",
+];
+
+// ─── Query expansion ────────────────────────────────────────────────────────
+
+/**
+ * Max chars of each generated sub-query (bilingual expansion, Stage 1).
+ * Sub-queries longer than this are truncated before retrieval.
+ */
+export const MAX_SUBQUERY_CHARS = 500;
+
+/** Max tokens for the query-expansion JSON response. */
+export const QUERY_EXPANSION_MAX_TOKENS = 250;
+
+/** Temperature for query expansion (slightly varied rephrasings). */
+export const QUERY_EXPANSION_TEMPERATURE = 0.2;
+
+// ─── Conversation memory ────────────────────────────────────────────────────
+
+/**
+ * How many recent messages the summary-buffer keeps verbatim before older
+ * turns are rolled into a summary.
+ */
+export const MAX_VERBATIM_MESSAGES = 8;
+
+/** Max chars of an old assistant turn fed into the memory summarizer. */
+export const MEMORY_SUMMARY_MAX_CHARS = 200;
+
+// ─── Streaming ──────────────────────────────────────────────────────────────
+
+/**
+ * Approx. words per token-chunk when streaming the assistant answer (keeps
+ * the SSE cursor smooth without flooding the wire).
+ */
+export const WORDS_PER_CHUNK = 3;
+
+// ─── Agent context caps ─────────────────────────────────────────────────────
+
+/** Max chars of the research context embedded in the analyst's matrix prompt. */
+export const ANALYST_RESEARCH_CONTEXT_CHARS = 3500;
+
+/** Max chars of the research context embedded in the writer's final prompt. */
+export const ANALYST_FINAL_CONTEXT_CHARS = 2500;
+
 // ─── Default LLM parameters ─────────────────────────────────────────────────
 
 /** LLM temperature for summarization / memory (low = deterministic). */

@@ -1,9 +1,12 @@
 import { callLLMJson } from "@/server/llm/json";
 import { createLogger } from "@/server/lib/logger";
+import {
+  MAX_SUBQUERY_CHARS,
+  QUERY_EXPANSION_MAX_TOKENS,
+  QUERY_EXPANSION_TEMPERATURE,
+} from "@/config/app";
 
 const logger = createLogger("query-expansion");
-
-const MAX_SUBQUERY_CHARS = 500;
 
 /**
  * Multi-query bilingual expansion (Stage 1): LLM generates alternative search
@@ -35,7 +38,11 @@ export async function generateSubQueries(query: string, numQueries: number = 5):
     `Return ONLY a JSON object with the exact shape: ` +
     `{"english": ["..."], "german": ["..."]}.`;
 
-  const parsed = await callLLMJson<{ english?: unknown; german?: unknown }>(prompt, 250, 0.2);
+  const parsed = await callLLMJson<{ english?: unknown; german?: unknown }>(
+    prompt,
+    QUERY_EXPANSION_MAX_TOKENS,
+    QUERY_EXPANSION_TEMPERATURE,
+  );
   const english = Array.isArray(parsed?.english) ? parsed.english : [];
   const german = Array.isArray(parsed?.german) ? parsed.german : [];
   if (english.length > 0 || german.length > 0) {

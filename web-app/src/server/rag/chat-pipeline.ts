@@ -19,6 +19,7 @@ import type {
   ChatStreamEvent,
 } from "@/lib/chat/types";
 import { MAX_QUERY_LENGTH } from "@/lib/chat/types";
+import { WORDS_PER_CHUNK } from "@/config/app";
 
 const logger = createLogger("chat-stream");
 
@@ -35,8 +36,6 @@ export interface ChatStreamInput {
 
 const GENERIC_ERROR_MESSAGE =
   "I'm sorry, I encountered an error while processing your request. Please try again in a moment.";
-
-const WORDS_PER_CHUNK = 3;
 
 function chunkText(text: string, wordsPerChunk: number = WORDS_PER_CHUNK): string[] {
   // Keep each word's trailing whitespace (spaces + newlines) attached so that

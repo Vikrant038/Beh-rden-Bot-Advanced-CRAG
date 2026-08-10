@@ -2,6 +2,12 @@ import { prisma } from "@/server/db";
 import { callLLM } from "@/server/llm/client";
 import type { LlmMessage } from "@/server/llm/client";
 import { createLogger } from "@/server/lib/logger";
+import {
+  LLM_MAX_TOKENS_SUMMARY,
+  LLM_TEMPERATURE_LOW,
+  MAX_VERBATIM_MESSAGES,
+  MEMORY_SUMMARY_MAX_CHARS,
+} from "@/config/app";
 
 const logger = createLogger("memory");
 
@@ -9,8 +15,6 @@ export interface MemoryTurn {
   role: "user" | "assistant";
   content: string;
 }
-
-const MAX_VERBATIM_MESSAGES = 8;
 
 /**
  * Summary-buffer conversational memory (ported from `src/memory.py`):
@@ -104,13 +108,16 @@ export class SummaryBufferMemory {
       `Current Background Summary: '${this.rollingSummary}'\n\n` +
       `New messages to integrate:\n` +
       `User: ${oldestUser.content}\n` +
-      `Assistant: ${oldestAssistant.content.slice(0, 200)}\n\n` +
+      `Assistant: ${oldestAssistant.content.slice(0, MEMORY_SUMMARY_MAX_CHARS)}\n\n` +
       `Update the background summary into 2-3 bullet points focusing ONLY on key user details ` +
       `(nationality, degree goal, university, visa stage). Keep under 100 words.`;
 
     try {
       const messages: LlmMessage[] = [{ role: "user", content: prompt }];
-      const summary = await callLLM(messages, { maxTokens: 150, temperature: 0.1 });
+      const summary = await callLLM(messages, {
+        maxTokens: LLM_MAX_TOKENS_SUMMARY,
+        temperature: LLM_TEMPERATURE_LOW,
+      });
       this.rollingSummary = summary.trim();
     } catch (error) {
       logger.warn({ error: String(error) }, "[MEMORY] summary update failed");

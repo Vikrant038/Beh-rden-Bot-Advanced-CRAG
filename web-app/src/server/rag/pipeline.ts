@@ -16,6 +16,7 @@ import { maskPii } from "@/server/pii/masker";
 import { formatChunksForPrompt } from "@/server/rag/tools/web-search";
 import type { SemanticCache } from "@/server/rag/cache/semantic-cache";
 import { buildStandardSystemPrompt } from "@/server/rag/prompt";
+import { LLM_MAX_TOKENS_ANSWER, LLM_TEMPERATURE_MEDIUM } from "@/config/app";
 import { LlmUsageCollector, withLlmUsageCollector, type LlmCallRecord } from "@/server/llm/usage";
 import { createLogger } from "@/server/lib/logger";
 
@@ -227,7 +228,10 @@ export async function runStandardCrag(
         { role: "user", content: userPrompt },
       ];
       try {
-        answerText = await callLLM(messages, { maxTokens: 600, temperature: 0.2 });
+        answerText = await callLLM(messages, {
+          maxTokens: LLM_MAX_TOKENS_ANSWER,
+          temperature: LLM_TEMPERATURE_MEDIUM,
+        });
         isGrounded = true;
         pathUsed = gate.pathUsed;
       } catch (error) {
