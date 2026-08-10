@@ -20,6 +20,10 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db";
 import { ingestUrl, ingestPdf } from "@/server/ingest/pipeline";
+import { GroqRateLimiter } from "@/server/ingest/translate";
+
+/** Shared rate limiter for background ingest jobs (admin upload / re-sync). */
+let jobsRateLimiter: GroqRateLimiter | undefined;
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("ingest-jobs");
@@ -245,10 +249,15 @@ async function runJob(
     if (!job.payload || !job.filename) {
       throw new Error("PDF job missing payload or filename");
     }
+    if (!jobsRateLimiter) {
+      jobsRateLimiter = new GroqRateLimiter();
+    }
     const result = await ingestPdf(Buffer.from(job.payload), job.filename, {
       ...(job.title ? { title: job.title } : {}),
       resumeFrom: job.progress,
       isBudgetExhausted,
+      normalizeEnglish: true,
+      rateLimiter: jobsRateLimiter,
     });
     await finalizeJob(job.id, result);
     return;
@@ -257,9 +266,14 @@ async function runJob(
   if (!job.url) {
     throw new Error("URL job missing url");
   }
+  if (!jobsRateLimiter) {
+    jobsRateLimiter = new GroqRateLimiter();
+  }
   const result = await ingestUrl(job.url, {
     ...(job.title ? { title: job.title } : {}),
     force: job.force,
+    normalizeEnglish: true,
+    rateLimiter: jobsRateLimiter,
   });
   await finalizeJob(job.id, result);
 }

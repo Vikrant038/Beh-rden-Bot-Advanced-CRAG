@@ -20,6 +20,7 @@
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
     "ingest": "tsx src/server/ingest/cli.ts",
+    "translate-corpus": "tsx scripts/translate-corpus.ts",
     "storage:estimate": "tsx scripts/estimate-storage.ts",
     "prepare": "husky"
   },

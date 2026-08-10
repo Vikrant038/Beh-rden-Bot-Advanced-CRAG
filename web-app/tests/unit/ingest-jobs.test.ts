@@ -153,10 +153,14 @@ describe("processIngestJobs (cron worker)", () => {
 
     expect(result.processed).toBe(1);
     expect(result.remaining).toBe(0);
-    expect(mockedIngestUrl).toHaveBeenCalledWith("https://example.com/a", {
-      title: undefined,
-      force: false,
-    });
+    expect(mockedIngestUrl).toHaveBeenCalledWith(
+      "https://example.com/a",
+      expect.objectContaining({
+        force: false,
+        normalizeEnglish: true,
+        rateLimiter: expect.any(Object),
+      }),
+    );
     expect(prismaMock.ingestJob.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ status: "DONE" }),
@@ -240,6 +244,8 @@ describe("processIngestJobs (cron worker)", () => {
       title: "Antrag",
       resumeFrom: 0,
       isBudgetExhausted: expect.any(Function),
+      normalizeEnglish: true,
+      rateLimiter: expect.any(Object),
     });
   });
 
@@ -275,6 +281,8 @@ describe("processIngestJobs (cron worker)", () => {
     expect(mockedIngestPdf).toHaveBeenCalledWith(buffer, "large.pdf", {
       resumeFrom: 5,
       isBudgetExhausted: expect.any(Function),
+      normalizeEnglish: true,
+      rateLimiter: expect.any(Object),
     });
 
     expect(prismaMock.ingestJob.update).toHaveBeenCalledWith(

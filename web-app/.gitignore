@@ -20,3 +20,6 @@ scratch/verify-rag-german.ts
 # Generated eval checkpoints only — the eval harness + testset are committed
 # so the eval workflow can run in CI.
 data/processed/
+
+# Translation checkpoint cache (English-normalized corpus).
+data/translation-cache/

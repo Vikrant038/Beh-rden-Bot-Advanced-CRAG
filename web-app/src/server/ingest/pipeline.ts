@@ -33,6 +33,7 @@ import { getCorpusProvider } from "@/server/rag/instance";
 import { ExternalApiError } from "@/server/lib/errors";
 import { runWithTrace } from "@/server/tracing";
 import { createLogger } from "@/server/lib/logger";
+import { translateToEnglish, type GroqRateLimiter } from "@/server/ingest/translate";
 
 const logger = createLogger("ingest");
 
@@ -56,6 +57,15 @@ export interface IngestOptions {
   embeddingClient?: EmbeddingClient;
   /** Re-ingest even when the content hash is unchanged. */
   force?: boolean;
+  /**
+   * When true, the text is normalized to English before chunking/embedding:
+   * non-English documents are translated via Groq (rate-limited). The rate
+   * limiter *must* be provided when this is true (shared across pipeline
+   * calls so the token bucket is respected globally).
+   */
+  normalizeEnglish?: boolean;
+  /** Groq rate limiter for translation (required when normalizeEnglish is true). */
+  rateLimiter?: GroqRateLimiter;
   /**
    * Optional display-name override. Defaults to the scraped `<title>` for URLs
    * and the filename for PDFs. When provided on a content-unchanged re-ingest,
@@ -130,7 +140,48 @@ async function ingestUrlInner(rawUrl: string, options: IngestOptions = {}): Prom
   }
 
   const titleOverride = options.title?.trim();
-  return persistIngested(url, titleOverride || scraped.title, cleanText(scraped.text), options);
+  const cleaned = cleanText(scraped.text);
+  return persistIngestedWithNormalization(url, titleOverride || scraped.title, cleaned, options);
+}
+
+async function persistIngestedWithNormalization(
+  sourceKey: string,
+  title: string,
+  cleaned: string,
+  options: IngestOptions = {},
+): Promise<IngestResult> {
+  const text = options.normalizeEnglish ? await normalizeToEnglish(cleaned, options) : cleaned;
+  return persistIngested(sourceKey, title, text, options);
+}
+
+/**
+ * Translates the text to English if it is not already English, using the
+ * Goq rate limiter from options. Returns the (possibly translated) text.
+ */
+export async function normalizeToEnglish(
+  text: string,
+  options: IngestOptions = {},
+): Promise<string> {
+  const limiter = options.rateLimiter;
+  if (!limiter) {
+    logger.warn(
+      "[INGEST] normalizeEnglish requested but no rateLimiter provided — skipping translation",
+    );
+    return text;
+  }
+  try {
+    const result = await translateToEnglish(text, limiter);
+    if (result.translated) {
+      logger.info(
+        { language: result.language, tokensUsed: result.tokensUsed },
+        "[INGEST] translated to English",
+      );
+    }
+    return result.englishText;
+  } catch (error) {
+    logger.warn({ error: String(error) }, "[INGEST] translation failed — using original text");
+    return text;
+  }
 }
 
 /**
@@ -363,7 +414,7 @@ export async function ingestPdf(
   return runWithTrace({ name: "ingest-pdf", metadata: { filename }, input: filename }, async () => {
     const parsed = await parsePdf(buffer);
     const cleaned = cleanText(parsed.text);
-    const result = await persistIngested(
+    const result = await persistIngestedWithNormalization(
       pdfSourceKey(buffer, filename),
       options.title?.trim() || filename,
       cleaned,

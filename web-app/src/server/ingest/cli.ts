@@ -34,9 +34,14 @@ import {
   ingestPdf,
   ingestUrl,
   syncAllDocuments,
+  type IngestOptions,
   type IngestResult,
 } from "@/server/ingest/pipeline";
+import { GroqRateLimiter } from "@/server/ingest/translate";
 import { createLogger } from "@/server/lib/logger";
+
+/** Shared rate limiter for the CLI run (reused across all documents). */
+let cliRateLimiter: GroqRateLimiter | undefined;
 
 const logger = createLogger("ingest-cli");
 
@@ -46,6 +51,7 @@ interface CliArgs {
   sync: boolean;
   force: boolean;
   title?: string;
+  english: boolean;
 }
 
 /** A single ingest job from the CLI: either a URL or a local PDF path. */
@@ -58,7 +64,7 @@ interface IngestEntry {
 type CliIngestResult = IngestResult & { filename?: string };
 
 function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { urls: [], sync: false, force: false };
+  const args: CliArgs = { urls: [], sync: false, force: false, english: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--file" || arg === "-f") {
@@ -67,6 +73,8 @@ function parseArgs(argv: string[]): CliArgs {
       args.sync = true;
     } else if (arg === "--force") {
       args.force = true;
+    } else if (arg === "--english") {
+      args.english = true;
     } else if (arg === "--title") {
       args.title = argv[++i];
     } else {
@@ -165,25 +173,39 @@ function printSummary(results: CliIngestResult[]): void {
   }
 }
 
+function ingestOptions(args: CliArgs): IngestOptions {
+  const opts: IngestOptions = { force: args.force, title: args.title };
+  if (args.english) {
+    opts.normalizeEnglish = true;
+    if (!cliRateLimiter) {
+      cliRateLimiter = new GroqRateLimiter();
+    }
+    opts.rateLimiter = cliRateLimiter;
+  }
+  return opts;
+}
+
 async function runEntry(
   entry: IngestEntry,
   baseDir: string,
-  force: boolean,
+  opts: IngestOptions,
 ): Promise<CliIngestResult> {
   if (entry.kind === "url") {
-    return ingestUrl(entry.value, { force, title: entry.title });
+    return ingestUrl(entry.value, opts);
   }
   const pdfPath = isAbsolute(entry.value) ? entry.value : resolve(baseDir, entry.value);
   const buffer = readFileSync(pdfPath);
-  return ingestPdf(buffer, basename(pdfPath), { force, title: entry.title });
+  return ingestPdf(buffer, basename(pdfPath), opts);
 }
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
   let results: CliIngestResult[];
+  const opts = ingestOptions(args);
+
   if (args.sync) {
-    results = await syncAllDocuments({ force: args.force });
+    results = await syncAllDocuments(opts);
   } else {
     const entries: IngestEntry[] = [];
     const baseDir = args.file ? dirname(resolve(args.file)) : process.cwd();
@@ -203,7 +225,7 @@ async function main(): Promise<void> {
 
     if (entries.length === 0) {
       process.stderr.write(
-        'Usage: pnpm ingest <url> [url...] [--title "Name"] | --file <path> | --sync [--force]\n',
+        'Usage: pnpm ingest <url> [url...] [--title "Name"] | --file <path> | --sync [--force] [--english]\n',
       );
       process.exit(2);
     }
@@ -211,7 +233,7 @@ async function main(): Promise<void> {
     results = [];
     for (const entry of entries) {
       try {
-        results.push(await runEntry(entry, baseDir, args.force));
+        results.push(await runEntry(entry, baseDir, opts));
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         results.push({
