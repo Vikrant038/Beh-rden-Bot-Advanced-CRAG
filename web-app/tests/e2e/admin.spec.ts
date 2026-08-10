@@ -39,7 +39,10 @@ test("allows an admin to view the dashboard", async ({ page }) => {
 
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(page.getByText("Total users")).toBeVisible();
-  await expect(page.getByText("12")).toBeVisible();
+  // Exact match: the dashboard's "Last updated 12:01:55 PM · …" clock also
+  // contains "12" when the local time is noon — a non-exact locator would
+  // strict-mode collide with the Total-users value.
+  await expect(page.getByText("12", { exact: true })).toBeVisible();
   await expect(page.getByText("Total messages")).toBeVisible();
-  await expect(page.getByText("340")).toBeVisible();
+  await expect(page.getByText("340", { exact: true })).toBeVisible();
 });

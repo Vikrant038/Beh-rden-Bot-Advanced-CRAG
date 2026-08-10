@@ -123,9 +123,9 @@ export class HfEmbeddingClient implements EmbeddingClient {
       metadata: { input: texts },
     });
 
+    const url = `${this.inferenceUrl}/pipeline/feature-extraction/${encodeURIComponent(this.model)}`;
     let response: Response;
     try {
-      const url = `${this.inferenceUrl}/pipeline/feature-extraction/${encodeURIComponent(this.model)}`;
       response = await fetch(url, {
         method: "POST",
         headers: {
@@ -154,9 +154,15 @@ export class HfEmbeddingClient implements EmbeddingClient {
 
     if (!response.ok) {
       const detail = await response.text();
-      logger.warn({ status: response.status }, `[EMBED] HF error: ${detail}`);
-      generation.endError(new Error(`Embedding API error ${response.status}: ${detail}`));
-      throw new LLMProviderError(`Embedding API error ${response.status}: ${detail}`);
+      // Include the exact URL: a 404 HTML page usually means HF_INFERENCE_URL
+      // points at a Hugging Face endpoint instead of the Cloudflare embeddings
+      // worker (the worker answers plain-text 401 for a bad EMBED_TOKEN and
+      // JSON for success — never an HTML page).
+      logger.warn({ status: response.status, url }, `[EMBED] HF error: ${detail}`);
+      generation.endError(
+        new Error(`Embedding API error ${response.status} from ${url}: ${detail}`),
+      );
+      throw new LLMProviderError(`Embedding API error ${response.status} from ${url}: ${detail}`);
     }
 
     const data = (await response.json()) as number[][] | number[][][];

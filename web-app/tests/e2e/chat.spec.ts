@@ -168,6 +168,81 @@ test("shows the empty state for a fresh conversation without creating another", 
   expect(createCalls).toBe(0);
 });
 
+test("admin sees another user's conversation read-only (no composer, no write actions)", async ({
+  page,
+}) => {
+  await setSessionCookie(page.context(), { role: "ADMIN" });
+
+  // conversation.getById returns readOnly: true for a conversation owned by
+  // someone else (the admin read bypass in the server router).
+  const READ_ONLY_CONVERSATION = {
+    id: CONVERSATION_ID,
+    title: "User's conversation",
+    mode: "AGENTIC",
+    createdAt: ISO,
+    updatedAt: ISO,
+    readOnly: true,
+    messages: [
+      {
+        id: "user-other",
+        role: "USER",
+        content: "What do I need for a student visa?",
+        sources: [],
+        metadata: { mode: "agentic" },
+        createdAt: ISO,
+      },
+      {
+        id: "assistant-other",
+        role: "ASSISTANT",
+        content: "A passport, proof of funds, and a university admission.",
+        sources: [],
+        metadata: { stage: "done" },
+        createdAt: ISO,
+      },
+    ],
+  };
+
+  await mockTrpc(page, {
+    "conversation.getById": () => READ_ONLY_CONVERSATION,
+    "conversation.list": () => ({ items: [], nextCursor: null }),
+    "source.list": () => [],
+  });
+
+  await page.goto(`/chat/${CONVERSATION_ID}`);
+
+  // The read-only notice is visible and the thread is still readable.
+  await expect(page.getByText(/Read-only view/)).toBeVisible();
+  await expect(page.getByText("What do I need for a student visa?")).toBeVisible();
+  await expect(
+    page.getByText("A passport, proof of funds, and a university admission."),
+  ).toBeVisible();
+
+  // No composer, no send button, no regenerate/follow-up write surfaces.
+  await expect(page.getByPlaceholder(/Ask about visas/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Send message" })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Regenerate answer" }),
+  ).toHaveCount(0);
+  // The follow-up chips are hidden too (they would send a message).
+  await expect(page.getByText("How long does a German student visa take to process?")).toHaveCount(0);
+
+  // Write actions are unreachable on every breakpoint. Desktop shows them in
+  // the header (clear is disabled in read-only); mobile hides the header and
+  // moves copy/delete into the overflow menu — where read-only drops delete.
+  const isMobile = (page.viewportSize()?.width ?? 0) < 768;
+  if (isMobile) {
+    await page.getByRole("button", { name: "Conversation actions" }).click();
+    await expect(page.getByRole("menuitem", { name: "Copy conversation" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Delete conversation" })).toHaveCount(0);
+  } else {
+    // Present but inert — the server would reject it for a conversation the
+    // admin does not own.
+    await expect(page.getByRole("button", { name: "Clear conversation" })).toBeDisabled();
+    // Copy stays available: reading + exporting is the point of the view.
+    await expect(page.getByRole("button", { name: "Copy conversation" })).toBeVisible();
+  }
+});
+
 test("renders an error banner when the stream fails", async ({ page }) => {
   await setSessionCookie(page.context());
   await mockConversationRouters(page, PERSISTED_CONVERSATION);

@@ -283,7 +283,11 @@ export function ChatInterface({
       ...(actionsRef.current.onClear ? { onClear: () => actionsRef.current.onClear?.() } : {}),
     });
     return () => setActions(null);
-  }, [setActions]);
+    // `readOnly` arrives asynchronously (conversation.getById resolves after
+    // mount, flipping readOnly false→true). Without it in the deps the mobile
+    // overflow menu would keep its Delete entry for read-only views — the
+    // registration effect must re-run once the read-only state is known.
+  }, [setActions, readOnly]);
 
   const bubbleAnimation = reduceMotion
     ? {}

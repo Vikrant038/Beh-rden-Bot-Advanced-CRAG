@@ -108,17 +108,29 @@ jobs:
       - name: Generate Prisma client
         run: pnpm prisma generate
 
-      - name: Require the embedding endpoint
+      - name: Require + verify the embedding endpoint
         # The ingest + eval both embed with BGE-M3. HF_INFERENCE_URL must point
-        # at a reachable endpoint (the Cloudflare worker); the HF Inference API
-        # default is unreachable from many networks and produces cryptic
-        # per-PDF "Hugging Face API is unreachable" failures. Fail fast here
-        # instead.
+        # at the DEPLOYED Cloudflare embeddings worker; the HF Inference API
+        # default is unreachable from many networks and returns a 404 HTML page
+        # for the worker's route, which surfaces as cryptic per-PDF
+        # "Embedding API error 404" failures. The worker exposes an
+        # unauthenticated GET /healthz (JSON {"ok":true,...}); a Hugging Face
+        # URL returns 404 HTML for it. Fail fast here with the exact URL so a
+        # wrong endpoint is diagnosed before any ingest.
+        env:
+          HF_INFERENCE_URL: ${{ secrets.HF_INFERENCE_URL }}
         run: |
-          if [[ -z "${{ secrets.HF_INFERENCE_URL }}" ]]; then
+          set -euo pipefail
+          URL="${HF_INFERENCE_URL:-}"
+          if [[ -z "$URL" ]]; then
             echo "::error::HF_INFERENCE_URL secret is required — set it to your Cloudflare embeddings worker URL (https://<worker>.workers.dev). See web-app/docs/EVALUATION.md."
             exit 1
           fi
+          if ! curl -fsS --max-time 20 "${URL%/}/healthz" -o /tmp/healthz.json 2>/tmp/healthz.err; then
+            echo "::error::HF_INFERENCE_URL (${URL}) did not answer GET /healthz. It must point at the DEPLOYED Cloudflare embeddings worker (behoerden-embeddings.<your-account>.workers.dev) — not api-inference.huggingface.co or a Hugging Face Space URL. Detail: $(cat /tmp/healthz.err)"
+            exit 1
+          fi
+          echo "Embedding endpoint verified: $(cat /tmp/healthz.json)"
 
       - name: Seed CI corpus (migrate + ingest small subset)
         if: ${{ inputs.corpus != 'full' }}
