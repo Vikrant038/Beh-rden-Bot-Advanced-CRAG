@@ -20,6 +20,8 @@
  */
 
 import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db";
 import { cleanText } from "@/server/ingest/cleaner";
@@ -433,6 +435,62 @@ export function pdfSourceKey(buffer: Buffer, filename: string): string {
   return `pdf://${digest}/${safeName}`;
 }
 
+/** Parses a `pdf://` source key into its SHA-256 prefix and sanitized name. */
+export function parsePdfSourceKey(sourceKey: string): { hashPrefix: string; name: string } | null {
+  const match = /^pdf:\/\/([0-9a-f]{16})\/(.+)$/.exec(sourceKey);
+  if (!match) return null;
+  return { hashPrefix: match[1]!, name: match[2]! };
+}
+
+/**
+ * Directory that holds the source PDFs for `pdf://` documents (overridable
+ * via PDFS_DIR for tests). Re-ingests resolve the buffer by matching the
+ * SHA-256 prefix stored in the source key.
+ */
+const PDFS_DIR = process.env.PDFS_DIR ?? join(process.cwd(), "data", "pdfs");
+
+function walkPdfFiles(dir: string): string[] {
+  let files: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files = files.concat(walkPdfFiles(full));
+    } else if (entry.name.toLowerCase().endsWith(".pdf")) {
+      files.push(full);
+    }
+  }
+  return files;
+}
+
+/**
+ * Finds the on-disk PDF buffer for a `pdf://` source key by matching the
+ * first-16-hex SHA-256 prefix of the buffer (the same derivation used by
+ * `pdfSourceKey`). Returns null when no file under `dir` matches.
+ */
+export function findPdfBuffer(sourceKey: string, dir: string = PDFS_DIR): Buffer | null {
+  const parsed = parsePdfSourceKey(sourceKey);
+  if (!parsed) return null;
+  let files: string[];
+  try {
+    files = walkPdfFiles(dir);
+  } catch {
+    return null;
+  }
+  for (const file of files) {
+    let buffer: Buffer;
+    try {
+      buffer = readFileSync(file);
+    } catch {
+      continue;
+    }
+    const prefix = createHash("sha256").update(buffer).digest("hex").slice(0, 16);
+    if (prefix === parsed.hashPrefix) {
+      return buffer;
+    }
+  }
+  return null;
+}
+
 /**
  * Re-ingests every document currently in the knowledge base using a serial
  * queue (concurrency = 1). Documents whose content hash is unchanged are
@@ -458,7 +516,11 @@ export async function syncAllDocuments(
 
   for (const document of documents) {
     queue.add(async () => {
-      const result = await ingestUrl(document.url, options);
+      // `pdf://` documents cannot be re-scraped as URLs (the SSRF guard rejects
+      // the scheme) — resolve the stored buffer from data/pdfs instead.
+      const result = document.url.startsWith("pdf://")
+        ? await reingestPdfDocument(document.url, options)
+        : await ingestUrl(document.url, options);
       results.push(result);
       logger.info(
         { url: document.url, status: result.status, chunks: result.chunkCount },
@@ -470,6 +532,35 @@ export async function syncAllDocuments(
   await queue.drain();
   logger.info({ total: results.length }, "[INGEST] full sync complete");
   return results;
+}
+
+/**
+ * Re-ingests a stored `pdf://` document from its on-disk buffer. Returns a
+ * failed result (without touching the document row) when the file is missing
+ * so a later run can retry.
+ */
+async function reingestPdfDocument(
+  sourceKey: string,
+  options: IngestOptions = {},
+): Promise<IngestResult> {
+  const parsed = parsePdfSourceKey(sourceKey);
+  const buffer = parsed ? findPdfBuffer(sourceKey) : null;
+  if (!buffer || !parsed) {
+    const message = parsed
+      ? `PDF file not found on disk (looked under ${PDFS_DIR})`
+      : "Invalid pdf:// source key";
+    logger.warn({ url: sourceKey, error: message }, "[INGEST] pdf re-ingest failed");
+    return {
+      url: sourceKey,
+      title: "",
+      status: "failed",
+      chunkCount: 0,
+      hash: "",
+      error: message,
+      cacheInvalidated: 0,
+    };
+  }
+  return ingestPdf(buffer, parsed.name, options);
 }
 
 /**

@@ -129,6 +129,27 @@ describe("createTranslationRateLimiter", () => {
     expect(limiter.size).toBe(2);
   });
 
+  it("reads GROQ_TRANSLATE_MODEL and GROQ_TPD from env", () => {
+    process.env.GROQ_API_KEY = "only-key";
+    process.env.GROQ_TRANSLATE_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+    process.env.GROQ_TPD = "500000";
+    const limiter = createTranslationRateLimiter();
+    expect(limiter).toBeInstanceOf(GroqRateLimiter);
+    expect(limiter.model).toBe("meta-llama/llama-4-scout-17b-16e-instruct");
+    expect(limiter.tpd).toBe(500000);
+  });
+
+  it("applies model and tpd overrides to a pool", () => {
+    const limiter = createTranslationRateLimiter({
+      keys: ["k1", "k2"],
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      tpd: 500000,
+    });
+    expect(limiter).toBeInstanceOf(GroqRateLimiterPool);
+    expect(limiter.model).toBe("meta-llama/llama-4-scout-17b-16e-instruct");
+    expect(limiter.tpd).toBe(500000);
+  });
+
   it("throws a clear error when no key is configured", () => {
     expect(() => createTranslationRateLimiter()).toThrow(/No Groq API key configured/);
   });
@@ -178,6 +199,23 @@ describe("translateToEnglish parallel dedupe", () => {
     expect(r2.englishText).toBe("The translated segment.");
     // Only one API call despite two concurrent callers.
     expect(createSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("GroqRateLimiter TPD guard", () => {
+  it("accumulates a daily token counter per request", async () => {
+    const limiter = new GroqRateLimiter({ rpm: 1000, tpm: 1_000_000, rpd: 1_000_000, tpd: 100 });
+    await limiter.waitForTokens(40);
+    await limiter.waitForTokens(40);
+    const state = limiter as unknown as { tokensToday: number };
+    expect(state.tokensToday).toBe(80);
+  });
+
+  it("does not count tokens when tpd is unset", async () => {
+    const limiter = new GroqRateLimiter({ rpm: 1000, tpm: 1_000_000, rpd: 1_000_000 });
+    await limiter.waitForTokens(40);
+    const state = limiter as unknown as { tokensToday: number };
+    expect(state.tokensToday).toBe(0);
   });
 });
 

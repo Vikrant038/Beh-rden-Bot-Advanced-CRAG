@@ -7,25 +7,33 @@
  *   2. Iterates every document in the database and re-ingests it through the
  *      English-first pipeline (detect → translate → chunk → embed → store).
  *   3. The translation step is rate-limited to Groq's free tier (30 RPM /
- *      6,000 TPM / 14,400 RPD) and checkpoint-cached, so interrupted runs
- *      resume without re-translating.
+ *      6,000 TPM / 14,400 RPD, plus the model's daily TPD cap — e.g. 100K/day
+ *      for llama-3.3-70b, 500K/day for llama-4-scout) and checkpoint-cached,
+ *      so interrupted runs resume without re-translating.
  *
  * Usage:
  *   pnpm tsx scripts/translate-corpus.ts
  *
- * Estimated time on Groq free tier: ~1–4 hours depending on how many sources
- * are already English (they skip translation). Set GROQ_API_KEYS to a
- * comma-separated list of keys from DIFFERENT Groq accounts to translate in
- * parallel (one worker per key, each key's free-tier bucket used
- * independently — free-tier limits are per organization, so same-account keys
- * share one bucket and gain nothing). Set GROQ_RPM / GROQ_TPM env vars for
- * paid-plan limits.
+ * ⚠️  Free-tier daily token caps dominate runtime. The ~260K tokens of German
+ * text need ~800K–1.2M tokens in+out total:
+ *   - llama-3.3-70b-versatile: 100K TPD → ~9–12 days (default)
+ *   - meta-llama/llama-4-scout-17b-16e-instruct: 500K TPD → ~2 days
+ *   Set GROQ_TRANSLATE_MODEL + GROQ_TPD to switch. The limiter now waits for
+ *   the midnight reset instead of 429-looping, so a run can span days.
+ *
+ * Set GROQ_API_KEYS to a comma-separated list of keys from DIFFERENT Groq
+ * accounts to translate in parallel (one worker per key, each key's free-tier
+ * bucket used independently — free-tier limits are per organization, so
+ * same-account keys share one bucket and gain nothing).
  *
  * Prerequisites:
  *   - GROQ_API_KEY set (translation)
  *   - DATABASE_URL set (ingest target)
- *   - AI_INFERENCE_URL + AI_INFERENCE_TOKEN set (or HF_INFERENCE_URL + HF_TOKEN)
- *   - The embeddings worker must be reachable (for re-embedding translated text)
+ *   - A reachable embedding endpoint: AI_INFERENCE_URL + AI_INFERENCE_TOKEN
+ *     (Cloudflare worker) or HF_INFERENCE_URL + HF_TOKEN. The script now
+ *     pre-flights this and aborts with a clear message if unreachable.
+ *   - The PDFs must exist under data/pdfs (the ~40 pdf:// documents are
+ *     re-ingested from disk, not re-scraped).
  */
 
 // Load .env (GROQ_API_KEYS, DATABASE_URL, …) — tsx does not auto-inject it.
@@ -34,6 +42,7 @@ import "dotenv/config";
 import { prisma } from "@/server/db";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { syncAllDocuments, type IngestOptions } from "@/server/ingest/pipeline";
+import { createDefaultEmbeddingClient } from "@/server/embeddings/client";
 import { createTranslationRateLimiter, detectLanguage } from "@/server/ingest/translate";
 import { createLogger } from "@/server/lib/logger";
 
@@ -63,23 +72,48 @@ async function main(): Promise<void> {
     return;
   }
 
-  // ── Step 3: Estimate translation work ─────────────────────────────────
-  // Sample a few documents to estimate how many need translation.
+  // ── Step 3: Pre-flight checks ─────────────────────────────────────────
+  // 3a. Embedding endpoint must be reachable BEFORE we spend any translation
+  //     tokens — the previous run translated docs and then failed at embed
+  //     (dead localhost endpoint), which rolled the docs back.
+  const embeddingClient = createDefaultEmbeddingClient();
+  try {
+    await embeddingClient.embedTexts(["connectivity check"]);
+    logger.info("[MIGRATE] Embedding endpoint reachable");
+  } catch (error) {
+    logger.error(
+      { error: String(error) },
+      "[MIGRATE] Embedding endpoint unreachable — set HF_INFERENCE_URL + HF_TOKEN " +
+        "(or AI_INFERENCE_URL + AI_INFERENCE_TOKEN) to a reachable BGE-M3 endpoint " +
+        "(e.g. your Cloudflare embeddings worker) in .env and re-run",
+    );
+    process.exit(1);
+  }
+
+  // 3b. Estimate translation work from actual chunk text (titles/URLs are
+  //     almost all English even for German documents, so they under-count).
   const samples = await prisma.document.findMany({
-    select: { url: true, title: true },
+    select: { id: true },
     take: Math.min(10, total),
     orderBy: { createdAt: "desc" },
   });
-  const germanSample = samples.filter(
-    (s) => detectLanguage(s.title) === "de" || detectLanguage(s.url) === "de",
-  );
-  const germanRatio = germanSample.length / samples.length;
+  let germanSample = 0;
+  for (const sample of samples) {
+    const chunk = await prisma.documentChunk.findFirst({
+      where: { documentId: sample.id },
+      select: { text: true },
+    });
+    if (chunk && detectLanguage(chunk.text) === "de") {
+      germanSample += 1;
+    }
+  }
+  const germanRatio = samples.length > 0 ? germanSample / samples.length : 0;
   const estimatedGerman = Math.round(total * germanRatio);
   logger.info(
     "[MIGRATE] Est. ~%d/%d documents need translation (sample: %d/%d German)",
     estimatedGerman,
     total,
-    germanSample.length,
+    germanSample,
     samples.length,
   );
 
@@ -92,17 +126,19 @@ async function main(): Promise<void> {
   const opts: IngestOptions = {
     normalizeEnglish: true,
     rateLimiter: limiter,
+    embeddingClient,
   };
 
   logger.info("[MIGRATE] Re-ingesting all documents through the English-first pipeline…");
   logger.info(
-    "[MIGRATE] Rate-limiter: model=%s, keys=%d, concurrency=%d, rpm=%d/key, tpm=%d/key, rpd=%d/key",
+    "[MIGRATE] Rate-limiter: model=%s, keys=%d, concurrency=%d, rpm=%d/key, tpm=%d/key, rpd=%d/key, tpd=%d/key/day",
     limiter.model,
     limiter.size,
     concurrency,
     limiter.rpm,
     limiter.tpm,
     limiter.rpd,
+    limiter.tpd,
   );
 
   const results = await syncAllDocuments(opts, { concurrency });

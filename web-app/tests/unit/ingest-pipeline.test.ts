@@ -4,6 +4,9 @@ vi.mock("@/server/ingest/pdf-parser", () => ({
 
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 vi.mock("@/server/db", () => {
   const tx = {
@@ -44,7 +47,14 @@ vi.mock("@/server/rag/cache/semantic-cache", () => ({
 
 import { prisma } from "@/server/db";
 import { cleanText } from "@/server/ingest/cleaner";
-import { ingestUrl, syncAllDocuments, pdfSourceKey, ingestPdf } from "@/server/ingest/pipeline";
+import {
+  ingestUrl,
+  syncAllDocuments,
+  pdfSourceKey,
+  parsePdfSourceKey,
+  findPdfBuffer,
+  ingestPdf,
+} from "@/server/ingest/pipeline";
 import { scrapeWebPage } from "@/server/ingest/scraper";
 import { parsePdf } from "@/server/ingest/pdf-parser";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
@@ -88,7 +98,8 @@ function fakeEmbeddingClient() {
   // 1024-dim vectors: `toVectorLiteral` (reused from vector-queries.ts) enforces
   // the BGE-M3 embedding contract, so a shorter vector would throw — matching
   // what the real `vector(1024)` column would reject at insert time.
-  const makeVector = (seed: number) => Array.from({ length: 1024 }, (_, i) => (i === seed ? 0.1 : 0.2));
+  const makeVector = (seed: number) =>
+    Array.from({ length: 1024 }, (_, i) => (i === seed ? 0.1 : 0.2));
   return {
     embedTexts: vi.fn(async (texts: string[]) => texts.map((_, i) => makeVector(i % 1024))),
     embedQuery: vi.fn(async () => makeVector(0)),
@@ -362,5 +373,43 @@ describe("pdfSourceKey", () => {
     const key = pdfSourceKey(buffer, "visa.pdf");
     const match = key.match(/^pdf:\/\/([0-9a-f]{16})\/visa\.pdf$/);
     expect(match).not.toBeNull();
+  });
+});
+
+describe("parsePdfSourceKey", () => {
+  it("extracts the hash prefix and name", () => {
+    const parsed = parsePdfSourceKey("pdf://0123456789abcdef/visa-guide.pdf");
+    expect(parsed).toEqual({ hashPrefix: "0123456789abcdef", name: "visa-guide.pdf" });
+  });
+
+  it("returns null for non-pdf source keys", () => {
+    expect(parsePdfSourceKey("https://example.com/a")).toBeNull();
+    expect(parsePdfSourceKey("pdf://short/a.pdf")).toBeNull();
+  });
+});
+
+describe("findPdfBuffer", () => {
+  it("finds the on-disk buffer by matching the sha256 prefix", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pdfs-test-"));
+    const nested = join(dir, "sub");
+    mkdirSync(nested);
+    const buffer = Buffer.from("%PDF-1.4\nunique-content");
+    writeFileSync(join(nested, "visa-guide.pdf"), buffer);
+
+    const key = pdfSourceKey(buffer, "visa-guide.pdf");
+    const found = findPdfBuffer(key, dir);
+    expect(found).not.toBeNull();
+    expect(found!.equals(buffer)).toBe(true);
+  });
+
+  it("returns null when no file matches", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pdfs-test-"));
+    const found = findPdfBuffer("pdf://0123456789abcdef/missing.pdf", dir);
+    expect(found).toBeNull();
+  });
+
+  it("returns null for invalid source keys", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pdfs-test-"));
+    expect(findPdfBuffer("https://example.com/a", dir)).toBeNull();
   });
 });

@@ -69,6 +69,13 @@ export interface GroqLimiterOptions {
   tpm?: number;
   /** Max requests per day (free tier: 14,400). */
   rpd?: number;
+  /**
+   * Max tokens per day (0 = unlimited). Groq free-tier models have hard daily
+   * token caps (e.g. llama-3.3-70b: 100,000/day, llama-4-scout: 500,000/day);
+   * without this the pipeline 429-loops until the model is paused. When set,
+   * the limiter waits for the midnight reset once the daily budget is spent.
+   */
+  tpd?: number;
   /** Groq API key (defaults to env.GROQ_API_KEY). */
   apiKey?: string;
   /** Groq model for translation. */
@@ -79,6 +86,7 @@ const DEFAULT_LIMITER: Required<GroqLimiterOptions> = {
   rpm: 30,
   tpm: 6000,
   rpd: 14400,
+  tpd: 0,
   apiKey: "",
   model: "llama-3.3-70b-versatile",
 };
@@ -101,6 +109,8 @@ export class GroqRateLimiter {
   readonly tpm: number;
   /** Max requests per day (free tier: 14,400). */
   readonly rpd: number;
+  /** Max tokens per day (0 = unlimited; see GroqLimiterOptions.tpd). */
+  readonly tpd: number;
   /** Groq model for translation. */
   readonly model: string;
   /** The OpenAI SDK client pointed at Groq. */
@@ -117,10 +127,15 @@ export class GroqRateLimiter {
   private requestsToday = 0;
   private rpdResetDay = new Date().getDate();
 
+  // TPD counter (daily token budget, e.g. 100K for llama-3.3-70b free tier)
+  private tokensToday = 0;
+  private tpdResetDay = new Date().getDate();
+
   constructor(options: GroqLimiterOptions = {}) {
     this.rpm = options.rpm ?? DEFAULT_LIMITER.rpm;
     this.tpm = options.tpm ?? DEFAULT_LIMITER.tpm;
     this.rpd = options.rpd ?? DEFAULT_LIMITER.rpd;
+    this.tpd = options.tpd ?? DEFAULT_LIMITER.tpd;
     this.model = options.model ?? DEFAULT_LIMITER.model;
 
     this.tokens = this.tpm; // start full
@@ -153,9 +168,10 @@ export class GroqRateLimiter {
   }
 
   /**
-   * Block until the token bucket has enough capacity for `tokens` and the
-   * RPM pacing interval has elapsed. Returns this limiter so the pool and
-   * single-key callers share one interface.
+   * Block until the token bucket has enough capacity for `tokens`, the RPM
+   * pacing interval has elapsed, and (when configured) the daily token budget
+   * (TPD) still has room. Returns this limiter so the pool and single-key
+   * callers share one interface.
    */
   async waitForTokens(tokens: number): Promise<GroqRateLimiter> {
     // RPD guard
@@ -177,6 +193,29 @@ export class GroqRateLimiter {
         await sleep(wait);
       }
       this.requestsToday = 0;
+    }
+
+    // TPD guard: wait for the midnight reset when the daily token budget is
+    // exhausted (avoids 429-looping against models with a hard daily cap).
+    if (this.tpd > 0) {
+      if (today !== this.tpdResetDay) {
+        this.tokensToday = 0;
+        this.tpdResetDay = today;
+      }
+      if (this.tokensToday + tokens > this.tpd) {
+        const resetTime = new Date();
+        resetTime.setDate(resetTime.getDate() + 1);
+        resetTime.setHours(0, 0, 0, 0);
+        const wait = resetTime.getTime() - Date.now();
+        if (wait > 0) {
+          logger.warn(
+            { waitMs: Math.ceil(wait), tpd: this.tpd, used: this.tokensToday },
+            "[TRANSLATE] TPD limit reached — waiting for daily reset",
+          );
+          await sleep(wait);
+        }
+        this.tokensToday = 0;
+      }
     }
 
     // RPM pacing: at least 60/rpm seconds between requests.
@@ -201,6 +240,9 @@ export class GroqRateLimiter {
 
     this.lastRequestTime = Date.now();
     this.requestsToday++;
+    if (this.tpd > 0) {
+      this.tokensToday += tokens;
+    }
     return this;
   }
 
@@ -227,12 +269,12 @@ function sleep(ms: number): Promise<void> {
 export class GroqRateLimiterPool {
   readonly limiters: GroqRateLimiter[];
 
-  constructor(keys: string[]) {
+  constructor(keys: string[], options: { model?: string; tpd?: number } = {}) {
     const resolved = keys.map((k) => k.trim()).filter((k) => k.length > 0);
     if (resolved.length === 0) {
       throw new Error("GroqRateLimiterPool requires at least one API key");
     }
-    this.limiters = resolved.map((apiKey) => new GroqRateLimiter({ apiKey }));
+    this.limiters = resolved.map((apiKey) => new GroqRateLimiter({ apiKey, ...options }));
   }
 
   /** Number of API keys in the pool. */
@@ -258,6 +300,11 @@ export class GroqRateLimiterPool {
   /** Per-key requests/day (all keys share the same config). */
   get rpd(): number {
     return this.limiters[0]?.rpd ?? 0;
+  }
+
+  /** Per-key tokens/day (0 = unlimited; all keys share the same config). */
+  get tpd(): number {
+    return this.limiters[0]?.tpd ?? 0;
   }
 
   /**
@@ -293,14 +340,19 @@ export type TranslationRateLimiter = GroqRateLimiter | GroqRateLimiterPool;
  * Builds the translation rate limiter: a multi-key pool when several keys are
  * configured, otherwise a single limiter. Keys come from `GROQ_API_KEYS`
  * (comma-separated, from DIFFERENT Groq accounts — see GroqRateLimiterPool)
- * with `GROQ_API_KEY` as the fallback.
+ * with `GROQ_API_KEY` as the fallback. The translation model comes from
+ * `GROQ_TRANSLATE_MODEL` (default llama-3.3-70b-versatile) and its daily
+ * token cap from `GROQ_TPD` (0 = unknown/unlimited).
  */
 export function createTranslationRateLimiter(
-  options: { keys?: string[] } = {},
+  options: { keys?: string[]; model?: string; tpd?: number } = {},
 ): TranslationRateLimiter {
   const explicit = options.keys && options.keys.length > 0;
   const raw = explicit ? (options.keys as string[]) : (process.env.GROQ_API_KEYS ?? "").split(",");
   const keys = raw.map((k) => k.trim()).filter((k) => k.length > 0);
+  const model = options.model ?? (process.env.GROQ_TRANSLATE_MODEL?.trim() || undefined);
+  const tpd = options.tpd ?? (process.env.GROQ_TPD ? Number(process.env.GROQ_TPD) : undefined);
+  const limiterOptions = { model, tpd };
   if (keys.length === 0) {
     const fallback = process.env.GROQ_API_KEY?.trim();
     if (!fallback) {
@@ -308,11 +360,12 @@ export function createTranslationRateLimiter(
         "No Groq API key configured — set GROQ_API_KEYS (comma-separated) or GROQ_API_KEY",
       );
     }
-    return new GroqRateLimiter({ apiKey: fallback });
+    return new GroqRateLimiter({ apiKey: fallback, ...limiterOptions });
   }
-  return keys.length === 1
-    ? new GroqRateLimiter({ apiKey: keys[0] })
-    : new GroqRateLimiterPool(keys);
+  if (keys.length === 1) {
+    return new GroqRateLimiter({ apiKey: keys[0], ...limiterOptions });
+  }
+  return new GroqRateLimiterPool(keys, limiterOptions);
 }
 
 // ─── Translation checkpoint cache ───────────────────────────────────────────
