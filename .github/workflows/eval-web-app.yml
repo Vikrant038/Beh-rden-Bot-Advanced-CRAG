@@ -190,13 +190,17 @@ jobs:
 
       - name: Point at production corpus
         if: ${{ steps.corpus.outputs.corpus == 'full' }}
+        env:
+          # Step-scoped (semgrep gha-workflow-env-secret) — never interpolated
+          # into the shell script directly (shell-injection rule).
+          EVAL_DATABASE_URL: ${{ secrets.EVAL_DATABASE_URL }}
         run: |
-          if [[ -z "${{ secrets.EVAL_DATABASE_URL }}" ]]; then
+          if [[ -z "$EVAL_DATABASE_URL" ]]; then
             echo "::error::full-corpus mode requires the EVAL_DATABASE_URL secret (a Postgres URL to a seeded copy of the corpus). See web-app/docs/EVALUATION.md."
             exit 1
           fi
           # JSON-escape for GITHUB_ENV; the URL may contain special characters.
-          echo "DATABASE_URL=${{ secrets.EVAL_DATABASE_URL }}" >> "$GITHUB_ENV"
+          echo "DATABASE_URL=$EVAL_DATABASE_URL" >> "$GITHUB_ENV"
 
       - name: Run 30-question evaluation
         # The only step that calls the LLM: generation (GROQ) + judge, BGE-M3
