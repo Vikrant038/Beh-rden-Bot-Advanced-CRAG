@@ -28,6 +28,9 @@
  * use their filename.
  */
 
+// Load .env (GROQ_API_KEYS, DATABASE_URL, …) — tsx does not auto-inject it.
+import "dotenv/config";
+
 import { readFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
 import {

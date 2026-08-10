@@ -28,6 +28,9 @@
  *   - The embeddings worker must be reachable (for re-embedding translated text)
  */
 
+// Load .env (GROQ_API_KEYS, DATABASE_URL, …) — tsx does not auto-inject it.
+import "dotenv/config";
+
 import { prisma } from "@/server/db";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { syncAllDocuments, type IngestOptions } from "@/server/ingest/pipeline";
