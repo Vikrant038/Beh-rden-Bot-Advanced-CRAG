@@ -23,6 +23,7 @@ import { PipelineVisualizer } from "@/components/admin/pipeline/pipeline-visuali
 import { useToast } from "@/lib/toast";
 import { formatRelativeTime, formatUsd } from "@/lib/utils";
 import type { AgenticRagResponse } from "@/server/rag/agents/orchestrator";
+import type { StandardRagTrace } from "@/server/rag/pipeline";
 
 /**
  * True when the tRPC error came from a broken HTTP transport rather than the
@@ -71,11 +72,16 @@ export default function AdminPipelineTesterPage() {
   const utils = api.useUtils();
   const [prompt, setPrompt] = useState("");
   const [copied, setCopied] = useState(false);
+  // Which pipeline to diagnose: the 3-agent ReAct pipeline or the single-shot
+  // standard CRAG pipeline (cache → sub-queries → retrieval → gate → generation).
+  const [pipeline, setPipeline] = useState<"agentic" | "standard">("agentic");
   const [bypassCache, setBypassCache] = useState(true);
   const [debugMode, setDebugMode] = useState(false);
   // A stored trace being inspected from the recent-runs list. When null the
   // visualizer shows the freshest completed run (activeRun.data.traceJson).
-  const [selectedTrace, setSelectedTrace] = useState<AgenticRagResponse | null>(null);
+  const [selectedTrace, setSelectedTrace] = useState<AgenticRagResponse | StandardRagTrace | null>(
+    null,
+  );
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   // Id of the background run created by `testPipeline`. The client polls
   // `getTestRun` until the row reaches a terminal state (SUCCESS/FAILED).
@@ -113,7 +119,7 @@ export default function AdminPipelineTesterPage() {
 
   useEffect(() => {
     if (selectedRun.data) {
-      setSelectedTrace(selectedRun.data.traceJson as AgenticRagResponse);
+      setSelectedTrace(selectedRun.data.traceJson as AgenticRagResponse | StandardRagTrace);
     }
   }, [selectedRun.data]);
 
@@ -126,7 +132,7 @@ export default function AdminPipelineTesterPage() {
   const runError = runStatus === "FAILED" ? (activeRun.data?.error ?? null) : null;
   const freshTrace =
     runStatus === "SUCCESS"
-      ? (activeRun.data?.traceJson as AgenticRagResponse | undefined)
+      ? (activeRun.data?.traceJson as AgenticRagResponse | StandardRagTrace | undefined)
       : undefined;
 
   const run = () => {
@@ -134,7 +140,7 @@ export default function AdminPipelineTesterPage() {
     if (!trimmed || testPipeline.isPending || isRunning) {
       return;
     }
-    testPipeline.mutate({ prompt: trimmed, bypassCache, debug: debugMode });
+    testPipeline.mutate({ prompt: trimmed, pipeline, bypassCache, debug: debugMode });
   };
 
   const copyTrace = async () => {
@@ -167,9 +173,9 @@ export default function AdminPipelineTesterPage() {
       <div>
         <h1 className="text-2xl font-semibold">Pipeline tester</h1>
         <p className="mt-1 text-sm text-muted">
-          Run a single glass-box trace through the 3-agent ReAct pipeline and inspect every stage —
-          including parent-child chunk expansion. Every run is stored so past traces can be
-          revisited.
+          Run a single glass-box trace through the 3-agent ReAct pipeline or the standard CRAG
+          pipeline and inspect every stage — including parent-child chunk expansion. Every run is
+          stored so past traces can be revisited.
         </p>
       </div>
 
@@ -220,6 +226,35 @@ export default function AdminPipelineTesterPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 lg:ml-auto">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted">Pipeline:</span>
+              <div
+                role="radiogroup"
+                aria-label="Pipeline"
+                className="inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1"
+              >
+                {(["agentic", "standard"] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={pipeline === value}
+                    onClick={() => {
+                      setPipeline(value);
+                      testPipeline.reset();
+                    }}
+                    className={`min-h-9 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                      pipeline === value
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {value === "agentic" ? "Agentic" : "Standard CRAG"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -283,7 +318,9 @@ export default function AdminPipelineTesterPage() {
         <div className="glass-card flex items-center gap-3 rounded-2xl p-4">
           <span className="status-pulse h-2.5 w-2.5 rounded-full bg-primary" />
           <p className="text-sm text-muted">
-            Running research → analyst → writer (3–5 sequential LLM calls)…
+            {pipeline === "agentic"
+              ? "Running research → analyst → writer (3–5 sequential LLM calls)…"
+              : "Running standard CRAG: cache → sub-queries → retrieval → gate → generation…"}
           </p>
           {runStalled ? (
             <span className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-1 text-xs text-warning">

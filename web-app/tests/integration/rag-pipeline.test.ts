@@ -72,6 +72,18 @@ const mockHybridRetriever = {
     bestCrossScore: 0.85,
     needsWebFallback: false,
     pathUsed: "HYBRID_RRF_CROSS_ENCODER",
+    telemetry: {
+      queryExpansionDurationMs: 2,
+      expandedQueries: ["blocked account total"],
+      denseDurationMs: 5,
+      sparseBm25DurationMs: 3,
+      rrfFusionDurationMs: 1,
+      rerankDurationMs: 2,
+      bestCrossScore: 0.85,
+      cragFallbackTriggered: false,
+      corpusLoadDurationMs: 0,
+      sparseEngine: "pg_fts",
+    },
   })),
 } as unknown as HybridRetriever;
 
@@ -244,6 +256,45 @@ describe("RAG Pipeline Orchestrators", () => {
     expect(result.isCached).toBe(true);
     expect(result.answer).toBe("Cached answer.");
     expect(mockedCallLLM).not.toHaveBeenCalled();
+  });
+
+  it("standard CRAG: collects a glass-box trace when collectTrace is set", async () => {
+    const memory = new SummaryBufferMemory("conv-8", 8);
+    const result = await runStandardCrag("What is the blocked account total?", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+      collectTrace: true,
+    });
+
+    // Admin pipeline tester: trace carries the per-stage timings + costs.
+    expect(result.trace).toBeDefined();
+    expect(result.trace?.pipeline).toBe("standard");
+    expect(result.trace?.stages).toHaveLength(5);
+    expect(result.trace?.stages[0].status).toBe("executed");
+    expect(result.trace?.stages[1].status).toBe("executed");
+    expect(result.trace?.stages[1].durationMs).toBeGreaterThan(0);
+    expect(result.trace?.retrievalTelemetry?.denseDurationMs).toBeGreaterThanOrEqual(0);
+    expect(result.trace?.retrievalTelemetry?.sparseEngine).toBe("pg_fts");
+    expect(result.trace?.preProcessing?.cacheHit).toBe(false);
+    expect(result.trace?.postProcessing?.cacheWritten).toBe(true);
+    expect(result.trace?.totalLatencyMs).toBeGreaterThanOrEqual(0);
+    expect(result.trace?.totalCostUsd).toBeGreaterThanOrEqual(0);
+    // The collector is wired (AsyncLocalStorage context active), but the
+    // mocked callLLM bypasses the real client's recordUsageCall, so the
+    // record array is empty here — with the real client it fills per call.
+    expect(result.trace?.llmCalls).toBeDefined();
+  });
+
+  it("standard CRAG: trace is absent when collectTrace is off (chat path pays nothing)", async () => {
+    const memory = new SummaryBufferMemory("conv-9", 8);
+    const result = await runStandardCrag("What is the blocked account total?", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    expect(result.trace).toBeUndefined();
   });
 
   it("should persist user + assistant messages with sources metadata", async () => {

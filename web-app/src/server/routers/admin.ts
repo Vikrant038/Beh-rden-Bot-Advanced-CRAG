@@ -16,6 +16,8 @@ import { createLogger } from "@/server/lib/logger";
 import { NotFoundError } from "@/server/lib/errors";
 import { z } from "zod";
 import { runAgenticRag } from "@/server/rag/agents/orchestrator";
+import { runStandardCrag, type StandardRagTrace } from "@/server/rag/pipeline";
+import { isQueryOutOfDomain, OUT_OF_DOMAIN_MESSAGE } from "@/server/rag/guardrail";
 import { getHybridRetriever } from "@/server/rag/instance";
 import { runStageZero } from "@/server/rag/stage-zero";
 
@@ -152,30 +154,85 @@ async function prunePipelineRuns(): Promise<void> {
  */
 export async function executePipelineTest(
   runId: string,
-  input: { prompt: string; bypassCache: boolean; debug: boolean },
+  input: {
+    prompt: string;
+    bypassCache: boolean;
+    debug: boolean;
+    pipeline?: "agentic" | "standard";
+  },
 ): Promise<void> {
   const startedAt = Date.now();
+  const pipeline = input.pipeline ?? "agentic";
   try {
     // Stage 0 — run PII mask + disambiguation up front (same as the chat
     // pipeline) so the stored trace renders the disambiguation node in the
     // visualizer. The pipeline still runs to completion; ambiguity is
     // recorded, not short-circuited, so the glass-box trace is complete. The
-    // masked query is handed to the orchestrator so it never masks twice.
+    // masked query is handed to the pipeline so it never masks twice.
     const { maskedQuery, disambiguation } = await runStageZero(input.prompt);
-    const result = await runAgenticRag(input.prompt, {
-      hybridRetriever: getHybridRetriever(),
-      cache: semanticCache,
-      memory: new NoopMemory(),
-      bypassCache: input.bypassCache,
-      maskedQuery,
-      disambiguation,
-    });
+
+    let traceJson: unknown;
+    let latencyMs: number;
+    if (pipeline === "standard") {
+      // Standard CRAG path — mirror the chat stream: domain guardrail at entry
+      // (CRAG itself is guardrail-free), then the single-shot corrected-RAG
+      // pipeline with per-stage trace collection for the visualizer.
+      const t0 = Date.now();
+      const blocked = await isQueryOutOfDomain(maskedQuery);
+      const guardrailDurationMs = Date.now() - t0;
+      const result = await runStandardCrag(input.prompt, {
+        hybridRetriever: getHybridRetriever(),
+        cache: semanticCache,
+        memory: new NoopMemory(),
+        bypassCache: input.bypassCache,
+        maskedQuery,
+        collectTrace: true,
+      });
+      const core = result.trace;
+      const trace: StandardRagTrace = {
+        pipeline: "standard",
+        userQuery: input.prompt,
+        maskedQuery,
+        guardrail: {
+          passed: !blocked,
+          reason: blocked ? OUT_OF_DOMAIN_MESSAGE : undefined,
+          durationMs: guardrailDurationMs,
+        },
+        finalAnswer: result.answer,
+        sources: result.sources,
+        retrievalPath: result.retrievalPath,
+        isGrounded: result.isGrounded,
+        isCached: result.isCached,
+        disambiguation,
+        retrievalTelemetry: core?.retrievalTelemetry,
+        totalLatencyMs: core?.totalLatencyMs ?? result.latencyMs,
+        stages: core?.stages ?? [],
+        llmCalls: core?.llmCalls ?? [],
+        totalCostUsd: core?.totalCostUsd ?? 0,
+        preProcessing: core?.preProcessing,
+        postProcessing: core?.postProcessing,
+      };
+      traceJson = trace;
+      latencyMs = trace.totalLatencyMs;
+    } else {
+      const result = await runAgenticRag(input.prompt, {
+        hybridRetriever: getHybridRetriever(),
+        cache: semanticCache,
+        memory: new NoopMemory(),
+        bypassCache: input.bypassCache,
+        maskedQuery,
+        disambiguation,
+      });
+      traceJson = result;
+      latencyMs = result.totalLatencyMs;
+    }
+
     await prisma.pipelineRun
       .update({
         where: { id: runId },
         data: {
-          traceJson: result as unknown as Prisma.InputJsonValue,
-          latencyMs: result.totalLatencyMs,
+          traceJson: traceJson as Prisma.InputJsonValue,
+          latencyMs,
           status: "SUCCESS",
           error: null,
         },
@@ -187,7 +244,7 @@ export async function executePipelineTest(
         );
       });
     logger.info(
-      { runId, prompt: input.prompt, latencyMs: result.totalLatencyMs },
+      { runId, prompt: input.prompt, pipeline, latencyMs },
       "[ADMIN] pipeline test complete",
     );
   } catch (error) {
@@ -451,6 +508,9 @@ export const adminRouter = router({
     .input(
       z.object({
         prompt: z.string().trim().min(5).max(2000),
+        // Which pipeline to diagnose: the 3-agent ReAct pipeline or the
+        // single-shot standard CRAG pipeline.
+        pipeline: z.enum(["agentic", "standard"]).default("agentic"),
         bypassCache: z.boolean().default(true),
         // Developer mode: failures persist the full name/message/cause/stack
         // detail on the run row so admins can debug from the tester UI.
