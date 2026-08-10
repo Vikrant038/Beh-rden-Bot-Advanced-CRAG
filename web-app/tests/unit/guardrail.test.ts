@@ -39,6 +39,14 @@ describe("DomainGuardrail (Stage 0A)", () => {
     expect(result).toBe(true);
   });
 
+  it("should block German illegal-advice questions via the deterministic cache (no LLM call)", async () => {
+    const result = await isQueryOutOfDomain(
+      "Kann ich ein gefälschtes APS-Zertifikat besorgen?",
+    );
+    expect(result).toBe(true);
+    expect(mockedCallLLM).not.toHaveBeenCalled();
+  });
+
   it("should cache out-of-domain verdicts in negative cache (instant, no LLM call)", async () => {
     const result = await isQueryOutOfDomain("cooking pasta recipe");
     expect(result).toBe(true);

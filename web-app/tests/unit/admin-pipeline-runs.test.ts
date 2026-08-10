@@ -249,10 +249,15 @@ describe("executePipelineTest (background worker contract)", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("prunes old runs so only the 5 newest terminal runs remain", async () => {
+  it("prunes old runs so only the 10 newest terminal runs remain", async () => {
     mockedRunAgenticRag.mockResolvedValue({ totalLatencyMs: 100, answer: "yes" } as never);
     prismaMock.pipelineRun.update.mockResolvedValue({ id: "run-1" } as never);
     prismaMock.pipelineRun.findMany.mockResolvedValue([
+      { id: "run-10" },
+      { id: "run-9" },
+      { id: "run-8" },
+      { id: "run-7" },
+      { id: "run-6" },
       { id: "run-5" },
       { id: "run-4" },
       { id: "run-3" },
@@ -267,15 +272,15 @@ describe("executePipelineTest (background worker contract)", () => {
       debug: false,
     });
 
-    // Keeps the newest MAX_PIPELINE_RUNS=5 and deletes everything older.
+    // Keeps the newest MAX_PIPELINE_RUNS=10 and deletes everything older.
     expect(prismaMock.pipelineRun.findMany).toHaveBeenCalledWith({
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: 5,
+      take: 10,
       select: { id: true },
     });
     expect(prismaMock.pipelineRun.deleteMany).toHaveBeenCalledWith({
       where: {
-        id: { notIn: ["run-5", "run-4", "run-3", "run-2", "run-1"] },
+        id: { notIn: ["run-10", "run-9", "run-8", "run-7", "run-6", "run-5", "run-4", "run-3", "run-2", "run-1"] },
         status: { not: "RUNNING" },
       },
     });

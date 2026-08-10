@@ -179,7 +179,7 @@ why the admin dashboard tracks hit rate and the cache health gauge.
 7. **Token discipline** — 500-char guardrail query truncation, `maxTokens`
    caps on generation, and a shared system prompt keep every call lean.
 8. **Bounded run history** — pipeline-tester traces are pruned to the newest
-   5 runs, so diagnostic storage doesn't grow unbounded.
+   10 runs, so diagnostic storage doesn't grow unbounded.
 
 ## Environment variables
 

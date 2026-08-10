@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BookOpen, ChevronDown, Copy, Menu, MoreHorizontal, Trash2, X, Zap } from "lucide-react";
+import {
+  BookOpen,
+  ChevronDown,
+  Copy,
+  GraduationCap,
+  Menu,
+  MoreHorizontal,
+  Trash2,
+  Zap,
+} from "lucide-react";
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
 import { ModeProvider, useMode } from "@/components/chat/mode-context";
 import { ChatActionsProvider, useChatActions } from "@/components/chat/chat-actions-context";
@@ -183,11 +192,14 @@ function MobileModeDropdown() {
 
 export function ChatLayout({ children }: { children: React.ReactNode }) {
   // ── Sidebar collapse state (md+) ─────────────────────────────────────────
-  // lg+ (1024px+): always expanded (w-72), no hover behavior.
-  // md (768–1023px): collapsed to icon rail (w-16), expands on hover.
+  // lg+ (1024px+): expanded by default (w-72), collapses via the header button.
+  // md (768–1023px): starts collapsed to the icon rail (w-16).
   // < md: hidden, mobile slide-in panel instead.
+  //
+  // The collapsed rail is click-only (no hover-expand): tapping a control
+  // (nav item, theme toggle, profile) acts directly; tapping empty rail space
+  // expands the sidebar — so reaching for an icon never opens the whole rail.
   const [collapsed, setCollapsed] = useState(false);
-  const [hoverExpanded, setHoverExpanded] = useState(false);
 
   // md (768–1023px) starts collapsed to the icon rail so the content area keeps
   // room; lg+ starts expanded. Adjusted once on mount (post-hydration) so the
@@ -199,23 +211,9 @@ export function ChatLayout({ children }: { children: React.ReactNode }) {
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => !prev);
-    setHoverExpanded(false);
   }, []);
 
-  // Hovering the collapsed rail expands it at any size (md and lg+); leaving
-  // collapses it again. The collapse button remains the only way to close it.
-  const handleSidebarHoverEnter = useCallback(() => {
-    if (collapsed) {
-      setHoverExpanded(true);
-    }
-  }, [collapsed]);
-
-  const handleSidebarHoverLeave = useCallback(() => {
-    setHoverExpanded(false);
-  }, []);
-
-  // The sidebar is expanded if: it's not collapsed, OR we're hovering on md
-  const isExpanded = !collapsed || hoverExpanded;
+  const isExpanded = !collapsed;
 
   // ── Mobile slide-in panel state (< md) ────────────────────────────────────
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -285,16 +283,14 @@ export function ChatLayout({ children }: { children: React.ReactNode }) {
           {/* ══════════════════════════════════════════════════════════════════
           SIDEBAR  —  md+ (768px and up)
           Full sidebar (272px) or icon rail (64px), always visible.
-          Collapse/expand is click-only: the rail's expand button and the
-          expanded header's collapse button are the only controls.
+          Click-only: rail controls (nav item, theme, profile) act directly;
+          tapping empty rail space expands; the header's collapse button closes.
       ══════════════════════════════════════════════════════════════════ */}
           <aside
             className={cn(
               "sidebar-glass hidden shrink-0 border-r border-border transition-[width] duration-200 md:block",
               isExpanded ? "w-72" : "w-16",
             )}
-            onMouseEnter={handleSidebarHoverEnter}
-            onMouseLeave={handleSidebarHoverLeave}
           >
             <AppSidebar collapsed={!isExpanded} onToggleCollapsed={toggleCollapsed} />
           </aside>
@@ -322,19 +318,9 @@ export function ChatLayout({ children }: { children: React.ReactNode }) {
                 aria-label="Navigation"
                 className="sidebar-glass drawer-panel absolute inset-y-0 left-0 w-[85vw] max-w-xs overflow-y-auto overscroll-contain shadow-2xl focus:outline-none"
               >
-                {/* Panel header — no brand on small screens (<800px); just the
-                close affordance, right-aligned. */}
-                <div className="flex items-center justify-end border-b border-border px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={closeMobile}
-                    aria-label="Close navigation"
-                    className="grid h-11 w-11 place-items-center rounded-lg text-muted transition hover:bg-surface-hover hover:text-foreground"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-
+                {/* No close button — the panel closes via Escape, the backdrop
+                click, or navigating. The drawer starts directly with the
+                brand + search (AppSidebar below). */}
                 <div className="px-3 pb-6 pt-2">
                   <AppSidebar
                     onNavigate={() => {
@@ -372,10 +358,15 @@ export function ChatLayout({ children }: { children: React.ReactNode }) {
                 <Menu className="h-5 w-5" />
               </button>
               <MobileModeDropdown />
-              {/* Brand is intentionally absent below 800px (see the sidebar
-                note) — a spacer keeps the mode dropdown on the left and the
-                actions menu at the far right. */}
-              <span className="min-w-0 flex-1" aria-hidden="true" />
+              {/* Brand mark + wordmark — visible at every width, centered
+                between the mode dropdown and the actions menu (truncates on
+                very narrow screens). */}
+              <span className="flex min-w-0 flex-1 items-center justify-center gap-1.5 px-1">
+                <span className="brand-gradient grid h-7 w-7 shrink-0 place-items-center rounded-lg text-white shadow-[0_4px_12px_-4px_var(--color-primary)]">
+                  <GraduationCap className="h-3.5 w-3.5" />
+                </span>
+                <span className="truncate text-sm font-semibold">Behörden-Bot</span>
+              </span>
               <MobileActionsMenu />
             </header>
 

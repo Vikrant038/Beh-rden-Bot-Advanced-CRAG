@@ -187,13 +187,28 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
   ];
 
   // ─── Collapsed icon rail ─────────────────────────────────────
+  // Click-through by design: tapping a control (nav item, new chat, theme,
+  // profile) acts directly and never opens the rail; tapping empty rail space
+  // expands the sidebar (the only way to open it — there is no hover-expand,
+  // so reaching for an icon never makes the whole sidebar pop open).
   if (collapsed) {
     return (
       <>
-        <div className="flex h-full flex-col items-center gap-1 py-3">
-          {/* Brand mark at the top of the rail — large screens only (≥800px). */}
+        <div
+          className="flex h-full flex-col items-center gap-1 py-3"
+          onClick={(event) => {
+            const target = event.target as HTMLElement;
+            const hitControl = target.closest(
+              'button, a, input, [role="menu"], [role="menuitem"], [role="menuitemradio"]',
+            );
+            if (!hitControl) {
+              onToggleCollapsed?.();
+            }
+          }}
+        >
+          {/* Brand mark at the top of the rail — visible at every width. */}
           <span
-            className="brand-gradient mb-2 hidden h-9 w-9 place-items-center rounded-xl text-white shadow-[0_4px_12px_-4px_var(--color-primary)] min-[800px]:grid"
+            className="brand-gradient mb-2 grid h-9 w-9 place-items-center rounded-xl text-white shadow-[0_4px_12px_-4px_var(--color-primary)]"
             aria-label="Behörden-Bot"
           >
             <GraduationCap className="h-4 w-4" />
@@ -238,6 +253,63 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
 
           <div className="flex flex-col items-center gap-2">
             <ThemeToggle compact />
+            {session?.user ? (
+              <div ref={profileRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setProfileOpen((value) => !value)}
+                  aria-haspopup="menu"
+                  aria-expanded={profileOpen}
+                  aria-label="Account menu"
+                  title={session.user.name ?? session.user.email ?? "Account"}
+                  className="grid h-11 w-11 place-items-center rounded-full bg-primary text-xs font-semibold text-white transition hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  {session.user.name?.charAt(0)?.toUpperCase() ??
+                    session.user.email?.charAt(0)?.toUpperCase() ??
+                    "?"}
+                </button>
+                {profileOpen ? (
+                  <div
+                    role="menu"
+                    aria-label="Profile menu"
+                    className="absolute bottom-0 left-full z-50 ml-2 w-44 overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-2xl"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setProfileOpen(false);
+                        go("/settings");
+                      }}
+                      className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground transition hover:bg-surface-hover"
+                    >
+                      <Settings className="h-4 w-4 text-muted" />
+                      Settings
+                    </button>
+                    <div className="my-1 h-px bg-border" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => void signOut({ callbackUrl: "/" })}
+                      className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive transition hover:bg-destructive/10"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Sign out
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : isDefinitelyGuest ? (
+              <button
+                type="button"
+                onClick={signIn}
+                aria-label="Sign in"
+                title="Sign in"
+                className="grid h-11 w-11 place-items-center rounded-full bg-surface-hover text-muted transition hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <LogIn className="h-4 w-4" />
+              </button>
+            ) : null}
           </div>
         </div>
       </>
@@ -248,14 +320,13 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
   return (
     <>
       <div className="flex h-full flex-col">
-        {/* Brand header — brand mark + collapse toggle on one line. The logo
-            and wordmark only appear on large screens (≥800px); the collapse
-            toggle is always available in the expanded sidebar. */}
-        <div className="flex items-center gap-2 px-4 pb-1 pt-3.5">
-          <span className="brand-gradient hidden h-8 w-8 shrink-0 place-items-center rounded-lg text-white shadow-[0_4px_12px_-4px_var(--color-primary)] min-[800px]:grid">
+        {/* Brand header — brand mark + collapse toggle on one line, visible
+            at every width. pb-3 leaves a clear gap before the search row. */}
+        <div className="flex items-center gap-2 px-4 pb-3 pt-3.5">
+          <span className="brand-gradient grid h-8 w-8 shrink-0 place-items-center rounded-lg text-white shadow-[0_4px_12px_-4px_var(--color-primary)]">
             <GraduationCap className="h-4 w-4" />
           </span>
-          <span className="hidden truncate font-semibold min-[800px]:inline">Behörden-Bot</span>
+          <span className="truncate font-semibold">Behörden-Bot</span>
           <button
             type="button"
             onClick={onToggleCollapsed}

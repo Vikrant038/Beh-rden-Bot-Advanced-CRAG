@@ -119,10 +119,11 @@ export function formatDebugError(error: unknown): string {
 /**
  * Keeps only the most recent MAX_PIPELINE_RUNS pipeline-test runs, deleting
  * older rows so the admin tester never accumulates unbounded traceJson
- * history. RUNNING rows are always preserved — the tester UI may still be
+ * history. Ten runs: enough history to compare recent experiments without
+ * unbounded growth. RUNNING rows are always preserved — the tester UI may still be
  * polling them — so pruning runs after a terminal state is persisted.
  */
-const MAX_PIPELINE_RUNS = 5;
+const MAX_PIPELINE_RUNS = 10;
 
 /**
  * Deletes pipeline-run history beyond the newest MAX_PIPELINE_RUNS terminal

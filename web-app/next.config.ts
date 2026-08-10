@@ -28,6 +28,13 @@ const nextConfig: NextConfig = {
   // them stops webpack from trying to bundle pdfjs-dist's optional `canvas`
   // native module during `next build`.
   serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
+  // /api/changelog reads CHANGELOG.md via `process.cwd()` at runtime (it is
+  // not imported, so Next cannot statically trace it). This guarantees the
+  // file ships inside the route's traced serverless bundle on Vercel — without
+  // it the route would silently serve the fallback in production.
+  outputFileTracingIncludes: {
+    "/api/changelog": ["./CHANGELOG.md"],
+  },
   async headers() {
     return [
       {

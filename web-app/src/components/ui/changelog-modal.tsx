@@ -77,8 +77,11 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
           </DialogDescription>
         </DialogHeader>
         <div className="mt-5 max-h-[80dvh] space-y-6 overflow-y-auto overscroll-contain pr-1">
-          {entries.map((entry) => (
-            <section key={`${entry.version}-${entry.title}`}>
+          {/* Keys include the index: the real CHANGELOG.md can contain several
+              groups with the same version+title (e.g. three "Unreleased —
+              Changed" groups), which would otherwise collide as React keys. */}
+          {entries.map((entry, entryIndex) => (
+            <section key={`${entry.version}-${entry.title}-${entryIndex}`}>
               <div className="flex items-baseline justify-between gap-2">
                 <h3 className="text-sm font-semibold">
                   {entry.version} — {entry.title}
@@ -88,8 +91,11 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
                 </h3>
               </div>
               <ul className="mt-2 space-y-1.5">
-                {entry.items.map((item) => (
-                  <li key={item} className="flex items-start gap-2 text-sm text-muted">
+                {entry.items.map((item, itemIndex) => (
+                  <li
+                    key={`${itemIndex}-${item}`}
+                    className="flex items-start gap-2 text-sm text-muted"
+                  >
                     <Check
                       className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success"
                       aria-hidden="true"
