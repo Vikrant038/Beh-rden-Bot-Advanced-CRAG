@@ -33,6 +33,8 @@ const row = {
   mode: "AGENTIC",
   latencyMs: 2500,
   isCached: true,
+  isGrounded: true,
+  retrievalPath: "HYBRID_RRF_CROSS_ENCODER",
   sourceCount: 3,
 };
 
@@ -61,8 +63,10 @@ describe("RecentQueriesTable", () => {
 
     expect(screen.getByText("Test query")).toBeDefined();
     expect(screen.getByText("AGENTIC")).toBeDefined();
-    expect(screen.getByText("yes")).toBeDefined();
-    expect(screen.getByText("3")).toBeDefined();
+    // Cached + Grounded columns both read "yes" for a grounded, uncached row.
+    expect(screen.getAllByText("yes")).toHaveLength(2);
+    // Path column shows the compact HYBRID badge instead of the raw constant.
+    expect(screen.getByText("HYBRID")).toBeDefined();
 
     const loadMoreBtn = screen.getByRole("button", { name: /Load more/i });
     fireEvent.click(loadMoreBtn);
@@ -97,9 +101,22 @@ describe("RecentQueriesTable", () => {
     expect((loadMoreBtn as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("shows zero sources when the answer cited none", () => {
-    render(<RecentQueriesTable queries={[{ ...row, sourceCount: 0 }]} loading={false} />);
-    expect(screen.getByText("0")).toBeDefined();
+  it("shows a warning-styled not-grounded row with its path badge", () => {
+    render(
+      <RecentQueriesTable
+        queries={[{ ...row, isGrounded: false, retrievalPath: "GUARDRAIL_BLOCKED" }]}
+        loading={false}
+      />,
+    );
+    // Cached="yes" + Grounded="no" for a blocked-but-cached row.
+    expect(screen.getByText("yes")).toBeDefined();
+    expect(screen.getByText("no")).toBeDefined();
+    expect(screen.getByText("GUARDRAIL")).toBeDefined();
+  });
+
+  it("shows an em-dash path badge when retrievalPath is missing", () => {
+    render(<RecentQueriesTable queries={[{ ...row, retrievalPath: null }]} loading={false} />);
+    expect(screen.getByText("—")).toBeDefined();
   });
 
   it("opens the details drawer with metadata-driven stats", async () => {

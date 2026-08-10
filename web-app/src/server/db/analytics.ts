@@ -116,6 +116,10 @@ export interface RecentQueryRow {
   latencyMs: number;
   isCached: boolean;
   sourceCount: number;
+  /** Whether the answer was grounded in corpus chunks (false = refusal/blocked/error). */
+  isGrounded: boolean;
+  /** Which pipeline path produced the answer (e.g. HYBRID_RRF_CROSS_ENCODER, GUARDRAIL_BLOCKED). */
+  retrievalPath: string | null;
 }
 
 export interface RecentQueriesCursor {
@@ -142,6 +146,8 @@ export async function recentQueries(
            COALESCE(a.metadata->>'mode', 'standard') AS mode,
            COALESCE((a.metadata->>'latencyMs')::float, 0) AS "latencyMs",
            COALESCE(a.metadata->>'isCached', 'false') = 'true' AS "isCached",
+           COALESCE(a.metadata->>'isGrounded', 'false') = 'true' AS "isGrounded",
+           a.metadata->>'retrievalPath' AS "retrievalPath",
            -- How many sources the answer cited (0 for refusals/blocked).
            COALESCE(jsonb_array_length(a.sources), 0)::int AS "sourceCount"
     FROM messages m
@@ -176,6 +182,8 @@ export async function recentQueries(
     mode: row.mode,
     latencyMs: Number(row.latencyMs ?? 0),
     isCached: Boolean(row.isCached),
+    isGrounded: Boolean(row.isGrounded),
+    retrievalPath: row.retrievalPath ?? null,
     sourceCount: Number(row.sourceCount ?? 0),
   }));
   const lastItem = rows.length > limit ? rows[limit - 1] : undefined;

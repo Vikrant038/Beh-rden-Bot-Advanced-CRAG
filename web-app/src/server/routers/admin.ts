@@ -62,6 +62,10 @@ export interface RecentQueryRow {
   mode: string;
   latencyMs: number;
   isCached: boolean;
+  /** Whether the answer was grounded in corpus chunks (false = refusal/blocked/error). */
+  isGrounded: boolean;
+  /** Which pipeline path produced the answer (e.g. HYBRID_RRF_CROSS_ENCODER, GUARDRAIL_BLOCKED). */
+  retrievalPath: string | null;
   sourceCount: number;
 }
 

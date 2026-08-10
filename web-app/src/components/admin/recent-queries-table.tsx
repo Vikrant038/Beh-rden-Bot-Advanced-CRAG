@@ -2,16 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  CheckCircle2,
-  Clock,
-  Eye,
-  ExternalLink,
-  GitFork,
-  Library,
-  Loader2,
-  XCircle,
-} from "lucide-react";
+import { CheckCircle2, Clock, Eye, ExternalLink, GitFork, Loader2, XCircle } from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -31,7 +22,51 @@ interface RecentQueryRow {
   mode: string;
   latencyMs: number;
   isCached: boolean;
+  isGrounded: boolean;
+  retrievalPath: string | null;
   sourceCount: number;
+}
+
+/**
+ * Compact badges for the pipeline paths that actually occur, so the column
+ * stays scannable instead of showing long snake_case constants. Unknown paths
+ * fall back to the raw value (truncated).
+ */
+const PATH_BADGES: Record<string, { label: string; className: string }> = {
+  HYBRID_RRF_CROSS_ENCODER: {
+    label: "HYBRID",
+    className: "border-primary/30 bg-primary/10 text-primary",
+  },
+  AGENTIC_3_AGENT_REACT: {
+    label: "AGENTIC",
+    className: "border-primary/30 bg-primary/10 text-primary",
+  },
+  GUARDRAIL_BLOCKED: {
+    label: "GUARDRAIL",
+    className: "border-warning/40 bg-warning/10 text-warning",
+  },
+  CRAG_FALLBACK_UNGROUNDED: {
+    label: "FALLBACK",
+    className: "border-warning/40 bg-warning/10 text-warning",
+  },
+  LLM_GENERATION_FAILED: {
+    label: "LLM FAIL",
+    className: "border-destructive/40 bg-destructive/10 text-destructive",
+  },
+  PIPELINE_ERROR: {
+    label: "ERROR",
+    className: "border-destructive/40 bg-destructive/10 text-destructive",
+  },
+};
+
+function pathBadge(path: string | null): { label: string; className: string } {
+  if (!path) return { label: "—", className: "border-border text-muted" };
+  return (
+    PATH_BADGES[path] ?? {
+      label: path,
+      className: "border-border text-muted",
+    }
+  );
 }
 
 interface RecentQueriesTableProps {
@@ -191,7 +226,8 @@ export function RecentQueriesTable({
               <th className="py-2 pr-4 font-medium">Mode</th>
               <th className="py-2 pr-4 font-medium">Latency</th>
               <th className="py-2 pr-4 font-medium">Cached</th>
-              <th className="py-2 pr-4 font-medium">Sources</th>
+              <th className="py-2 pr-4 font-medium">Grounded</th>
+              <th className="py-2 pr-4 font-medium">Path</th>
               <th className="py-2 pr-4 font-medium">When</th>
               <th className="py-2 font-medium">
                 <span className="sr-only">Actions</span>
@@ -241,9 +277,22 @@ export function RecentQueriesTable({
                   )}
                 </td>
                 <td className="py-2.5 pr-4">
-                  <span className="inline-flex items-center gap-1 text-xs text-muted">
-                    <Library className="h-3 w-3" />
-                    {query.sourceCount}
+                  {query.isGrounded ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-success">
+                      <CheckCircle2 className="h-3 w-3" /> yes
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs text-warning">
+                      <XCircle className="h-3 w-3" /> no
+                    </span>
+                  )}
+                </td>
+                <td className="max-w-[140px] py-2.5 pr-4">
+                  <span
+                    className={`inline-flex max-w-full items-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] ${pathBadge(query.retrievalPath).className}`}
+                    title={query.retrievalPath ?? undefined}
+                  >
+                    <span className="truncate">{pathBadge(query.retrievalPath).label}</span>
                   </span>
                 </td>
                 <td className="whitespace-nowrap py-2.5 text-xs text-muted">

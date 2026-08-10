@@ -177,6 +177,8 @@ describe("admin router", () => {
         mode: "agentic",
         latencyMs: 812.5,
         isCached: false,
+        isGrounded: true,
+        retrievalPath: "AGENTIC_3_AGENT_REACT",
         sourceCount: 4,
       },
       {
@@ -187,6 +189,8 @@ describe("admin router", () => {
         mode: "standard",
         latencyMs: 1.2,
         isCached: true,
+        isGrounded: true,
+        retrievalPath: null,
         sourceCount: 0,
       },
     ] as never);
@@ -195,7 +199,10 @@ describe("admin router", () => {
     expect(result.items).toHaveLength(2);
     expect(result.nextCursor).toBeNull();
     expect(result.items[0].mode).toBe("agentic");
+    expect(result.items[0].isGrounded).toBe(true);
+    expect(result.items[0].retrievalPath).toBe("AGENTIC_3_AGENT_REACT");
     expect(result.items[1].isCached).toBe(true);
+    expect(result.items[1].retrievalPath).toBeNull();
   });
 
   it("recentQueries: exposes a nextCursor when a further page exists", async () => {

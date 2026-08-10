@@ -80,6 +80,14 @@ pnpm prisma migrate deploy
 The app runtime uses `DATABASE_URL` only; migrations use `MIGRATION_DATABASE_URL` (same
 value is fine on Neon free).
 
+**Migrations are now applied automatically**: the `Database Migrate` GitHub workflow runs
+`prisma migrate deploy` on every push to `main` that touches `web-app/prisma/**` (plus manual
+dispatch), using the `MIGRATION_DATABASE_URL` **repository secret** (Settings → Secrets and
+variables → Actions → New repository secret). Add that secret once — the same Neon pooled
+connection string Vercel uses for production. The manual command above is only needed for the
+initial database setup or ad-hoc runs; additive migrations (nullable columns, `CREATE INDEX
+IF NOT EXISTS`) are safe to apply while the app is live.
+
 ---
 
 ## 3. Production embedding architecture (seeded corpus, not re-embed)
