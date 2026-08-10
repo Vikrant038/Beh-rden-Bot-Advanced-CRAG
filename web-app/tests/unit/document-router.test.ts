@@ -12,6 +12,9 @@ vi.mock("@/server/db", () => ({
     },
     documentChunk: {},
     semanticCacheEntry: {},
+    user: {
+      findUnique: vi.fn(),
+    },
     $queryRaw: vi.fn(),
   },
 }));
@@ -54,6 +57,9 @@ const prismaMock = prisma as unknown as {
     findMany: ReturnType<typeof vi.fn>;
     deleteMany: ReturnType<typeof vi.fn>;
   };
+  user: {
+    findUnique: ReturnType<typeof vi.fn>;
+  };
 };
 const mockedDrainPendingJobs = vi.mocked(drainPendingJobs);
 const mockedEnqueueUrl = vi.mocked(enqueueUrlJob);
@@ -64,6 +70,8 @@ const mockedInvalidate = vi.mocked(semanticCache.invalidateForDocument);
 const mockedAssertSafeUrl = vi.mocked(assertSafeUrl);
 
 function makeCaller(role: "USER" | "ADMIN" = "ADMIN") {
+  // isAuthenticated reads role + block status fresh from the DB.
+  prismaMock.user.findUnique.mockResolvedValue({ role, blockedAt: null } as never);
   return appRouter.createCaller({
     db: prismaMock as never,
     session: {

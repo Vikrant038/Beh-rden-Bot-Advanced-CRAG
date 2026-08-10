@@ -1,4 +1,4 @@
-import { router, adminProcedure } from "@/server/trpc/t";
+import { router, adminProcedure, type AuthedUser } from "@/server/trpc/t";
 import { after } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db";
@@ -40,6 +40,8 @@ export interface AdminUserRow {
   role: "USER" | "ADMIN";
   createdAt: Date;
   conversationCount: number;
+  /** Non-null when the account is suspended (admin user-management). */
+  blockedAt: Date | null;
 }
 
 export interface DailyQueryPoint {
@@ -357,6 +359,7 @@ export const adminRouter = router({
         name: true,
         email: true,
         role: true,
+        blockedAt: true,
         createdAt: true,
         _count: { select: { conversations: true } },
       },
@@ -369,10 +372,72 @@ export const adminRouter = router({
       name: row.name,
       email: row.email,
       role: row.role,
+      blockedAt: row.blockedAt,
       createdAt: row.createdAt,
       conversationCount: row._count.conversations,
     }));
   }),
+
+  setUserRole: adminProcedure
+    .input(z.object({ id: z.string().min(1), role: z.enum(["USER", "ADMIN"]) }))
+    .mutation(async ({ ctx, input }) => {
+      const actor = ctx.user as AuthedUser;
+      // Guardrails: an admin must not be able to demote themselves (that would
+      // be a one-way door that could lock the app out of admin access entirely
+      // if no other admin remains) or promote/block themselves (self-granting
+      // is meaningless — they are already admin).
+      if (input.id === actor.id) {
+        throw new NotFoundError("User", input.id);
+      }
+
+      const existing = await prisma.user.findUnique({
+        where: { id: input.id },
+        select: { id: true },
+      });
+      if (!existing) {
+        throw new NotFoundError("User", input.id);
+      }
+
+      await prisma.user.update({
+        where: { id: input.id },
+        data: { role: input.role },
+        select: { id: true },
+      });
+      logger.info(
+        { targetId: input.id, role: input.role, actorId: actor.id },
+        "[ADMIN] user role updated",
+      );
+      return { success: true };
+    }),
+
+  setUserBlocked: adminProcedure
+    .input(z.object({ id: z.string().min(1), blocked: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const actor = ctx.user as AuthedUser;
+      // An admin must not be able to block themselves (self lock-out).
+      if (input.id === actor.id) {
+        throw new NotFoundError("User", input.id);
+      }
+
+      const existing = await prisma.user.findUnique({
+        where: { id: input.id },
+        select: { id: true },
+      });
+      if (!existing) {
+        throw new NotFoundError("User", input.id);
+      }
+
+      await prisma.user.update({
+        where: { id: input.id },
+        data: { blockedAt: input.blocked ? new Date() : null },
+        select: { id: true },
+      });
+      logger.info(
+        { targetId: input.id, blocked: input.blocked, actorId: actor.id },
+        "[ADMIN] user blocked status updated",
+      );
+      return { success: true };
+    }),
 
   dailyQueries: adminProcedure
     .input(z.object({ days: z.number().int().min(7).max(DAILY_QUERY_MAX_DAYS).default(14) }))

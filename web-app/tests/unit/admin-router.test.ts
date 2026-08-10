@@ -7,6 +7,8 @@ vi.mock("@/server/db", () => ({
     user: {
       count: vi.fn(),
       findMany: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
     },
     conversation: { count: vi.fn() },
     message: {
@@ -28,6 +30,8 @@ import type { MockPrisma } from "../helpers/mock-prisma";
 const prismaMock = prisma as unknown as MockPrisma;
 
 function makeCaller(role: "USER" | "ADMIN" = "ADMIN") {
+  // isAuthenticated reads role + block status fresh from the DB.
+  prismaMock.user.findUnique.mockResolvedValue({ role, blockedAt: null } as never);
   return appRouter.createCaller({
     db: prismaMock as never,
     session: {
@@ -90,15 +94,25 @@ describe("admin router", () => {
     expect(result.cleared).toBe(true);
   });
 
-  it("users: lists users with conversation counts", async () => {
+  it("users: lists users with conversation counts and block status", async () => {
     prismaMock.user.findMany.mockResolvedValue([
       {
         id: "u1",
         name: "Alice",
         email: "alice@example.com",
         role: "USER",
+        blockedAt: null,
         createdAt: new Date(),
         _count: { conversations: 4 },
+      },
+      {
+        id: "u2",
+        name: "Bob",
+        email: "bob@example.com",
+        role: "ADMIN",
+        blockedAt: new Date("2026-08-01T00:00:00Z"),
+        createdAt: new Date(),
+        _count: { conversations: 1 },
       },
     ] as never);
 
@@ -106,6 +120,11 @@ describe("admin router", () => {
     const result = await caller.admin.users();
     expect(result[0].conversationCount).toBe(4);
     expect(result[0].role).toBe("USER");
+    expect(result[0].blockedAt).toBeNull();
+    expect(result[1].blockedAt).toBeInstanceOf(Date);
+    expect(prismaMock.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { email: { not: { startsWith: "guest:" } } } }),
+    );
   });
 
   it("dailyQueries: returns a time series of user queries", async () => {
@@ -373,5 +392,95 @@ describe("admin router", () => {
     prismaMock.message.findUnique.mockResolvedValue(null as never);
     const caller = makeCaller();
     await expect(caller.admin.queryDetail({ id: "ghost" })).rejects.toThrow(/not found/i);
+  });
+
+  it("setUserRole: promotes a regular user to ADMIN", async () => {
+    // First findUnique is the isAuthenticated role lookup; the second is the
+    // mutation's existence check on the target user.
+    prismaMock.user.findUnique
+      .mockResolvedValueOnce({ role: "ADMIN", blockedAt: null } as never)
+      .mockResolvedValueOnce({ id: "u2" } as never);
+    prismaMock.user.update.mockResolvedValue({ id: "u2" } as never);
+    const caller = makeCaller();
+
+    const result = await caller.admin.setUserRole({ id: "u2", role: "ADMIN" });
+    expect(result.success).toBe(true);
+    expect(prismaMock.user.update).toHaveBeenCalledWith({
+      where: { id: "u2" },
+      data: { role: "ADMIN" },
+      select: { id: true },
+    });
+  });
+
+  it("setUserRole: demotes an admin to USER", async () => {
+    prismaMock.user.findUnique
+      .mockResolvedValueOnce({ role: "ADMIN", blockedAt: null } as never)
+      .mockResolvedValueOnce({ id: "u2" } as never);
+    prismaMock.user.update.mockResolvedValue({ id: "u2" } as never);
+    const caller = makeCaller();
+
+    await caller.admin.setUserRole({ id: "u2", role: "USER" });
+    expect(prismaMock.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { role: "USER" } }),
+    );
+  });
+
+  it("setUserRole: refuses to modify the caller's own row (self-protection)", async () => {
+    const caller = makeCaller();
+    await expect(caller.admin.setUserRole({ id: "user-1", role: "USER" })).rejects.toThrow();
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+    // The existence check never runs either — the guard fires before any DB write.
+    expect(prismaMock.user.findUnique).toHaveBeenCalledTimes(1);
+  });
+
+  it("setUserRole: throws when the target user does not exist", async () => {
+    prismaMock.user.findUnique
+      .mockResolvedValueOnce({ role: "ADMIN", blockedAt: null } as never)
+      .mockResolvedValueOnce(null as never);
+    const caller = makeCaller();
+    await expect(caller.admin.setUserRole({ id: "ghost", role: "USER" })).rejects.toThrow();
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+  });
+
+  it("setUserBlocked: blocks an account and stamps blockedAt", async () => {
+    prismaMock.user.findUnique
+      .mockResolvedValueOnce({ role: "ADMIN", blockedAt: null } as never)
+      .mockResolvedValueOnce({ id: "u2" } as never);
+    prismaMock.user.update.mockResolvedValue({ id: "u2" } as never);
+    const caller = makeCaller();
+
+    const result = await caller.admin.setUserBlocked({ id: "u2", blocked: true });
+    expect(result.success).toBe(true);
+    expect(prismaMock.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { blockedAt: expect.any(Date) } }),
+    );
+  });
+
+  it("setUserBlocked: unblocks an account by clearing blockedAt", async () => {
+    prismaMock.user.findUnique
+      .mockResolvedValueOnce({ role: "ADMIN", blockedAt: null } as never)
+      .mockResolvedValueOnce({ id: "u2" } as never);
+    prismaMock.user.update.mockResolvedValue({ id: "u2" } as never);
+    const caller = makeCaller();
+
+    await caller.admin.setUserBlocked({ id: "u2", blocked: false });
+    expect(prismaMock.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { blockedAt: null } }),
+    );
+  });
+
+  it("setUserBlocked: refuses to block the caller's own row", async () => {
+    const caller = makeCaller();
+    await expect(caller.admin.setUserBlocked({ id: "user-1", blocked: true })).rejects.toThrow();
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+  });
+
+  it("setUserBlocked: throws when the target user does not exist", async () => {
+    prismaMock.user.findUnique
+      .mockResolvedValueOnce({ role: "ADMIN", blockedAt: null } as never)
+      .mockResolvedValueOnce(null as never);
+    const caller = makeCaller();
+    await expect(caller.admin.setUserBlocked({ id: "ghost", blocked: true })).rejects.toThrow();
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
   });
 });

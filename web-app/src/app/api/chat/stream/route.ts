@@ -48,6 +48,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Blocked accounts must not be able to stream answers (or consume the
+  // embedding/LLM budget). Guests are device-scoped and never suspended via
+  // the admin user-management surface, so only real session users are checked.
+  if (sessionUserId) {
+    const dbUser = await prisma.user.findUnique({
+      where: { id: sessionUserId },
+      select: { blockedAt: true },
+    });
+    if (!dbUser || dbUser.blockedAt) {
+      return NextResponse.json({ error: "This account has been blocked." }, { status: 403 });
+    }
+  }
+
   // Free-tier cap: guests may ask at most GUEST_PROMPT_LIMIT prompts total. This
   // is the enforcement point for sending a message inside an existing
   // conversation (conversation.create guards starting new threads); it must run

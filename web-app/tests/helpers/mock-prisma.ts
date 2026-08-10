@@ -43,8 +43,10 @@ export interface MockPrisma {
   user: {
     count: MockFn;
     findMany: MockFn;
+    findUnique: MockFn;
     create: MockFn;
     upsert: MockFn;
+    update: MockFn;
     delete: MockFn;
   };
   messageFeedback: {

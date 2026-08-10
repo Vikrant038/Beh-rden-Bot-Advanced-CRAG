@@ -14,6 +14,9 @@ vi.mock("@/server/db", () => ({
       findMany: vi.fn(),
       count: vi.fn(),
     },
+    user: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 
@@ -23,6 +26,8 @@ import type { MockPrisma } from "../helpers/mock-prisma";
 const prismaMock = prisma as unknown as MockPrisma;
 
 function makeCaller() {
+  // isAuthenticated reads role + block status fresh from the DB.
+  prismaMock.user.findUnique.mockResolvedValue({ role: "USER", blockedAt: null } as never);
   return appRouter.createCaller({
     db: prismaMock as never,
     session: {

@@ -11,6 +11,9 @@ vi.mock("@/server/db", () => ({
       findUnique: vi.fn(),
       deleteMany: vi.fn(),
     },
+    user: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 
@@ -45,6 +48,8 @@ const mockedRunAgenticRag = vi.mocked(runAgenticRag);
 const mockedDisambiguate = vi.mocked(disambiguateQuery);
 
 function makeCaller(role: "USER" | "ADMIN" = "ADMIN") {
+  // isAuthenticated reads role + block status fresh from the DB.
+  prismaMock.user.findUnique.mockResolvedValue({ role, blockedAt: null } as never);
   return appRouter.createCaller({
     db: prismaMock as never,
     session: {

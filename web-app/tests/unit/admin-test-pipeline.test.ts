@@ -4,7 +4,7 @@ import type { Context } from "@/server/trpc/context";
 
 vi.mock("@/server/db", () => ({
   prisma: {
-    user: { count: vi.fn() },
+    user: { count: vi.fn(), findUnique: vi.fn() },
     conversation: { count: vi.fn(), create: vi.fn() },
     message: { count: vi.fn(), create: vi.fn() },
     document: { count: vi.fn() },
@@ -40,6 +40,8 @@ import { formatDebugError } from "@/server/routers/admin";
 const prismaMock = prisma as unknown as MockPrisma;
 
 function makeCaller(role: "USER" | "ADMIN" = "ADMIN") {
+  // isAuthenticated reads role + block status fresh from the DB.
+  prismaMock.user.findUnique.mockResolvedValue({ role, blockedAt: null } as never);
   return appRouter.createCaller({
     db: prismaMock as never,
     session: {

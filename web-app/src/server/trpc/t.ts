@@ -41,7 +41,26 @@ const isAuthenticated = t.middleware(async ({ ctx, next }) => {
 
   let user: AuthedUser;
   if (session?.user?.id) {
-    user = { id: session.user.id, role: session.user.role, isGuest: false };
+    // Read the role + block status fresh from the DB rather than trusting the
+    // JWT. The JWT role is baked at sign-in, so an admin promote/demote would
+    // otherwise only take effect on the user's next login — the admin
+    // user-management surface must apply immediately. One indexed PK lookup
+    // per request; blocked accounts are rejected here (and in the SSE stream
+    // route + signIn) so a suspension is enforced, not just cosmetic.
+    const dbUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true, blockedAt: true },
+    });
+    if (!dbUser) {
+      throw new TRPCError({ code: "UNAUTHORIZED" });
+    }
+    if (dbUser.blockedAt) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "This account has been blocked. Contact support for assistance.",
+      });
+    }
+    user = { id: session.user.id, role: dbUser.role, isGuest: false };
   } else {
     // Guest admission: the id is signed (server/guest.ts), so treating it as a
     // User id cannot claim another account. Lazy-provision the row once so

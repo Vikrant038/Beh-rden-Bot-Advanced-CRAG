@@ -21,9 +21,11 @@ vi.mock("@/server/guest", () => ({
 }));
 
 const mockMessageCount = vi.fn();
+const mockUserFindUnique = vi.fn();
 vi.mock("@/server/db", () => ({
   prisma: {
     message: { count: (...args: unknown[]) => mockMessageCount(...args) },
+    user: { findUnique: (...args: unknown[]) => mockUserFindUnique(...args) },
   },
 }));
 
@@ -60,6 +62,8 @@ describe("POST /api/chat/stream", () => {
     mockReadGuestId.mockReturnValue(null);
     mockRateCheck.mockResolvedValue({ success: true, reset: 0 });
     mockMessageCount.mockResolvedValue(0);
+    // The route looks up the session user's block status before streaming.
+    mockUserFindUnique.mockResolvedValue({ blockedAt: null });
     mockRunChatStream.mockImplementation(() =>
       streamEvents(
         { type: "status", stage: "guardrail" },
@@ -106,6 +110,22 @@ describe("POST /api/chat/stream", () => {
     const response = await POST(buildRequest());
     expect(response.status).toBe(200);
     expect(mockMessageCount).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 for a blocked account before any streaming starts", async () => {
+    mockUserFindUnique.mockResolvedValue({ blockedAt: new Date("2026-08-01T00:00:00Z") });
+    const response = await POST(buildRequest());
+    expect(response.status).toBe(403);
+    const body = await response.json();
+    expect(body.error).toMatch(/blocked/i);
+    expect(mockRunChatStream).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 when the session user no longer exists in the DB", async () => {
+    mockUserFindUnique.mockResolvedValue(null);
+    const response = await POST(buildRequest());
+    expect(response.status).toBe(403);
+    expect(mockRunChatStream).not.toHaveBeenCalled();
   });
 
   it("returns 429 with resetInSeconds when rate limited", async () => {
