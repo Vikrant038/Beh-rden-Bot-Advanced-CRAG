@@ -9,7 +9,11 @@
  *
  * Rate-limited to respect Groq's free tier (30 RPM / 6,000 TPM / 14,400 RPD)
  * with a configurable token bucket so the pipeline never 429s. Checkpoint
- * caching means interrupted runs resume without re-translating.
+ * caching means interrupted runs resume without re-translating. Multiple API
+ * keys (from DIFFERENT Groq organizations — free-tier limits are per-org, so
+ * same-account keys share one bucket) can be supplied via `GROQ_API_KEYS`
+ * (comma-separated) and are spread across by `GroqRateLimiterPool` for
+ * parallel workers.
  */
 
 import { createHash } from "node:crypto";
@@ -134,11 +138,26 @@ export class GroqRateLimiter {
     return this.tpm / 60;
   }
 
+  /** Number of API keys in this limiter (1 — the pool reports its key count). */
+  get size(): number {
+    return 1;
+  }
+
+  /**
+   * Current token-bucket capacity (refilled to TPM). Lets the pool pick the
+   * least-loaded key without mutating the bucket.
+   */
+  get availableTokens(): number {
+    this.refillBucket();
+    return this.tokens;
+  }
+
   /**
    * Block until the token bucket has enough capacity for `tokens` and the
-   * RPM pacing interval has elapsed.
+   * RPM pacing interval has elapsed. Returns this limiter so the pool and
+   * single-key callers share one interface.
    */
-  async waitForTokens(tokens: number): Promise<void> {
+  async waitForTokens(tokens: number): Promise<GroqRateLimiter> {
     // RPD guard
     const today = new Date().getDate();
     if (today !== this.rpdResetDay) {
@@ -182,6 +201,7 @@ export class GroqRateLimiter {
 
     this.lastRequestTime = Date.now();
     this.requestsToday++;
+    return this;
   }
 
   private refillBucket(): void {
@@ -196,7 +216,114 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Multi-key rate limiter: spreads translation requests across several Groq
+ * API keys so each key's free-tier bucket is consumed independently.
+ *
+ * ⚠️ Only helps when the keys belong to DIFFERENT Groq organizations. Groq's
+ * free-tier limits (30 RPM / 6,000 TPM / 14,400 RPD) are per organization, so
+ * multiple keys on one account share a single bucket and gain nothing.
+ */
+export class GroqRateLimiterPool {
+  readonly limiters: GroqRateLimiter[];
+
+  constructor(keys: string[]) {
+    const resolved = keys.map((k) => k.trim()).filter((k) => k.length > 0);
+    if (resolved.length === 0) {
+      throw new Error("GroqRateLimiterPool requires at least one API key");
+    }
+    this.limiters = resolved.map((apiKey) => new GroqRateLimiter({ apiKey }));
+  }
+
+  /** Number of API keys in the pool. */
+  get size(): number {
+    return this.limiters.length;
+  }
+
+  /** Model used by every key (they all translate with the same model). */
+  get model(): string {
+    return this.limiters[0]?.model ?? "";
+  }
+
+  /** Per-key requests/minute (all keys share the same config). */
+  get rpm(): number {
+    return this.limiters[0]?.rpm ?? 0;
+  }
+
+  /** Per-key tokens/minute (all keys share the same config). */
+  get tpm(): number {
+    return this.limiters[0]?.tpm ?? 0;
+  }
+
+  /** Per-key requests/day (all keys share the same config). */
+  get rpd(): number {
+    return this.limiters[0]?.rpd ?? 0;
+  }
+
+  /**
+   * Reserves `tokens` on the least-loaded key (most available bucket tokens)
+   * and returns that key's limiter. Blocks until one key has capacity, so
+   * parallel workers never 429 the account.
+   */
+  async waitForTokens(tokens: number): Promise<GroqRateLimiter> {
+    const chosen = this.pickBest();
+    await chosen.waitForTokens(tokens);
+    return chosen;
+  }
+
+  /** Picks the key with the most available tokens (ties → first). */
+  private pickBest(): GroqRateLimiter {
+    let best = this.limiters[0]!;
+    let bestTokens = -1;
+    for (const limiter of this.limiters) {
+      const available = limiter.availableTokens;
+      if (available > bestTokens) {
+        best = limiter;
+        bestTokens = available;
+      }
+    }
+    return best;
+  }
+}
+
+/** A single-key limiter or a multi-key pool — both expose `waitForTokens()`. */
+export type TranslationRateLimiter = GroqRateLimiter | GroqRateLimiterPool;
+
+/**
+ * Builds the translation rate limiter: a multi-key pool when several keys are
+ * configured, otherwise a single limiter. Keys come from `GROQ_API_KEYS`
+ * (comma-separated, from DIFFERENT Groq accounts — see GroqRateLimiterPool)
+ * with `GROQ_API_KEY` as the fallback.
+ */
+export function createTranslationRateLimiter(
+  options: { keys?: string[] } = {},
+): TranslationRateLimiter {
+  const explicit = options.keys && options.keys.length > 0;
+  const raw = explicit ? (options.keys as string[]) : (process.env.GROQ_API_KEYS ?? "").split(",");
+  const keys = raw.map((k) => k.trim()).filter((k) => k.length > 0);
+  if (keys.length === 0) {
+    const fallback = process.env.GROQ_API_KEY?.trim();
+    if (!fallback) {
+      throw new Error(
+        "No Groq API key configured — set GROQ_API_KEYS (comma-separated) or GROQ_API_KEY",
+      );
+    }
+    return new GroqRateLimiter({ apiKey: fallback });
+  }
+  return keys.length === 1
+    ? new GroqRateLimiter({ apiKey: keys[0] })
+    : new GroqRateLimiterPool(keys);
+}
+
 // ─── Translation checkpoint cache ───────────────────────────────────────────
+
+/**
+ * In-flight translation promises keyed by segment hash. With parallel workers
+ * (multi-key pool + concurrency > 1), two workers can pick up the same segment
+ * before the checkpoint cache is written — this dedupes those concurrent
+ * calls so a segment is never translated twice (and never double-charged).
+ */
+const inflightSegments = new Map<string, Promise<string>>();
 
 const CACHE_DIR = join(process.cwd(), "data", "translation-cache");
 
@@ -271,15 +398,16 @@ export interface TranslationResult {
 
 /**
  * Translates a text to English if it's not already English. Rate-limited to
- * the Groq free tier. Checkpoint-cached for resumability.
+ * the Groq free tier. Checkpoint-cached for resumability, and safe under
+ * parallel workers (concurrent duplicate segments are deduped in-flight).
  *
  * @param text - The extracted document text (cleaned, not chunked).
- * @param rateLimiter - A configured GroqRateLimiter instance.
+ * @param rateLimiter - A GroqRateLimiter or GroqRateLimiterPool.
  * @returns TranslationResult with the English text + metadata.
  */
 export async function translateToEnglish(
   text: string,
-  rateLimiter: GroqRateLimiter,
+  rateLimiter: TranslationRateLimiter,
 ): Promise<TranslationResult> {
   const language = detectLanguage(text);
 
@@ -308,11 +436,19 @@ export async function translateToEnglish(
     const outputTokens = inputTokens; // conservative estimate
     const requestTokens = inputTokens + outputTokens;
 
-    await rateLimiter.waitForTokens(requestTokens);
+    // Parallel-worker dedupe: another worker may already be translating this
+    // exact segment. Wait on the shared promise instead of re-translating.
+    const inFlight = inflightSegments.get(hash);
+    if (inFlight) {
+      const translated = await inFlight;
+      translatedSegments.push(translated);
+      continue;
+    }
 
-    try {
-      const response = await rateLimiter.client.chat.completions.create({
-        model: rateLimiter.model,
+    const translation = (async (): Promise<string> => {
+      const limiter = await rateLimiter.waitForTokens(requestTokens);
+      const response = await limiter.client.chat.completions.create({
+        model: limiter.model,
         messages: [
           { role: "system", content: TRANSLATION_SYSTEM_PROMPT },
           { role: "user", content: segment },
@@ -326,8 +462,7 @@ export async function translateToEnglish(
         throw new Error("Empty translation response");
       }
 
-      cacheStore(hash, translated, rateLimiter.model, language);
-      translatedSegments.push(translated);
+      cacheStore(hash, translated, limiter.model, language);
       totalTokens += requestTokens;
       logger.info(
         "[TRANSLATE] segment %d/%d done (%d tokens used)",
@@ -335,6 +470,13 @@ export async function translateToEnglish(
         segments.length,
         requestTokens,
       );
+      return translated;
+    })();
+
+    inflightSegments.set(hash, translation);
+    try {
+      const translated = await translation;
+      translatedSegments.push(translated);
     } catch (error) {
       logger.warn(
         { error: String(error), segment: i + 1 },
@@ -344,6 +486,8 @@ export async function translateToEnglish(
       // If this is the first segment and it fails, translations will be empty
       // and the caller should treat this as a non-fatal error.
       throw error;
+    } finally {
+      inflightSegments.delete(hash);
     }
   }
 

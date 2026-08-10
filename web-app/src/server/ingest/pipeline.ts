@@ -33,7 +33,7 @@ import { getCorpusProvider } from "@/server/rag/instance";
 import { ExternalApiError } from "@/server/lib/errors";
 import { runWithTrace } from "@/server/tracing";
 import { createLogger } from "@/server/lib/logger";
-import { translateToEnglish, type GroqRateLimiter } from "@/server/ingest/translate";
+import { translateToEnglish, type TranslationRateLimiter } from "@/server/ingest/translate";
 
 const logger = createLogger("ingest");
 
@@ -64,8 +64,10 @@ export interface IngestOptions {
    * calls so the token bucket is respected globally).
    */
   normalizeEnglish?: boolean;
-  /** Groq rate limiter for translation (required when normalizeEnglish is true). */
-  rateLimiter?: GroqRateLimiter;
+  /** Groq rate limiter (or multi-key pool) for translation (required when
+   * normalizeEnglish is true — shared across pipeline calls so the token
+   * buckets are respected globally). */
+  rateLimiter?: TranslationRateLimiter;
   /**
    * Optional display-name override. Defaults to the scraped `<title>` for URLs
    * and the filename for PDFs. When provided on a content-unchanged re-ingest,
@@ -440,11 +442,18 @@ export function pdfSourceKey(buffer: Buffer, filename: string): string {
  * job queue (src/server/ingest/jobs.ts → enqueueSyncJobs) drained by the
  * cron worker. See module-level JSDoc.
  */
-export async function syncAllDocuments(options: IngestOptions = {}): Promise<IngestResult[]> {
+export async function syncAllDocuments(
+  options: IngestOptions = {},
+  queueOptions: { concurrency?: number } = {},
+): Promise<IngestResult[]> {
   const documents = await prisma.document.findMany({ select: { url: true } });
-  logger.info({ count: documents.length }, "[INGEST] starting full sync via serial queue");
+  const concurrency = Math.max(1, queueOptions.concurrency ?? 1);
+  logger.info(
+    { count: documents.length, concurrency },
+    "[INGEST] starting full sync via serial queue",
+  );
 
-  const queue = new IngestQueue({ concurrency: 1 });
+  const queue = new IngestQueue({ concurrency });
   const results: IngestResult[] = [];
 
   for (const document of documents) {

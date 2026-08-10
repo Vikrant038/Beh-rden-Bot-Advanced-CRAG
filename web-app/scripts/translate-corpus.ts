@@ -14,8 +14,12 @@
  *   pnpm tsx scripts/translate-corpus.ts
  *
  * Estimated time on Groq free tier: ~1–4 hours depending on how many sources
- * are already English (they skip translation). Set GROQ_RPM / GROQ_TPM env
- * vars for paid-plan limits.
+ * are already English (they skip translation). Set GROQ_API_KEYS to a
+ * comma-separated list of keys from DIFFERENT Groq accounts to translate in
+ * parallel (one worker per key, each key's free-tier bucket used
+ * independently — free-tier limits are per organization, so same-account keys
+ * share one bucket and gain nothing). Set GROQ_RPM / GROQ_TPM env vars for
+ * paid-plan limits.
  *
  * Prerequisites:
  *   - GROQ_API_KEY set (translation)
@@ -27,7 +31,7 @@
 import { prisma } from "@/server/db";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { syncAllDocuments, type IngestOptions } from "@/server/ingest/pipeline";
-import { GroqRateLimiter, detectLanguage } from "@/server/ingest/translate";
+import { createTranslationRateLimiter, detectLanguage } from "@/server/ingest/translate";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("translate-corpus");
@@ -77,7 +81,11 @@ async function main(): Promise<void> {
   );
 
   // ── Step 4: Run the re-ingest ─────────────────────────────────────────
-  const limiter = new GroqRateLimiter();
+  const limiter = createTranslationRateLimiter();
+  // One worker per API key saturates every key's bucket; capped so a huge
+  // key list never thrashes the DB. Extra workers beyond keys simply queue
+  // on the pool (no harm).
+  const concurrency = Math.min(limiter.size, 4);
   const opts: IngestOptions = {
     normalizeEnglish: true,
     rateLimiter: limiter,
@@ -85,14 +93,16 @@ async function main(): Promise<void> {
 
   logger.info("[MIGRATE] Re-ingesting all documents through the English-first pipeline…");
   logger.info(
-    "[MIGRATE] Rate-limiter: model=%s, rpm=%d, tpm=%d, rpd=%d",
+    "[MIGRATE] Rate-limiter: model=%s, keys=%d, concurrency=%d, rpm=%d/key, tpm=%d/key, rpd=%d/key",
     limiter.model,
+    limiter.size,
+    concurrency,
     limiter.rpm,
     limiter.tpm,
     limiter.rpd,
   );
 
-  const results = await syncAllDocuments(opts);
+  const results = await syncAllDocuments(opts, { concurrency });
 
   // ── Step 5: Summary ───────────────────────────────────────────────────
   const succeeded = results.filter((r) => r.status !== "failed").length;

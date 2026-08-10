@@ -37,11 +37,14 @@ import {
   type IngestOptions,
   type IngestResult,
 } from "@/server/ingest/pipeline";
-import { GroqRateLimiter } from "@/server/ingest/translate";
+import {
+  createTranslationRateLimiter,
+  type TranslationRateLimiter,
+} from "@/server/ingest/translate";
 import { createLogger } from "@/server/lib/logger";
 
 /** Shared rate limiter for the CLI run (reused across all documents). */
-let cliRateLimiter: GroqRateLimiter | undefined;
+let cliRateLimiter: TranslationRateLimiter | undefined;
 
 const logger = createLogger("ingest-cli");
 
@@ -178,7 +181,7 @@ function ingestOptions(args: CliArgs): IngestOptions {
   if (args.english) {
     opts.normalizeEnglish = true;
     if (!cliRateLimiter) {
-      cliRateLimiter = new GroqRateLimiter();
+      cliRateLimiter = createTranslationRateLimiter();
     }
     opts.rateLimiter = cliRateLimiter;
   }
