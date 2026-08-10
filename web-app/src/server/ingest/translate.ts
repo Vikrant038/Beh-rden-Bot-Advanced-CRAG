@@ -481,6 +481,26 @@ export class GroqRateLimiterPool {
   }
 
   /**
+   * Marks a model's daily budget as fully spent after the API reports a TPD
+   * 429. The in-process estimate resets to zero on every run while Groq's
+   * counter is server-side and persists, so the estimate can hand out a model
+   * that is actually exhausted (exactly what stalled run 3: every segment got
+   * a 70b limiter that 429'd and fell back to German). Marking it exhausted
+   * makes the next waitForTokens call skip it and advance the chain.
+   */
+  exhaustModelToday(modelId: string): void {
+    const mi = this.models.findIndex((m) => m.model === modelId);
+    if (mi === -1) {
+      return;
+    }
+    const tpd = this.models[mi]!.tpd;
+    if (tpd > 0) {
+      this.tokensToday[mi] = tpd;
+      logger.warn({ model: modelId }, "[TRANSLATE] model daily budget marked exhausted (API 429)");
+    }
+  }
+
+  /**
    * Reserves `tokens` on the best available (key, model): the preferred model
    * that still has daily budget, on its least-loaded key. When a model's TPD
    * is spent on all keys it falls back to the next model; when every model is
@@ -703,6 +723,18 @@ function isHardModelError(error: unknown): boolean {
 }
 
 /**
+ * True when a 429 means the model's DAILY token budget is spent (vs a
+ * per-minute/request throttle that recovers on its own). The pool must treat
+ * these as exhaustion: mark the model spent and advance to the next one,
+ * rather than falling back to original text for the whole document.
+ */
+function isTpdExhaustion(error: unknown): boolean {
+  return /tokens per day|TPD|daily token limit/i.test(
+    String((error as { message?: string })?.message ?? error),
+  );
+}
+
+/**
  * Result of a translation operation.
  */
 export interface TranslationResult {
@@ -812,7 +844,15 @@ export async function translateToEnglish(
             rateLimiter.blacklistModel(limiter.model);
             continue;
           }
-          // Transient — surface so the caller can fall back to original text.
+          if (isTpdExhaustion(error) && rateLimiter instanceof GroqRateLimiterPool) {
+            // The API says this model's daily budget is gone — the in-process
+            // estimate missed it (it resets per run). Mark it spent and retry
+            // the segment on the next model instead of falling back to German.
+            rateLimiter.exhaustModelToday(limiter.model);
+            continue;
+          }
+          // Transient (per-minute throttle, 5xx, network) — surface so the
+          // caller can fall back to original text.
           throw error;
         }
       }

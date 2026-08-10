@@ -154,6 +154,25 @@ describe("GroqRateLimiterPool", () => {
     pool.blacklistModel("not-a-model");
     expect(pool.liveModels).toEqual(["llama-3.3-70b-versatile"]);
   });
+
+  it("exhausting a model's daily budget makes waitForTokens skip it", async () => {
+    const pool = new GroqRateLimiterPool(["key-1"], [SEVENTY_B, SCOUT]);
+    pool.exhaustModelToday("llama-3.3-70b-versatile");
+    const chosen = await pool.waitForTokens(10);
+    expect(chosen.model).toBe("meta-llama/llama-4-scout-17b-16e-instruct");
+    // The model is NOT blacklisted — just spent for today.
+    expect(pool.liveModels).toEqual([
+      "llama-3.3-70b-versatile",
+      "meta-llama/llama-4-scout-17b-16e-instruct",
+    ]);
+  });
+
+  it("exhausting an unknown model is a no-op", async () => {
+    const pool = new GroqRateLimiterPool(["key-1"], [SEVENTY_B]);
+    pool.exhaustModelToday("not-a-model");
+    const chosen = await pool.waitForTokens(10);
+    expect(chosen.model).toBe("llama-3.3-70b-versatile");
+  });
 });
 
 describe("createTranslationRateLimiter", () => {
@@ -343,6 +362,47 @@ describe("translateToEnglish parallel dedupe", () => {
     // original text) — the chain must NOT burn the next model's budget on it.
     await expect(translateToEnglish(germanText, pool)).rejects.toThrow("over capacity");
     expect(scout.client.chat.completions.create).not.toHaveBeenCalled();
+  });
+
+  it("advances past a model whose daily budget the API reports as spent", async () => {
+    const pool = new GroqRateLimiterPool(["key-1"], [SEVENTY_B, SCOUT]);
+    const [seventyB] = pool.keyLimiters(0);
+    const [scout] = pool.keyLimiters(1);
+
+    // Exactly the error from run 3: the pool's fresh in-process estimate said
+    // 70b had budget, but Groq's server-side counter was already exhausted.
+    const tpd429 = Object.assign(
+      new Error(
+        "Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_x` " +
+          "service tier `on_demand` on tokens per day (TPD): Limit 100000, Used 95738, Requested 5161.",
+      ),
+      { status: 429 },
+    );
+    vi.spyOn(seventyB.client.chat.completions, "create").mockRejectedValue(tpd429 as never);
+    vi.spyOn(scout.client.chat.completions, "create").mockResolvedValue({
+      choices: [{ message: { content: "Translated by scout." } }],
+    } as never);
+
+    const germanText = "Die Aufenthaltserlaubnis wird für das Studium benötigt.";
+    const segmentHash = createHash("sha256").update(germanText).digest("hex");
+    rmSync(join(process.cwd(), "data", "translation-cache", `${segmentHash}.json`), {
+      force: true,
+    });
+
+    const result = await translateToEnglish(germanText, pool);
+    expect(result.englishText).toBe("Translated by scout.");
+    expect(seventyB.client.chat.completions.create).toHaveBeenCalledTimes(1);
+    expect(scout.client.chat.completions.create).toHaveBeenCalledTimes(1);
+
+    // A second call must skip 70b entirely (its budget is marked spent) and
+    // go straight to scout — this is what makes the big remaining docs finish.
+    const germanText2 = "Die Anmeldung muss bei der Meldebehörde erfolgen.";
+    const hash2 = createHash("sha256").update(germanText2).digest("hex");
+    rmSync(join(process.cwd(), "data", "translation-cache", `${hash2}.json`), { force: true });
+    const second = await translateToEnglish(germanText2, pool);
+    expect(second.englishText).toBe("Translated by scout.");
+    expect(seventyB.client.chat.completions.create).toHaveBeenCalledTimes(1);
+    expect(scout.client.chat.completions.create).toHaveBeenCalledTimes(2);
   });
 });
 
