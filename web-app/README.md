@@ -122,6 +122,65 @@ scripts/              # Developer tooling (secret scan, …)
   `IngestQueue` (one document at a time). A nightly cron (`/api/cron/cleanup-cache`)
   clears the semantic cache.
 
+## Cost & query economics
+
+Every LLM call is metered end-to-end. `LlmUsageCollector` (AsyncLocalStorage)
+records **provider, model, prompt tokens, completion tokens, and estimated USD**
+for every call; the agentic pipeline rolls those up into per-agent costs
+(`research` / `analyst` / `writer`) and a `totalCostUsd`, and both pipeline
+variants expose the raw call records (`llmCalls`) in their glass-box trace —
+visible in the admin pipeline tester. Embeddings and reranking run on a
+self-hosted HF Inference worker (inference credits, not per-token billing), so
+the per-query cost is dominated by generation.
+
+### Providers & pricing basis
+
+| Component | Provider | Model / endpoint | Basis |
+|---|---|---|---|
+| Generation | Groq | `llama-3.1-8b-instant` (primary), `llama-3.3-70b-versatile` (fallback) | $0.05/1M in · $0.08/1M out (8b); $0.59/1M in · $0.79/1M out (70b) |
+| Query expansion | Groq | same model | counted per call above |
+| Embeddings | HF worker (self-hosted) | `BAAI/bge-m3`, batched | inference credits, no per-token charge |
+| Rerank | HF endpoint | cross-encoder | inference credits, no per-token charge |
+| Semantic cache | Postgres pgvector (HNSW) | — | $0 after the first cold run |
+
+### Typical per-query cost
+
+Estimates at current token budgets (system prompt + context chunks + memory
+for input; 400–600 token answers):
+
+| Pipeline | LLM calls | Typical input tokens | Typical output tokens | Est. cost / query |
+|---|---|---|---|---|
+| **Standard CRAG** | 2 (expansion + generation) | ~2,000–3,000 | ~500 | **~$0.0002** |
+| **Agentic** | 5–7 (research iterations + analyst + writer) | ~5,000–8,000 | ~1,200 | **~$0.0006–0.0010** |
+| Cache hit (either) | 0 | — (1 embedding lookup) | — | **~$0.00001** |
+
+At ~1,000 queries/day with a ~40% cache-hit rate, the blended cost lands well
+under **$1/day** on the 8b model — the cache is the dominant lever, which is
+why the admin dashboard tracks hit rate and the cache health gauge.
+
+### Cost-optimization measures (implemented)
+
+1. **Semantic cache (7-day TTL)** — exact-hash tier + vector-similarity tier;
+   a hit skips the entire pipeline, including the LLM.
+2. **One expansion call, not many** — bilingual `2+2` EN/DE sub-queries come
+   from a single structured-JSON LLM call, so query decomposition never
+   multiplies provider spend.
+3. **Batched embeddings** — all sub-queries embed in **one** worker request
+   (`embedTexts`), and the dense pgvector lookups run in parallel; no
+   per-sub-query round-trips.
+4. **Never cache ungrounded output (M1)** — fallback/error answers are not
+   persisted, so a transient failure can't poison the cache with a cheap wrong
+   answer that users then "save" for 7 days.
+5. **ANN indexes** — HNSW on chunk embeddings and cache vectors means no
+   sequential scans during retrieval or cache lookup.
+6. **Embedding cache + worker self-warm** — exact-text batch cache (1h TTL)
+   and a 5-minute warm cron avoid cold-start model loads that otherwise burn
+   a full round-trip (and its compute) on the first query.
+7. **Token discipline** — 500-char guardrail query truncation, `maxTokens`
+   caps on generation, and a shared system prompt keep every call lean.
+8. **Bounded run history** — pipeline-tester traces are pruned to the newest
+   5 runs, so diagnostic storage doesn't grow unbounded.
+
 ## Environment variables
 
 See `.env.example` for the full list with comments. Key ones:

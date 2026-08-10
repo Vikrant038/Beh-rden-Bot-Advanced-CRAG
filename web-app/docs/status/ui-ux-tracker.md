@@ -5,6 +5,29 @@
 > **Legend:** ✅ Implemented (verified in code) · ⚠️ Partial (core present, notable gap vs plan) · ❌ Not implemented
 >
 > **Audit summary (2026-08-03):** 124 / 150 ✅ · 17 / 150 ⚠️ · 9 / 150 ❌ (see **Post-Phase-G Pass 2026-08-10** below for the follow-up work shipped after this audit)
+>
+> **Re-verified 2026-08-10 (post-audit):** every ⚠️/❌ row from the 2026-08-03 audit
+> was re-checked against source; **all are now implemented** (later passes closed them out):
+>
+> | ID | Item | Now | Evidence |
+> |---|---|---|---|
+> | 1.11 | Brand favicon & icon set | ✅ | `public/apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `manifest.webmanifest` + `layout.tsx` metadata |
+> | 3.10 | Continue as guest | ✅ | Real anonymous sessions (`POST /api/guest`), signed guest cookie, 5-prompt cap, returning-guest redirect |
+> | 4.7 | Source chips with favicons | ✅ | `chat/source-citation.tsx` — Google `s2/favicons` per-host chip, globe fallback, `pdf://` skipped |
+> | 6.6 | Delete confirmation dialog | ✅ | `ui/confirm-dialog.tsx` — "Clear this conversation?" modal from the kebab menu |
+> | 6.8 | Profile dropdown (Settings/Theme/Sign out) | ✅ | `sidebar/app-sidebar.tsx` — outside-click + Escape-closed dropdown |
+> | 6.10 | Mobile bottom-sheet nav | ✅ | Mobile drawer restyled (kept left slide-in per product decision) |
+> | 7.5 | History preview modal | ✅ | `history/history-list.tsx` — dialog with message preview + Export / Open |
+> | 7.13 | History page header stats | ✅ | `conversation.stats` — Conversations / Messages / Pinned / Deleted cards |
+> | 8.5 | Chunk navigation (prev/next) | ✅ | `sources/source-browser.tsx` — paginated chunk mode with prev/next |
+> | 8.11 | Chunk relevance score bar | ✅ | `source-browser.tsx` — deterministic term-coverage score + bar when searching |
+> | 8.14 | KB empty-state CTA | ✅ | `source-browser.tsx` — "Add documents in the admin panel" for admins |
+> | 9.3 | Sparklines on metric cards | ✅ | `admin/metric-card.tsx` — inline SVG sparkline when a series is provided |
+> | 9.8 | Chart tooltips with more detail | ✅ | `admin/dashboard-charts.tsx` — day-over-day % change + avg in daily tooltip, share % in mode tooltip |
+> | 1.14 | Changelog modal reads real history | ✅ | `ui/changelog-modal.tsx` fetches `/api/changelog` (parsed `CHANGELOG.md`), hardcoded list kept as offline fallback |
+>
+> **Genuinely open (needs a human/device, not code):** 11.13 physical-device screen-reader pass
+> (VoiceOver/NVDA) — structural ARIA is in place.
 
 ---
 
