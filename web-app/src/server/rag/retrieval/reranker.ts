@@ -6,6 +6,13 @@ import { LLMProviderError } from "@/server/llm/errors";
 
 const logger = createLogger("reranker");
 
+// Workers AI reranker contract: max 50 documents, each ≤ 4000 chars. Chunks
+// arrive pre-ranked by hybrid retrieval, so reranking the top 50 candidates
+// is the same job with a smaller input — and keeps the returned score array
+// aligned 1:1 with the set sent.
+const RERANK_MAX_DOCS = 50;
+const RERANK_MAX_DOC_CHARS = 4000;
+
 export interface Reranker {
   rerank(query: string, chunks: Chunk[], topK?: number): Promise<Chunk[]>;
 }
@@ -39,7 +46,10 @@ export class HfReranker implements Reranker {
       return fallbackRerank(query, chunks, topK);
     }
 
-    const pairs = chunks.map((chunk) => [query, chunk.text] as [string, string]);
+    const candidates = chunks.slice(0, RERANK_MAX_DOCS);
+    const pairs = candidates.map(
+      (chunk) => [query, chunk.text.slice(0, RERANK_MAX_DOC_CHARS)] as [string, string],
+    );
 
     try {
       const url = `${this.inferenceUrl}/pipeline/text-classification/${encodeURIComponent(this.model)}`;
@@ -63,9 +73,9 @@ export class HfReranker implements Reranker {
       }
 
       const data = (await response.json()) as unknown;
-      const scores = extractScores(data, chunks.length);
+      const scores = extractScores(data, candidates.length);
 
-      const reranked = chunks.map((chunk, index) => ({
+      const reranked = candidates.map((chunk, index) => ({
         ...chunk,
         crossScore: sigmoid(scores[index]),
       }));

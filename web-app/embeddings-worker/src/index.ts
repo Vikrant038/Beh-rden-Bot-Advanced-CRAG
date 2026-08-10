@@ -19,12 +19,9 @@ export interface Env {
   AI: {
     run(
       model: string,
-      inputs:
-        | { text: string | string[] }
-        | { query: string; documents: string[] },
+      inputs: { text: string | string[] } | { query: string; documents: string[] },
     ): Promise<
-      | { shape: number[]; data: number[][] }
-      | { result: Array<{ index: number; score: number }> }
+      { shape: number[]; data: number[][] } | { result: Array<{ index: number; score: number }> }
     >;
   };
   EMBED_TOKEN: string;
@@ -32,6 +29,9 @@ export interface Env {
 
 const MODEL = "@cf/baai/bge-m3";
 const RERANKER_MODEL = "@cf/baai/bge-reranker-base";
+// Workers AI reranker contract: max 50 documents, each ≤ 4000 chars.
+const RERANK_MAX_DOCS = 50;
+const RERANK_MAX_DOC_CHARS = 4000;
 
 /**
  * Minimal scheduled-event shape — avoids depending on @cloudflare/workers-types
@@ -84,10 +84,7 @@ export default {
       return Response.json({ ok: true, model: MODEL, reranker: RERANKER_MODEL });
     }
 
-    if (
-      request.method === "POST" &&
-      url.pathname.startsWith("/pipeline/text-classification/")
-    ) {
+    if (request.method === "POST" && url.pathname.startsWith("/pipeline/text-classification/")) {
       return handleRerank(request, env);
     }
 
@@ -125,7 +122,15 @@ export default {
     const texts = body.inputs as string[];
     // Workers AI returns { shape, data } for embedding models — unwrap data.
     // bge-m3 takes `text` (string | string[]) and pools with CLS internally.
-    const result = await env.AI.run(MODEL, { text: texts });
+    let result: { shape: number[]; data: number[][] };
+    try {
+      result = (await env.AI.run(MODEL, { text: texts })) as { shape: number[]; data: number[][] };
+    } catch (error) {
+      return Response.json(
+        { error: `Workers AI embedding failed: ${String(error)}` },
+        { status: 502 },
+      );
+    }
     if (!("data" in result)) {
       return Response.json({ error: "unexpected embedding response" }, { status: 502 });
     }
@@ -191,14 +196,33 @@ async function handleRerank(request: Request, env: Env): Promise<Response> {
     documents.push(pair[1] as string);
   }
 
-  const result = await env.AI.run(RERANKER_MODEL, { query, documents });
+  // Enforce the model's input contract (≤50 docs, ≤4000 chars each) so a
+  // long candidate list degrades gracefully instead of erroring.
+  const capped = documents
+    .slice(0, RERANK_MAX_DOCS)
+    .map((doc) => doc.slice(0, RERANK_MAX_DOC_CHARS));
+
+  let result: { result: Array<{ index: number; score: number }> };
+  try {
+    result = (await env.AI.run(RERANKER_MODEL, {
+      query,
+      documents: capped,
+    })) as { result: Array<{ index: number; score: number }> };
+  } catch (error) {
+    // Surface the real Workers AI error — a bare 1101 tells the operator
+    // nothing (that was exactly the failure mode being debugged).
+    return Response.json(
+      { error: `Workers AI reranker failed: ${String(error)}` },
+      { status: 502 },
+    );
+  }
   if (!("result" in result)) {
     return Response.json({ error: "unexpected reranker response" }, { status: 502 });
   }
 
   // Workers AI returns {index, score} sorted by relevance — map back to input
   // order and wrap each in the HF single-label shape the client parses.
-  const scores = new Array<number>(documents.length).fill(0);
+  const scores = new Array<number>(capped.length).fill(0);
   for (const entry of result.result) {
     if (entry.index >= 0 && entry.index < scores.length) {
       scores[entry.index] = entry.score;
