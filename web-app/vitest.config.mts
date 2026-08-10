@@ -8,6 +8,12 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["tests/setup.ts"],
     globals: true,
+    // Slow integration tests (full SSE pipeline, LLM retry/fallback paths)
+    // legitimately take 5-7s, and the v8 coverage instrumentation adds enough
+    // overhead to push them past Vitest's 5s default — causing random
+    // "Test timed out in 5000ms" flakes on coverage runs. 20s still catches
+    // real hangs; per-test overrides (e.g. llm-client 20s) remain effective.
+    testTimeout: 20_000,
     env: {
       GEMINI_API_KEY: "test_key_for_vitest",
     },

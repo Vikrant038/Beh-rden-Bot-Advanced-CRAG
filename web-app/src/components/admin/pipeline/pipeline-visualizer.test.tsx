@@ -3,6 +3,50 @@ import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { PipelineVisualizer } from "@/components/admin/pipeline/pipeline-visualizer";
 import type { AgenticRagResponse } from "@/server/rag/agents/orchestrator";
+import type { StandardRagTrace } from "@/server/rag/pipeline";
+
+function standardTrace(overrides: Partial<StandardRagTrace> = {}): StandardRagTrace {
+  return {
+    pipeline: "standard",
+    userQuery: "How much is the blocked account for 2026?",
+    maskedQuery: "How much is the blocked account for 2026?",
+    guardrail: { passed: true, reason: "In-domain", durationMs: 12 },
+    finalAnswer: "The blocked account requirement for 2026 is €11,904.",
+    sources: [
+      {
+        name: "blocked-account.pdf",
+        url: "pdf://abc/blocked-account.pdf",
+        score: 0.88,
+        documentId: "doc-2",
+        childText: "Matched child snippet.",
+        parentText: "Expanded parent context.",
+      },
+    ],
+    retrievalPath: "HYBRID_RRF_CROSS_ENCODER",
+    isGrounded: true,
+    isCached: false,
+    disambiguation: { isAmbiguous: false, options: [], durationMs: 4 },
+    retrievalTelemetry: {
+      queryExpansionDurationMs: 20,
+      denseDurationMs: 200,
+      sparseBm25DurationMs: 60,
+      rrfFusionDurationMs: 1,
+      rerankDurationMs: 25,
+      corpusLoadDurationMs: 2,
+      expandedQueries: ["Blocked account 2026 amount", "Sperrkonto 2026 Betrag"],
+      sparseEngine: "pg_fts",
+      bestCrossScore: 0.88,
+      cragFallbackTriggered: false,
+    },
+    totalLatencyMs: 1600,
+    stages: [{ index: 0, name: "Stage 0 — Disambiguation", durationMs: 4, status: "executed" }],
+    llmCalls: [],
+    totalCostUsd: 0.0001,
+    preProcessing: { piiMaskingDurationMs: 2, cacheLookupDurationMs: 3, cacheHit: false },
+    postProcessing: { cacheWriteDurationMs: 4, memoryWriteDurationMs: 1, cacheWritten: true },
+    ...overrides,
+  };
+}
 
 function fullTrace(overrides: Partial<AgenticRagResponse> = {}): AgenticRagResponse {
   return {
@@ -231,5 +275,80 @@ describe("PipelineVisualizer", () => {
     expect(screen.getByText("No table.")).toBeInTheDocument();
     expect(screen.queryByText("Key insights")).not.toBeInTheDocument();
     expect(screen.queryByText("Verified facts")).not.toBeInTheDocument();
+  });
+});
+
+describe("PipelineVisualizer — standard CRAG trace", () => {
+  it("renders the standard badge, totals, telemetry, and grounded verdict", () => {
+    render(<PipelineVisualizer trace={standardTrace()} />);
+    expect(screen.getByText("standard CRAG")).toBeInTheDocument();
+    expect(screen.getByText("1600ms total")).toBeInTheDocument();
+    expandAllStages();
+    expect(screen.getByText("Blocked account 2026 amount")).toBeInTheDocument();
+    expect(screen.getByText(/200ms/)).toBeInTheDocument();
+    expect(screen.getByText(/60ms/)).toBeInTheDocument();
+    expect(screen.getByText("Grounded answer: YES")).toBeInTheDocument();
+    expect(screen.getByText("WRITTEN")).toBeInTheDocument();
+  });
+
+  it("short-circuits downstream stages when the guardrail blocks", () => {
+    render(
+      <PipelineVisualizer
+        trace={standardTrace({
+          guardrail: { passed: false, reason: "Out of domain", durationMs: 8 },
+          sources: [],
+          isGrounded: false,
+        })}
+      />,
+    );
+    expect(screen.getByText("out of domain")).toBeInTheDocument();
+    expandAllStages();
+    expect(screen.getByText(/BLOCKED/)).toBeInTheDocument();
+    // The CRAG gate / generation / post-processing bodies are nulled out.
+    expect(screen.queryByText(/Grounded answer/)).not.toBeInTheDocument();
+  });
+
+  it("renders the cache-hit short-circuit (retrieval + gate + generation skipped)", () => {
+    render(
+      <PipelineVisualizer
+        trace={standardTrace({
+          isCached: true,
+          sources: [],
+          isGrounded: true,
+        })}
+      />,
+    );
+    expect(screen.getByText("cache hit")).toBeInTheDocument();
+    expandAllStages();
+    expect(screen.getByText("HIT")).toBeInTheDocument();
+    expect(screen.queryByText(/Grounded answer/)).not.toBeInTheDocument();
+    // Post-processing still ran and wrote the cache.
+    expect(screen.getByText("WRITTEN")).toBeInTheDocument();
+  });
+
+  it("renders a not-grounded verdict with the CRAG web-fallback notice", () => {
+    render(<PipelineVisualizer trace={standardTrace({ isGrounded: false, sources: [] })} />);
+    expandAllStages();
+    expect(screen.getByText("Grounded answer: NO")).toBeInTheDocument();
+    expect(
+      screen.getByText(/No local chunks passed the CRAG threshold — the answer was not grounded/),
+    ).toBeInTheDocument();
+  });
+
+  it("falls back to dashes and placeholder notices when telemetry is missing", () => {
+    render(
+      <PipelineVisualizer
+        trace={standardTrace({
+          retrievalTelemetry: undefined,
+          preProcessing: undefined,
+          postProcessing: undefined,
+          disambiguation: undefined,
+          stages: [],
+        })}
+      />,
+    );
+    expandAllStages();
+    expect(screen.getByText(/Retrieval telemetry not available/)).toBeInTheDocument();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 });
