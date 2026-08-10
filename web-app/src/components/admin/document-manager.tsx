@@ -31,6 +31,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/lib/toast";
 type DocumentStatus = "PENDING" | "INGESTING" | "SYNCED" | "FAILED";
 
+/**
+ * `pdf://<hash>/<file>` pseudo-URLs have no resolvable host — a browser cannot
+ * navigate to them, so they must never be rendered as a link. Only real
+ * `http(s)://` URLs are clickable.
+ */
+function isLinkableUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
 interface DocumentItem {
   id: string;
   title: string;
@@ -99,14 +108,18 @@ function DocumentPreviewModal({
         <DialogHeader>
           <DialogTitle className="truncate">{document.title}</DialogTitle>
           <DialogDescription className="truncate">
-            <a
-              href={document.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-accent underline-offset-2 hover:underline"
-            >
-              {document.url || "no URL"}
-            </a>
+            {isLinkableUrl(document.url) ? (
+              <a
+                href={document.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent underline-offset-2 hover:underline"
+              >
+                {document.url}
+              </a>
+            ) : (
+              <span className="text-accent">{document.url || "no URL"}</span>
+            )}
             {" · "}
             {document.chunkCount} child chunks · updated {formatRelativeTime(document.updatedAt)}
           </DialogDescription>
@@ -847,14 +860,18 @@ export function DocumentManager() {
                     </span>
                   </div>
                   <p className="truncate text-xs text-muted">
-                    <a
-                      href={document.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hover:underline"
-                    >
-                      {document.url || "no URL"}
-                    </a>
+                    {isLinkableUrl(document.url) ? (
+                      <a
+                        href={document.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:underline"
+                      >
+                        {document.url}
+                      </a>
+                    ) : (
+                      <span>{document.url || "no URL"}</span>
+                    )}
                   </p>
                 </div>
                 <div className="ml-auto flex shrink-0 items-center gap-3 text-xs text-muted sm:gap-4">

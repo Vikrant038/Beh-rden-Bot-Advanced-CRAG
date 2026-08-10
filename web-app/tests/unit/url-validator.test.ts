@@ -43,6 +43,38 @@ describe("assertSafeUrl (SSRF guard)", () => {
     }
   });
 
+  it("rejects IPv6 link-local and unique-local (ULA) ranges", async () => {
+    for (const address of ["fe80::1", "fe80::a1b2:c3d4", "fc00::1", "fd12:3456:789a::1"]) {
+      lookupMock.mockResolvedValue([{ address, family: 6 }]);
+      await expect(assertSafeUrl("https://example.com")).rejects.toBeInstanceOf(SsrfBlockedError);
+    }
+  });
+
+  it("rejects IPv4-mapped IPv6 forms of blocked IPv4 addresses", async () => {
+    // ::ffff:127.0.0.1 → loopback, ::ffff:10.0.0.1 → RFC1918,
+    // ::ffff:169.254.169.254 → cloud metadata. All must be caught even though
+    // the literal string is an IPv6 address.
+    for (const address of ["::ffff:127.0.0.1", "::ffff:10.0.0.1", "::ffff:169.254.169.254"]) {
+      lookupMock.mockResolvedValue([{ address, family: 6 }]);
+      await expect(assertSafeUrl("https://example.com")).rejects.toBeInstanceOf(SsrfBlockedError);
+    }
+  });
+
+  it("rejects IPv4-compatible IPv6 forms of loopback", async () => {
+    lookupMock.mockResolvedValue([{ address: "::127.0.0.1", family: 6 }]);
+    await expect(assertSafeUrl("https://example.com")).rejects.toBeInstanceOf(SsrfBlockedError);
+  });
+
+  it("rejects the IPv6 unspecified address", async () => {
+    lookupMock.mockResolvedValue([{ address: "::", family: 6 }]);
+    await expect(assertSafeUrl("https://example.com")).rejects.toBeInstanceOf(SsrfBlockedError);
+  });
+
+  it("accepts public IPv6 hosts outside blocked ranges", async () => {
+    lookupMock.mockResolvedValue([{ address: "2606:4700::6810:84e5", family: 6 }]);
+    await expect(assertSafeUrl("https://example.com")).resolves.toBeUndefined();
+  });
+
   it("rejects link-local and cloud-metadata IPs", async () => {
     for (const address of ["169.254.1.1", "169.254.169.254"]) {
       lookupMock.mockResolvedValue([{ address, family: 4 }]);
@@ -61,6 +93,33 @@ describe("assertSafeUrl (SSRF guard)", () => {
   it("accepts a public host that resolves outside blocked ranges", async () => {
     lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
     await expect(assertSafeUrl("https://example.com")).resolves.toBeUndefined();
+  });
+
+  // Regression: macOS/Linux resolvers return IPv6 addresses in UNCOMPRESSED
+  // form (no "::") — e.g. getaddrinfo returns "2606:4700:8392:2270:1639:83a:
+  // 291c:7105" for www.fintiba.com. The parser must not crash on the missing
+  // right-hand side of split("::").
+  it("accepts an uncompressed public IPv6 address (no '::')", async () => {
+    lookupMock.mockResolvedValue([
+      { address: "2606:4700:8392:2270:1639:83a:291c:7105", family: 6 },
+    ]);
+    await expect(assertSafeUrl("https://www.fintiba.com")).resolves.toBeUndefined();
+  });
+
+  it("blocks an uncompressed IPv6 loopback (no '::')", async () => {
+    lookupMock.mockResolvedValue([{ address: "0:0:0:0:0:0:0:1", family: 6 }]);
+    await expect(assertSafeUrl("https://example.com")).rejects.toBeInstanceOf(SsrfBlockedError);
+  });
+
+  it("blocks an uncompressed IPv4-mapped loopback (no '::')", async () => {
+    // 0:0:0:0:0:ffff:7f00:1 == ::ffff:127.0.0.1 written without compression.
+    lookupMock.mockResolvedValue([{ address: "0:0:0:0:0:ffff:7f00:1", family: 6 }]);
+    await expect(assertSafeUrl("https://example.com")).rejects.toBeInstanceOf(SsrfBlockedError);
+  });
+
+  it("blocks an uncompressed IPv6 link-local address (no '::')", async () => {
+    lookupMock.mockResolvedValue([{ address: "fe80:0:0:0:0:0:0:1", family: 6 }]);
+    await expect(assertSafeUrl("https://example.com")).rejects.toBeInstanceOf(SsrfBlockedError);
   });
 });
 

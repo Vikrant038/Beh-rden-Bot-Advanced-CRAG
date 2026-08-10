@@ -25,4 +25,9 @@ describe("VisaCalculator", () => {
     expect(result.summary).toContain("€12,006.66");
     expect(result.totalInr).toBeCloseTo(1000.555 * 12 * 90, 2);
   });
+
+  it("should reject a non-finite or non-positive INR rate", () => {
+    expect(() => calculateVisaRequirements(992, 12, Number.POSITIVE_INFINITY)).toThrow();
+    expect(() => calculateVisaRequirements(992, 12, 0)).toThrow();
+  });
 });

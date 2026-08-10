@@ -6,8 +6,14 @@ vi.mock("@/server/db", () => ({
   },
 }));
 
+const envState = vi.hoisted(() => ({ cronSecret: "super-secret" as string | undefined }));
+
 vi.mock("@/server/env", () => ({
-  env: { CRON_SECRET: "super-secret" },
+  env: {
+    get CRON_SECRET() {
+      return envState.cronSecret;
+    },
+  },
 }));
 
 import { prisma } from "@/server/db";
@@ -28,6 +34,14 @@ function makeRequest(authorization?: string): Request {
 describe("cleanup-cache cron route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    envState.cronSecret = "super-secret";
+  });
+
+  it("rejects every request when CRON_SECRET is not configured", async () => {
+    envState.cronSecret = undefined;
+    const response = await GET(makeRequest("Bearer super-secret"));
+    expect(response.status).toBe(401);
+    expect(prismaMock.semanticCacheEntry.deleteMany).not.toHaveBeenCalled();
   });
 
   it("rejects requests without the cron secret", async () => {
@@ -55,6 +69,12 @@ describe("cleanup-cache cron route", () => {
 
   it("returns 500 when deletion fails", async () => {
     prismaMock.semanticCacheEntry.deleteMany.mockRejectedValue(new Error("db down"));
+    const response = await GET(makeRequest("Bearer super-secret"));
+    expect(response.status).toBe(500);
+  });
+
+  it("handles a non-Error rejection from the database", async () => {
+    prismaMock.semanticCacheEntry.deleteMany.mockRejectedValue("db exploded");
     const response = await GET(makeRequest("Bearer super-secret"));
     expect(response.status).toBe(500);
   });

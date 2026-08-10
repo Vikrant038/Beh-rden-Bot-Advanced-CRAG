@@ -48,4 +48,10 @@ describe("PIIMasker", () => {
     expect(maskPii("").text).toBe("");
     expect(maskPii("").wasPiiDetected).toBe(false);
   });
+
+  it("should return non-string input unchanged (defensive)", () => {
+    const result = maskPii(42 as unknown as string);
+    expect(result.text).toBe(42 as unknown as string);
+    expect(result.wasPiiDetected).toBe(false);
+  });
 });

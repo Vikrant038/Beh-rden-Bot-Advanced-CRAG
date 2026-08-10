@@ -64,4 +64,25 @@ describe("QueryDisambiguator (Stage 0B)", () => {
     expect(result.isAmbiguous).toBe(false);
     expect(mockedCallLLMJson).not.toHaveBeenCalled();
   });
+
+  it("should flag an empty query as ambiguous without calling the LLM", async () => {
+    const result = await disambiguateQuery("   ");
+    expect(result.isAmbiguous).toBe(true);
+    expect(result.options).toEqual([]);
+    expect(mockedCallLLMJson).not.toHaveBeenCalled();
+  });
+
+  it("should fall back to empty options when the LLM returns a non-array", async () => {
+    mockedCallLLMJson.mockResolvedValue("not an array");
+    const result = await disambiguateQuery("what about it?");
+    expect(result.isAmbiguous).toBe(true);
+    expect(result.options).toEqual([]);
+  });
+
+  it("should fall back to empty options when the LLM returns an empty array", async () => {
+    mockedCallLLMJson.mockResolvedValue([]);
+    const result = await disambiguateQuery("what about it?");
+    expect(result.isAmbiguous).toBe(true);
+    expect(result.options).toEqual([]);
+  });
 });

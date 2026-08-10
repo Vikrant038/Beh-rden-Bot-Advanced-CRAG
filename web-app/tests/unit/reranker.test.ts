@@ -202,4 +202,29 @@ describe("HfReranker", () => {
     expect(result[0].id).toBe("a");
     expect(result[0].crossScore).toBeCloseTo(0.92, 5);
   });
+
+  it("falls back when the API returns an empty array (malformed response)", async () => {
+    const fetchMock = vi.fn(
+      async () => ({ ok: true, status: 200, json: async () => [] }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const reranker = new HfReranker("model", "https://rerank.api", "token");
+    const chunks = [makeChunk({ id: "a", similarityScore: 0.9 }), makeChunk({ id: "b" })];
+    const result = await reranker.rerank("query", chunks, 5);
+    expect(result[0].id).toBe("a");
+    expect(result[0].crossScore).toBeCloseTo(0.9, 5);
+  });
+
+  it("falls back when score objects lack a numeric score field", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        ({ ok: true, status: 200, json: async () => [[{ label: "x" }]] }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const reranker = new HfReranker("model", "https://rerank.api", "token");
+    const chunks = [makeChunk({ id: "a", similarityScore: 0.85 })];
+    const result = await reranker.rerank("query", chunks, 5);
+    expect(result[0].id).toBe("a");
+    expect(result[0].crossScore).toBeCloseTo(0.85, 5);
+  });
 });

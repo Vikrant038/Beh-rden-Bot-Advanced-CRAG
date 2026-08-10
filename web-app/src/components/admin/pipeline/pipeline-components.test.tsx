@@ -144,4 +144,14 @@ describe("SourcePanel", () => {
     fireEvent.click(screen.getByRole("button"));
     expect(screen.getByText("No parent expansion available.")).toBeInTheDocument();
   });
+
+  it("does not render an external-link icon for pdf:// pseudo-URLs", () => {
+    render(
+      <SourcePanel
+        index={0}
+        source={{ name: "local pdf", url: "pdf://aabbccddee/file.pdf", score: 0.5 }}
+      />,
+    );
+    expect(screen.queryByLabelText("Open local pdf")).not.toBeInTheDocument();
+  });
 });

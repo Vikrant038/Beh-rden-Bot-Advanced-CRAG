@@ -166,4 +166,11 @@ describe("SemanticCache", () => {
     const result = await cache.checkCache("visa", null);
     expect(result).toBeNull();
   });
+
+  it("should return 0 when no cache entries match the document", async () => {
+    mockedFindMany.mockResolvedValue([]);
+    const count = await cache.invalidateForDocument("doc-none");
+    expect(count).toBe(0);
+    expect(mockedDeleteMany).not.toHaveBeenCalled();
+  });
 });

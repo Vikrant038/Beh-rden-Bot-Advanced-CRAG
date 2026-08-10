@@ -124,6 +124,49 @@ describe("writer agent streaming", () => {
     expect(seen).toEqual([]);
     expect(answer).toContain("Analyst summary text.");
   }, 30_000);
+
+  it("falls back to the analyst summary when the stream ends without content", async () => {
+    mockCreate.mockResolvedValue(groqStream([]));
+
+    const { agentWriterSynthesis } = await import("@/server/rag/agents/analyst");
+    const answer = await agentWriterSynthesis("q", RESEARCH, MATRIX, () => {});
+
+    expect(answer).toContain("Analyst summary text.");
+  });
+
+  it("returns the fallback matrix when the analyst response fails schema validation", async () => {
+    mockCreate.mockResolvedValue({ choices: [{ message: { content: "{}" } }] });
+
+    const { agentAnalystEvaluation } = await import("@/server/rag/agents/analyst");
+    const result = await agentAnalystEvaluation("Is APS mandatory?", RESEARCH);
+
+    expect(result.summary).toContain("Analysis completed");
+    expect(result.structured_table).toContain("General Info");
+  });
+
+  it("returns the parsed matrix when the analyst response passes schema validation", async () => {
+    mockCreate.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              summary: "APS is mandatory for Indian applicants.",
+              structured_table: "| A | B |",
+              key_insights: ["insight-1"],
+              verified_facts: ["fact-1"],
+            }),
+          },
+        },
+      ],
+    });
+
+    const { agentAnalystEvaluation } = await import("@/server/rag/agents/analyst");
+    const result = await agentAnalystEvaluation("Is APS mandatory?", RESEARCH);
+
+    expect(result.summary).toBe("APS is mandatory for Indian applicants.");
+    expect(result.key_insights).toEqual(["insight-1"]);
+    expect(result.verified_facts).toEqual(["fact-1"]);
+  });
 });
 
 describe("callLLMStream fallback safety", () => {

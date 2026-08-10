@@ -29,7 +29,7 @@ Why format is a gate, not a suggestion: the "CI broke on the latest push" incide
 
 ### Layer 2 — Unit + integration (Vitest)
 
-- **600+ tests across 60+ files**, run with `pnpm test`.
+- **775 tests across 81 files**, run with `pnpm test` (branch coverage **85.04%**).
 - **Unit:** pure logic — RAG stages (guardrail, sub-queries, RRF, rerank scoring), cache payload parsing, conversation policy, PII masking, sparse retriever dispatch, telemetry aggregation.
 - **Integration:** tRPC routers (conversation, admin, public) against **mocked Prisma** — fast, deterministic, no DB needed in CI (CI exports placeholder env for zod validation only).
 - **Component:** chat components with behavioral contracts — message bubbles, pipeline status, chat input (mode toggle, paste, char counter, MAX_QUERY_LENGTH), empty state (prompt cards + submit contract), source citations (pdf:// handling, favicons), theme toggle, UI primitives.

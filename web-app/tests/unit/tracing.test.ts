@@ -142,4 +142,70 @@ describe("tracing", () => {
   it("setTraceInput is a safe no-op outside a trace", () => {
     expect(() => setTraceInput({ q: "x" })).not.toThrow();
   });
+
+  it("runWithTraceGen propagates errors and marks the span failed", async () => {
+    envState.keys = true;
+    const span = { end: vi.fn(), update: vi.fn() };
+    traceSpies.trace.mockReturnValue({
+      span: vi.fn(() => span),
+      generation: vi.fn(),
+      update: vi.fn(),
+    });
+    const iterator = runWithTraceGen({ name: "fail-gen" }, async function* () {
+      yield 1;
+      throw new Error("gen boom");
+    })[Symbol.asyncIterator]();
+    await expect(iterator.next()).resolves.toEqual(expect.objectContaining({ done: false }));
+    await expect(iterator.next()).rejects.toThrow("gen boom");
+    expect(span.end).toHaveBeenCalledWith(expect.objectContaining({ level: "ERROR" }));
+  });
+
+  it("runWithTrace records a non-string result without truncation", async () => {
+    envState.keys = true;
+    const span = { end: vi.fn(), update: vi.fn() };
+    traceSpies.trace.mockReturnValue({
+      span: vi.fn(() => span),
+      generation: vi.fn(),
+      update: vi.fn(),
+    });
+    const result = await runWithTrace({ name: "obj-trace" }, async () => ({ ok: true }));
+    expect(result).toEqual({ ok: true });
+    expect(span.end).toHaveBeenCalledWith({ output: { ok: true } });
+  });
+
+  it("setTraceInput updates the active trace and span inside a trace", async () => {
+    envState.keys = true;
+    const trace = {
+      span: vi.fn(() => ({ end: vi.fn(), update: vi.fn() })),
+      generation: vi.fn(),
+      update: vi.fn(),
+    };
+    traceSpies.trace.mockReturnValue(trace);
+    await runWithTrace({ name: "input-trace" }, async () => {
+      setTraceInput({ masked: "query" });
+    });
+    expect(trace.update).toHaveBeenCalledWith({ input: { masked: "query" } });
+  });
+
+  it("observeGeneration marks the generation failed via endError inside a trace", async () => {
+    envState.keys = true;
+    const generation = { end: vi.fn(), update: vi.fn() };
+    traceSpies.trace.mockReturnValue({
+      span: vi.fn(() => ({ end: vi.fn(), update: vi.fn() })),
+      generation: vi.fn(() => generation),
+      update: vi.fn(),
+    });
+    await runWithTrace({ name: "gen-error" }, async () => {
+      const handle = observeGeneration("llm.call");
+      handle.endError(new Error("gen failed"));
+      expect(generation.end).toHaveBeenCalledWith(expect.objectContaining({ level: "ERROR" }));
+    });
+  });
+
+  it("swallows a Langfuse flush failure", async () => {
+    envState.keys = true;
+    traceSpies.flush.mockRejectedValue(new Error("flush boom"));
+    const result = await runWithTrace({ name: "flush-trace" }, async () => "ok");
+    expect(result).toBe("ok");
+  });
 });

@@ -13,6 +13,10 @@ __pycache__/
 # Freebuff desktop app state (local-only, churns every session)
 .freebuff/
 
+# Local pnpm store (accidentally committed in an earlier session — 2 files
+# were removed; keep the whole directory ignored so it never returns)
+.pnpm-store/
+
 # Generated eval outputs + old Python CRAG-eval harness (not pushed)
 mvp-python/tests/eval_ragas_30.py
 mvp-python/data/processed/

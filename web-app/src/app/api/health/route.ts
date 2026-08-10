@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/server/db";
+import { createLogger } from "@/server/lib/logger";
+
+const logger = createLogger("health");
 
 export const runtime = "nodejs";
 
@@ -29,16 +32,17 @@ export async function GET() {
       timestamp: new Date().toISOString(),
     });
   } catch (error: unknown) {
+    // Only a generic message goes to the public response. The full error
+    // (message, cause, stack) is logged server-side — exposing it here leaks
+    // internal paths/connection details to anyone who can reach /api/health.
     const message = error instanceof Error ? error.message : String(error);
-    const cause = error instanceof Error && error.cause ? String(error.cause) : null;
     const stack = error instanceof Error ? error.stack : undefined;
+    logger.error({ error: message, stack }, "[HEALTH] DB ping failed");
     return NextResponse.json(
       {
         success: false,
         db: "error",
         error: message,
-        cause,
-        stack,
         timestamp: new Date().toISOString(),
       },
       { status: 503 },

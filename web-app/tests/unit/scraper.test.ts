@@ -232,6 +232,80 @@ describe("scrapeWebPage", () => {
     mockFetchResponse(huge, 200, "text/html");
     await expect(scrapeWebPage("https://example.com/big")).rejects.toThrow(/too large/);
   });
+
+  it("follows redirects hop-by-hop, re-validating every hop", async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 302,
+        headers: new Headers({ location: "/de/study/" }),
+        body: { cancel },
+        text: () => Promise.resolve(""),
+      } as unknown as Response)
+      .mockResolvedValueOnce(mockResponse(SAMPLE_HTML));
+
+    const result = await scrapeWebPage("https://www.daad.de/en/study/");
+
+    expect(result.title).toBe("DAAD — Study in Germany");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    // The second hop resolves the relative Location against the first URL.
+    expect(vi.mocked(globalThis.fetch).mock.calls[1]?.[0]).toBe(
+      "https://www.daad.de/de/study/",
+    );
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("propagates an SSRF rejection on a redirect hop immediately (no retry)", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 302,
+      headers: new Headers({ location: "http://169.254.169.254/latest/meta-data" }),
+      body: { cancel: vi.fn().mockResolvedValue(undefined) },
+      text: () => Promise.resolve(""),
+    } as unknown as Response);
+    mockedAssertSafeUrl.mockImplementation((url: string) =>
+      url.includes("169.254.169.254")
+        ? Promise.reject(new SsrfBlockedError(url))
+        : Promise.resolve(),
+    );
+
+    await expect(scrapeWebPage("https://example.com/redirect")).rejects.toThrow(
+      SsrfBlockedError,
+    );
+    // SSRF rejections are deterministic — never retried.
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a redirect chain longer than the hop cap", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 302,
+      headers: new Headers({ location: "/next" }),
+      body: { cancel: vi.fn().mockResolvedValue(undefined) },
+      text: () => Promise.resolve(""),
+    } as unknown as Response);
+
+    await expect(scrapeWebPage("https://example.com/loop")).rejects.toThrow(
+      /Too many redirects/,
+    );
+  });
+
+  it("clamps an absurd retry option to the hard cap", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      headers: new Headers(),
+      text: () => Promise.resolve(""),
+    } as Response);
+
+    await expect(
+      scrapeWebPage("https://example.com/cap", { maxRetries: 99, backoffMs: 1 }),
+    ).rejects.toThrow(ExternalApiError);
+    // MAX_RETRIES_CAP (5) + initial attempt = 6 fetches, not 100.
+    expect(globalThis.fetch).toHaveBeenCalledTimes(6);
+  });
 });
 
 describe("extractMainContent", () => {

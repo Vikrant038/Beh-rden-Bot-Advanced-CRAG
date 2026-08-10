@@ -6,7 +6,7 @@
  */
 
 import { assertSafeUrl } from "@/server/lib/security/url-validator";
-import { ExternalApiError, InvalidContentTypeError } from "@/server/lib/errors";
+import { ExternalApiError, InvalidContentTypeError, SsrfBlockedError } from "@/server/lib/errors";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("ingest-scraper");
@@ -114,6 +114,40 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Max redirect hops followed, each re-validated against the SSRF guard. */
+const MAX_REDIRECT_HOPS = 5;
+
+/**
+ * Fetches a URL following redirects MANUALLY so every hop (not just the final
+ * URL) is re-validated against the SSRF guard. `fetch(redirect: "follow")`
+ * silently follows the whole chain — a chain like public → http://169.254.169.254
+ * → public would fetch the internal host while the final URL looks safe.
+ * Re-validating each hop closes that gap. A single AbortSignal covers the
+ * whole chain so the total time stays bounded by SCRAPE_TIMEOUT_MS.
+ */
+async function fetchWithRedirectValidation(
+  url: string,
+  init: { headers: Record<string, string>; signal: AbortSignal },
+): Promise<Response> {
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop += 1) {
+    // Resolve + validate the CURRENT hop right before connecting. This also
+    // re-checks the scheme, so a redirect to file:// or another protocol is
+    // rejected here rather than fetched.
+    await assertSafeUrl(current);
+    const response = await fetch(current, { ...init, redirect: "manual" });
+    const location = response.headers.get("location");
+    if (response.status >= 300 && response.status < 400 && location) {
+      // Release the connection for the next hop (redirect bodies are empty).
+      await response.body?.cancel().catch(() => {});
+      current = new URL(location, current).toString();
+      continue;
+    }
+    return response;
+  }
+  throw new ExternalApiError(`Too many redirects fetching ${url}`);
+}
+
 /**
  * Fetches a URL with exponential-backoff retries on transient failures.
  * Non-transient 4xx responses and content-type/size errors are thrown
@@ -133,15 +167,20 @@ async function fetchWithTimeout(url: string, options: ScrapeOptions): Promise<Re
 
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await fetchWithRedirectValidation(url, {
         headers: {
           "User-Agent": BROWSER_USER_AGENT,
           Accept: "text/html,text/plain;q=0.9",
         },
-        redirect: "follow",
         signal: AbortSignal.timeout(SCRAPE_TIMEOUT_MS),
       });
     } catch (error) {
+      // SSRF rejections are deterministic (the host resolved to a blocked
+      // range) — never retry, propagate immediately so the caller sees the
+      // real reason instead of a wrapped ExternalApiError after 3 attempts.
+      if (error instanceof SsrfBlockedError) {
+        throw error;
+      }
       if (attempt < maxRetries) {
         logger.warn({ url, error: String(error), attempt }, "[INGEST] fetch failed; retrying");
         continue;

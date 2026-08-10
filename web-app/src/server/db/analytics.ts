@@ -249,11 +249,15 @@ export interface GermanChunkStats {
 }
 
 export async function germanChunkStats(prisma: PrismaClient): Promise<GermanChunkStats> {
+  // isGerman is set at ingest time (see ingest/pipeline.ts) and backfilled by
+  // migration 20260810000003. The german count reads the partial index
+  // document_chunks_isGerman_idx; the total uses an index-only scan — neither
+  // touches the row data, so this stays cheap as the corpus grows. (The old
+  // `text ~ '[äöüßÄÖÜ]'` regex forced a full scan on every public page load.)
   const rows = await prisma.$queryRaw<Array<{ german: bigint; total: bigint }>>`
     SELECT
-      count(*) FILTER (WHERE text ~ '[äöüßÄÖÜ]') AS german,
-      count(*) AS total
-    FROM document_chunks;
+      (SELECT count(*) FROM document_chunks WHERE "isGerman") AS german,
+      (SELECT count(*) FROM document_chunks) AS total;
   `;
   const first = rows[0];
   return { german: Number(first?.german ?? 0), total: Number(first?.total ?? 0) };

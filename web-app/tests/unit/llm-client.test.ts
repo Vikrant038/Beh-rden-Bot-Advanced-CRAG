@@ -147,4 +147,107 @@ describe("LLM client", () => {
     }
     expect(parts).toEqual(["fallback"]);
   }, 20000);
+
+  it("handles a HuggingFace array response shape", async () => {
+    mockCreate.mockRejectedValue(new Error("Groq down"));
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: async () => [{ generated_text: "first" }, { generated_text: "second" }],
+    });
+
+    const { callLLM } = await import("@/server/llm/client");
+    const result = await callLLM([{ role: "user", content: "hi" }]);
+    expect(result).toBe("first");
+  }, 20000);
+
+  it("fails when HuggingFace returns an empty completion", async () => {
+    mockCreate.mockRejectedValue(new Error("Groq down"));
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: async () => ({ generated_text: "" }),
+    });
+
+    const { callLLM } = await import("@/server/llm/client");
+    await expect(callLLM([{ role: "user", content: "hi" }])).rejects.toThrow(
+      /No working LLM provider/,
+    );
+  }, 20000);
+
+  it("prefers the X-Usage header token counts from HuggingFace", async () => {
+    mockCreate.mockRejectedValue(new Error("Groq down"));
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({ "x-usage": JSON.stringify({ input_tokens: 50, output_tokens: 20 }) }),
+      json: async () => ({ generated_text: "hf answer" }),
+    });
+
+    const { callLLM } = await import("@/server/llm/client");
+    await expect(callLLM([{ role: "user", content: "hi" }])).resolves.toBe("hf answer");
+  }, 20000);
+
+  it("ignores a malformed X-Usage header and keeps the estimate", async () => {
+    mockCreate.mockRejectedValue(new Error("Groq down"));
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({ "x-usage": "not-json" }),
+      json: async () => ({ generated_text: "hf answer" }),
+    });
+
+    const { callLLM } = await import("@/server/llm/client");
+    await expect(callLLM([{ role: "user", content: "hi" }])).resolves.toBe("hf answer");
+  }, 20000);
+
+  it("fails when Groq returns an empty completion on every attempt", async () => {
+    mockCreate.mockResolvedValue({
+      choices: [{ message: { content: "" } }],
+    });
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => "err",
+    });
+
+    const { callLLM } = await import("@/server/llm/client");
+    await expect(callLLM([{ role: "user", content: "hi" }])).rejects.toThrow(
+      /No working LLM provider/,
+    );
+  }, 20000);
+
+  it("callLLMStream re-throws when streaming fails after the first token", async () => {
+    mockCreate.mockResolvedValue({
+      [Symbol.asyncIterator]: async function* () {
+        yield { choices: [{ delta: { content: "Hel" } }] };
+        throw new Error("stream aborted");
+      },
+    });
+
+    const { callLLMStream } = await import("@/server/llm/client");
+    const parts: string[] = [];
+    await expect(
+      (async () => {
+        for await (const chunk of callLLMStream([{ role: "user", content: "hi" }])) {
+          parts.push(chunk);
+        }
+      })(),
+    ).rejects.toThrow("stream aborted");
+    expect(parts).toEqual(["Hel"]);
+  });
+
+  it("callLLMStream falls back to non-streamed when Groq streaming fails before the first token", async () => {
+    mockCreate.mockRejectedValue(new Error("stream setup failed"));
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: async () => ({ generated_text: "fallback" }),
+    });
+
+    const { callLLMStream } = await import("@/server/llm/client");
+    const parts: string[] = [];
+    for await (const chunk of callLLMStream([{ role: "user", content: "hi" }])) {
+      parts.push(chunk);
+    }
+    expect(parts).toEqual(["fallback"]);
+  }, 20000);
 });

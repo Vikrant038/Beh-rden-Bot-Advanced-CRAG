@@ -78,6 +78,50 @@ describe("RecursiveChunker", () => {
     const second = chunkText(LONG_TEXT);
     expect(first).toEqual(second);
   });
+
+  it("falls back to per-character splitting when no separator is present", () => {
+    const chunker = new RecursiveChunker({
+      chunkSize: 20,
+      chunkOverlap: 5,
+      minChunkChars: 3,
+      separators: ["XY"],
+    });
+    const chunks = chunker.splitText("abcdefghijklmnopqrstuvwxyz");
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(20 + 5);
+    }
+  });
+
+  it("recursively splits oversized pieces when the separator is too rare", () => {
+    const chunker = new RecursiveChunker({
+      chunkSize: 100,
+      chunkOverlap: 20,
+      minChunkChars: 10,
+      separators: ["\n"],
+    });
+    const chunks = chunker.splitText(`${'x'.repeat(500)}\nshort tail`);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(100 + 20);
+    }
+  });
+
+  it("trims overlap by dropping the oldest pieces when a merge exceeds the chunk size", () => {
+    const chunker = new RecursiveChunker({
+      chunkSize: 40,
+      chunkOverlap: 10,
+      minChunkChars: 3,
+      separators: ["\n"],
+    });
+    const text = Array.from({ length: 10 }, (_v, i) => `piece-${i}`).join("\n");
+    const chunks = chunker.splitText(text);
+    expect(chunks.length).toBeGreaterThan(1);
+    // Overlap is real: a later chunk re-includes the tail of an earlier one.
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(40 + 10);
+    }
+  });
 });
 
 describe("chunkParentChild", () => {

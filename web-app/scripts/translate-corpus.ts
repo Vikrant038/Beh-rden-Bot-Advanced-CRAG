@@ -44,7 +44,6 @@
 import "dotenv/config";
 
 import { prisma } from "@/server/db";
-import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { syncAllDocuments, type IngestOptions } from "@/server/ingest/pipeline";
 import { createDefaultEmbeddingClient } from "@/server/embeddings/client";
 import { createTranslationRateLimiter, detectLanguage } from "@/server/ingest/translate";

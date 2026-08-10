@@ -208,7 +208,19 @@ async function persistIngested(
 
   const resumeFrom = options.resumeFrom ?? 0;
 
-  if (existing && existing.hash === hash && !options.force && resumeFrom === 0) {
+  // A row with a matching hash but ZERO stored chunks is a broken record (an
+  // ingest that died between the upsert and the first successful embed) — it is
+  // NOT in sync, so the hash-match skip must not apply. Re-ingesting rebuilds
+  // it from the source (this is what the syncAllDocuments CLI hit for
+  // pdf://…/englisch_aufenthg.pdf on prod: matching hash + chunkCount 0 +
+  // status INGESTING, skipped forever).
+  if (
+    existing &&
+    existing.hash === hash &&
+    existing.chunkCount > 0 &&
+    !options.force &&
+    resumeFrom === 0
+  ) {
     // Allow re-titling a document even when its content is unchanged: update
     // the stored title without re-scraping chunks or re-embedding.
     const titleOverride = options.title?.trim();
@@ -298,16 +310,29 @@ async function persistIngested(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         logger.warn({ url: sourceKey, block: i }, `[INGEST] embedding failed: ${message}`);
-        // Roll back the fresh document row so a later run RETRIES instead of
-        // skipping it: the upsert above already stored the new hash with
-        // chunkCount 0, so without cleanup the next run would treat it as
-        // "content unchanged" and never embed it. Resume attempts (resumeFrom
-        // > 0) keep prior committed blocks, so only fresh attempts roll back.
+        // Roll the fresh document back to a RETRYABLE state so a later run
+        // re-ingests it instead of skipping: the upsert above stored the new
+        // hash with chunkCount 0, so without cleanup the next run would treat
+        // it as "content unchanged" and never embed it. Resume attempts
+        // (resumeFrom > 0) keep prior committed blocks, so only fresh attempts
+        // roll back.
+        //
+        // We deliberately do NOT `document.delete` here. Deleting the row would
+        // CASCADE to its chunks and could race a concurrent in-flight job still
+        // mid-loop creating parent chunks for the same documentId → an FK
+        // violation on `document_parent_chunks_documentId_fkey` (seen on prod
+        // when two sync runs overlap). Keeping the row but resetting it to
+        // chunkCount 0 + FAILED is race-safe AND still re-ingests next run: the
+        // hash-match skip above requires `chunkCount > 0`, so a 0-chunk row is
+        // treated as a broken record and rebuilt.
         if (resumeFrom === 0) {
           try {
             await prisma.documentChunk.deleteMany({ where: { documentId } });
             await prisma.documentParentChunk.deleteMany({ where: { documentId } });
-            await prisma.document.delete({ where: { id: documentId } });
+            await prisma.document.update({
+              where: { id: documentId },
+              data: { chunkCount: 0, status: "FAILED", lastError: message },
+            });
           } catch (cleanupError) {
             logger.warn(
               { url: sourceKey, error: String(cleanupError) },
@@ -342,6 +367,7 @@ async function persistIngested(
             ${sourceKey},
             ${child.text},
             ${toVectorLiteral(vector)}::vector,
+            ${/[äöüßÄÖÜ]/.test(child.text)},
             NOW()
           )`;
         });
@@ -350,7 +376,7 @@ async function persistIngested(
         if (nonNull.length > 0) {
           await tx.$executeRaw(Prisma.sql`
             INSERT INTO document_chunks
-              ("documentId", "parentId", "sourceName", "sourceUrl", "text", "embedding", "createdAt")
+              ("documentId", "parentId", "sourceName", "sourceUrl", "text", "embedding", "isGerman", "createdAt")
             VALUES ${Prisma.join(nonNull, ", ")}
           `);
           childCount += nonNull.length;

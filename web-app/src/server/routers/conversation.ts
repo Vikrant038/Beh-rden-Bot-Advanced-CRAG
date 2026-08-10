@@ -107,11 +107,7 @@ function toChatMessage(row: {
     // Feedback is per-user: the query filters it to the requesting user, so an
     // admin viewing someone else's conversation gets null here (their own
     // ratings, if any, belong to their own messages only).
-    feedback: row.feedback?.[0]
-      ? row.feedback[0].rating === "UP"
-        ? "up"
-        : "down"
-      : null,
+    feedback: row.feedback?.[0] ? (row.feedback[0].rating === "UP" ? "up" : "down") : null,
   };
 }
 

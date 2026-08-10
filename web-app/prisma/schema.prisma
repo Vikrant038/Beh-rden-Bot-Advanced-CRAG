@@ -6,7 +6,7 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  extensions = [vector]
+  extensions = [vector, pg_trgm]
 }
 
 // @ai-exception: Enum members use PascalCase per WEB_APP_PLAN §5 (user-approved
@@ -100,6 +100,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
   @@map("accounts")
 }
 
@@ -111,6 +112,7 @@ model Session {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("sessions")
 }
 
@@ -171,6 +173,7 @@ model MessageFeedback {
 
   @@unique([messageId, userId])
   @@index([rating, createdAt])
+  @@index([userId])
   @@map("message_feedback")
 }
 
@@ -236,6 +239,10 @@ model DocumentChunk {
   sourceName String
   sourceUrl  String
   text       String
+  // Set at ingest time (umlaut heuristic); lets the public landing-page
+  // aggregate (germanChunkStats) count German chunks via a partial index
+  // instead of regex-scanning every chunk on every page load.
+  isGerman   Boolean             @default(false)
   embedding  Unsupported("vector(1024)")
   createdAt  DateTime            @default(now())
 

@@ -1,5 +1,10 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { webSearch, formatWebResultsForPrompt } from "@/server/rag/tools/web-search";
+import {
+  webSearch,
+  formatWebResultsForPrompt,
+  formatChunksForPrompt,
+} from "@/server/rag/tools/web-search";
+import type { Chunk } from "@/server/rag/types";
 
 vi.mock("duck-duck-scrape", async () => {
   const actual = await vi.importActual<typeof import("duck-duck-scrape")>("duck-duck-scrape");
@@ -112,6 +117,26 @@ describe("WebSearchTool", () => {
       snippet: "raw snippet",
     });
   });
+
+  it("should render an empty snippet when both description fields are missing", async () => {
+    mockedSearch.mockResolvedValue({
+      noResults: false,
+      vqd: "abc",
+      results: [
+        {
+          title: "Title only",
+          url: "https://example.com",
+          description: "",
+          rawDescription: "",
+          hostname: "example.com",
+          icon: "",
+        },
+      ],
+    } as never);
+
+    const results = await webSearch("study in germany", 3);
+    expect(results[0]?.snippet).toBe("");
+  });
 });
 
 describe("formatWebResultsForPrompt", () => {
@@ -126,5 +151,23 @@ describe("formatWebResultsForPrompt", () => {
 
   it("should return empty string for no results", () => {
     expect(formatWebResultsForPrompt([])).toBe("");
+  });
+});
+
+describe("formatChunksForPrompt", () => {
+  it("returns a sentinel when there are no chunks", () => {
+    expect(formatChunksForPrompt([])).toBe("No relevant context found.");
+  });
+
+  it("renders the [Source: name (url)] block for each chunk", () => {
+    const chunk = {
+      id: "c1",
+      sourceName: "DAAD",
+      sourceUrl: "https://www.daad.de/en/",
+      text: "Official study-in-Germany guidelines.",
+    } as Chunk;
+    const output = formatChunksForPrompt([chunk]);
+    expect(output).toContain("[Source: DAAD (https://www.daad.de/en/)]");
+    expect(output).toContain("Official study-in-Germany guidelines.");
   });
 });

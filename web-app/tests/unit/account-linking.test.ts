@@ -83,6 +83,15 @@ describe("autoLinkOAuthAccount", () => {
     expect(mockedUserFindUnique).not.toHaveBeenCalled();
   });
 
+  it("does nothing when the account lacks a providerAccountId", async () => {
+    const linked = await autoLinkOAuthAccount(
+      { email: "x@example.com" },
+      { provider: "github", type: "oauth", providerAccountId: "" },
+    );
+    expect(linked).toBe(false);
+    expect(mockedUserFindUnique).not.toHaveBeenCalled();
+  });
+
   it("upsert is idempotent for an already-linked provider account", async () => {
     mockedUserFindUnique.mockResolvedValue({ id: "user-42" } as never);
     mockedAccountUpsert.mockResolvedValue({ id: "existing-acct" } as never);

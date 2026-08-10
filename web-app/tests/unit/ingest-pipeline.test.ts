@@ -185,6 +185,30 @@ describe("ingestUrl", () => {
     expect(txMock.__tx.$executeRaw).not.toHaveBeenCalled();
   });
 
+  it("re-ingests a 0-chunk broken record even when the hash matches", async () => {
+    // A row upserted with INGESTING + hash but never embedded (embedding died
+    // mid-ingest) has chunkCount 0. The hash match must NOT skip it — that is
+    // how pdf://…/englisch_aufenthg.pdf stayed INGESTING with 0 chunks on prod
+    // across every re-ingest.
+    prismaMock.document.findUnique.mockResolvedValue({
+      id: "doc-1",
+      url: "https://www.example.com/visa-guide",
+      hash: createHash("sha256").update(cleanText(MOCK_TEXT)).digest("hex"),
+      chunkCount: 0,
+    });
+
+    const result = await ingestUrl("https://www.example.com/visa-guide", {
+      embeddingClient: fakeEmbeddingClient(),
+    });
+
+    expect(result.status).not.toBe("skipped");
+    expect(txMock.__tx.document.upsert).toHaveBeenCalled();
+    expect(txMock.__tx.$executeRaw).toHaveBeenCalled();
+    expect(prismaMock.document.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "SYNCED", lastError: null } }),
+    );
+  });
+
   it("skips unchanged documents (idempotent)", async () => {
     mockedScrape.mockResolvedValue({
       title: "German Student Visa Guide",
@@ -263,6 +287,38 @@ describe("ingestUrl", () => {
     });
     expect(result.status).toBe("failed");
     expect(result.error).toContain("embedding service down");
+  });
+
+  it("reverts a failed embed to a retryable FAILED/0-chunk row instead of deleting it", async () => {
+    const badClient = {
+      embedTexts: vi.fn(async () => {
+        throw new Error("embedding service down");
+      }),
+      embedQuery: vi.fn(),
+    };
+
+    const result = await ingestUrl("https://www.example.com/visa-guide", {
+      embeddingClient: badClient,
+    });
+
+    expect(result.status).toBe("failed");
+    // The partially-created chunks must be cleared so the row is not "in sync".
+    expect(prismaMock.documentChunk.deleteMany).toHaveBeenCalled();
+    expect(prismaMock.documentParentChunk.deleteMany).toHaveBeenCalled();
+    // The row is KEPT and reset (chunkCount 0 + FAILED) so a concurrent
+    // in-flight job can still create parent chunks for it without an FK
+    // violation — never deleted (which would race and cascade).
+    expect(prismaMock.document.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "doc-1" },
+        data: expect.objectContaining({
+          chunkCount: 0,
+          status: "FAILED",
+          lastError: "embedding service down",
+        }),
+      }),
+    );
+    expect((prismaMock.document as unknown as Record<string, unknown>).delete).toBeUndefined();
   });
 });
 

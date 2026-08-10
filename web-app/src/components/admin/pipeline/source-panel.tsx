@@ -31,7 +31,7 @@ export function SourcePanel({ source, index }: SourcePanelProps) {
         <span className="shrink-0 font-mono text-[10px] text-muted">
           {(source.score * 100).toFixed(0)}%
         </span>
-        {source.url ? (
+        {source.url && /^https?:\/\//i.test(source.url) ? (
           <a
             href={source.url}
             target="_blank"

@@ -243,7 +243,7 @@ anyone on the internet.
 | `EMBEDDING_PROVIDER` | `gemini` (default) or `hf`. **Set `hf` for the Cloudflare path.** |
 | `HF_INFERENCE_URL` | Cloudflare worker URL, e.g. `https://embed-worker.<you>.workers.dev` |
 | `HF_TOKEN` | The worker's `EMBED_TOKEN` secret (set via `wrangler secret put`) |
-| `EMBEDDING_MODEL` | `BAAI/bge-base-en-v1.5` (default; must match the worker's model) |
+| `EMBEDDING_MODEL` | `@cf/baai/bge-m3` (worker's model; drives the `/pipeline/feature-extraction/` path) |
 | `GEMINI_API_KEY` | Google AI Studio key — only needed while `EMBEDDING_PROVIDER=gemini` |
 | `CRON_SECRET` | Random string; matches the `/api/cron/cleanup-cache` guard |
 

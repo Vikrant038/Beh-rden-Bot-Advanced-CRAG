@@ -81,4 +81,35 @@ describe("parseChangelog", () => {
     expect(parseChangelog("No versions here.")).toEqual([]);
     expect(parseChangelog("")).toEqual([]);
   });
+
+  it("skips version blocks that do not match the [version] header pattern", () => {
+    const markdown = `# Changelog
+
+## Unreleased Notes
+
+### Added
+
+- Something
+`;
+    expect(parseChangelog(markdown)).toEqual([]);
+  });
+
+  it("skips groups without any bullet items", () => {
+    const markdown = `# Changelog
+
+## [1.0.0] - 2026-07-30
+
+### Changed
+
+- Real change
+
+### Removed
+
+(nothing removed yet)
+`;
+    const entries = parseChangelog(markdown);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.title).toBe("Changed");
+    expect(entries[0]?.items).toEqual(["Real change"]);
+  });
 });

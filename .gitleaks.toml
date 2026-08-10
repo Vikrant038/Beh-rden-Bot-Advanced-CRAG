@@ -1,0 +1,20 @@
+# Gitleaks config — extends the default ruleset.
+# See https://github.com/gitleaks/gitleaks for the schema.
+title = "Behoerden-Bot gitleaks config"
+
+[extend]
+useDefault = true
+
+# The E2E workflow forges an Auth.js session cookie to test authenticated
+# routes. NEXTAUTH_SECRET there is a deliberately FAKE placeholder
+# (e2e-placeholder-secret-1234567890abcdef) — not a real credential. The
+# generic-api-key entropy rule flags it; allowlist the exact value so the
+# security workflow's gitleaks job stays green.
+[allowlist]
+description = "E2E CI placeholder secret (not a real credential)"
+regexes = [
+  '''e2e-placeholder-secret-1234567890abcdef''',
+]
+paths = [
+  '''\.github/workflows/e2e-web-app\.yml''',
+]

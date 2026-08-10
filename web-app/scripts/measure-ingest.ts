@@ -22,7 +22,6 @@
 import type { Prisma } from "@prisma/client";
 import { config as loadEnv } from "dotenv";
 import fs from "node:fs/promises";
-import { createHash } from "node:crypto";
 
 // Load .env BEFORE importing any server module (env.ts validates process.env
 // at import time and does not read .env itself).

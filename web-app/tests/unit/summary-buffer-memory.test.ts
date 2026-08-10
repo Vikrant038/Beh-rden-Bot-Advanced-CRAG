@@ -78,4 +78,41 @@ describe("SummaryBufferMemory", () => {
     const context = await memory.getContextFormatted();
     expect(context).toBe("");
   });
+
+  it("restores an existing rolling summary from the database", async () => {
+    mockedFindUnique.mockResolvedValue({
+      conversationId: "conv-1",
+      summaryText: "Prior summary from earlier session",
+    } as never);
+    const memory = new SummaryBufferMemory("conv-1", 8);
+    const context = await memory.getContextFormatted();
+    expect(context).toContain("Prior summary from earlier session");
+  });
+
+  it("swallows a DB load failure", async () => {
+    mockedFindUnique.mockRejectedValue(new Error("db down"));
+    const memory = new SummaryBufferMemory("conv-1", 8);
+    const context = await memory.getContextFormatted();
+    expect(context).toBe("");
+  });
+
+  it("swallows an LLM failure while summarizing older turns", async () => {
+    mockedCallLLM.mockRejectedValue(new Error("llm down"));
+    const memory = new SummaryBufferMemory("conv-1", 2);
+    for (let i = 1; i <= 2; i += 1) {
+      await memory.addTurn(`q${i}`, `a${i}`);
+    }
+    const context = await memory.getContextFormatted();
+    // No summary was produced, but the remaining turns are still verbatim.
+    expect(context).toContain("q2");
+    expect(context).not.toContain("ROLLING BACKGROUND SUMMARY");
+  });
+
+  it("swallows a DB save failure", async () => {
+    mockedUpsert.mockRejectedValue(new Error("db down"));
+    const memory = new SummaryBufferMemory("conv-1", 8);
+    await memory.addTurn("q1", "a1");
+    const context = await memory.getContextFormatted();
+    expect(context).toContain("q1");
+  });
 });
