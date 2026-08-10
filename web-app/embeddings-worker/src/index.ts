@@ -19,7 +19,7 @@ export interface Env {
   AI: {
     run(
       model: string,
-      inputs: { text: string | string[] } | { query: string; contexts: string[] },
+      inputs: { text: string | string[] } | { query: string; contexts: Array<{ text: string }> },
     ): Promise<
       { shape: number[]; data: number[][] } | { result: Array<{ index: number; score: number }> }
     >;
@@ -67,7 +67,10 @@ export default {
   async scheduled(_event: ScheduledEventLike, env: Env): Promise<void> {
     try {
       await env.AI.run(MODEL, { text: "keep-warm" });
-      await env.AI.run(RERANKER_MODEL, { query: "keep-warm", contexts: ["keep-warm"] });
+      await env.AI.run(RERANKER_MODEL, {
+        query: "keep-warm",
+        contexts: [{ text: "keep-warm" }],
+      });
     } catch (error) {
       // Best-effort: a failed tick must not crash the worker, but log it so a
       // silently broken keep-warm (wrong input shape, model evicted forever)
@@ -204,11 +207,12 @@ async function handleRerank(request: Request, env: Env): Promise<Response> {
 
   let result: { result: Array<{ index: number; score: number }> };
   try {
-    // The Workers AI reranker contract is { query, contexts } — `documents`
-    // is rejected with a 5006 schema error (the exact failure we hit).
+    // The Workers AI reranker contract is { query, contexts: [{ text }] } —
+    // plain strings are rejected (5006 for `documents`, 8001 for bare
+    // strings); each context must be wrapped in an object with a `text` key.
     result = (await env.AI.run(RERANKER_MODEL, {
       query,
-      contexts: capped,
+      contexts: capped.map((text) => ({ text })),
     })) as { result: Array<{ index: number; score: number }> };
   } catch (error) {
     // Surface the real Workers AI error — a bare 1101 tells the operator
