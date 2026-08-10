@@ -48,7 +48,8 @@ actually retrieved — not a truncated proxy window.
 
 Prerequisites: Postgres up with the corpus seeded (see
 `DEPLOYMENT.md`/`scripts/seed-corpus.sh`), and the API keys in `.env`
-(`GROQ_API_KEY`, `HF_TOKEN`, `HF_INFERENCE_URL`, `RERANKER_URL`/`RERANKER_TOKEN`).
+(`GROQ_API_KEY`, `HF_TOKEN`, `HF_INFERENCE_URL`; `RERANKER_URL`/`RERANKER_TOKEN`
+are optional — they default to the embedding URL/token).
 
 ```bash
 cd web-app
@@ -90,11 +91,13 @@ Two corpus modes:
 | Secret | Required | Notes |
 |--------|----------|-------|
 | `GROQ_API_KEY` | ✅ | generation + judge LLM calls |
-| `HF_TOKEN` | ✅ | BGE-M3 embeddings + cross-encoder reranker |
+| `HF_TOKEN` | ✅ | BGE-M3 embeddings + cross-encoder reranker (both via the Cloudflare worker's one token) |
 | `GROQ_MODEL` | optional | default `llama-3.1-8b-instant` |
 | `EMBEDDING_MODEL` | optional | default `BAAI/bge-m3` (must match the corpus space) |
-| `HF_INFERENCE_URL` | ✅ | the BGE-M3 feature-extraction endpoint (your deployed Cloudflare embeddings worker, e.g. `https://<worker>.workers.dev`). Required — the HF Inference API default is unreachable from many networks (DNS/geo blocks) and fails every ingest with "Hugging Face API is unreachable". The workflow fails fast if this secret is missing. |
-| `RERANKER_MODEL` | optional | default `BAAI/bge-reranker-v2-m3` |
+| `HF_INFERENCE_URL` | ✅ | your deployed Cloudflare embeddings worker, e.g. `https://<worker>.workers.dev`. The worker serves BOTH `/pipeline/feature-extraction` (bge-m3) and `/pipeline/text-classification` (`@cf/baai/bge-reranker-base`) behind one `EMBED_TOKEN`. Required — the HF Inference API default is unreachable from many networks (DNS/geo blocks) and fails every ingest with "Hugging Face API is unreachable". The workflow fails fast if this secret is missing. |
+| `RERANKER_URL` | optional | defaults to `HF_INFERENCE_URL` (one worker, one token). Set it only to point the reranker at a different provider. |
+| `RERANKER_TOKEN` | optional | defaults to `HF_TOKEN`. |
+| `RERANKER_MODEL` | optional | default `@cf/baai/bge-reranker-base` |
 | `EVAL_DATABASE_URL` | full mode only | seeded corpus Postgres URL — see "Setting up full-corpus mode" below |
 
 ## Setting up full-corpus mode (`EVAL_DATABASE_URL`)

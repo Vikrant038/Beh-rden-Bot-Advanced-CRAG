@@ -36,17 +36,24 @@ const serverEnvSchema = z.object({
     normalizeUrl,
     z.string().url().default("https://api-inference.huggingface.co"),
   ),
-  RERANKER_MODEL: z.string().default("BAAI/bge-reranker-v2-m3"),
+  RERANKER_MODEL: z.string().default("@cf/baai/bge-reranker-base"),
   /**
-   * Cross-encoder endpoint — deliberately SEPARATE from HF_INFERENCE_URL.
-   * HF_INFERENCE_URL now points at the Cloudflare embeddings worker, which
-   * only serves /pipeline/feature-extraction (it cannot run bge-reranker).
-   * The reranker must always target a real text-classification endpoint.
+   * Cross-encoder endpoint. The Cloudflare worker (behoerden-embeddings)
+   * serves BOTH /pipeline/feature-extraction (bge-m3) AND
+   * /pipeline/text-classification (bge-reranker-base) behind one token, so
+   * RERANKER_URL defaults to HF_INFERENCE_URL — one URL, one token, zero
+   * Hugging Face dependency. An explicit RERANKER_URL pointing elsewhere
+   * (e.g. a different provider) still wins when set.
    */
-  RERANKER_URL: z.preprocess(
-    normalizeUrl,
-    z.string().url().default("https://api-inference.huggingface.co"),
-  ),
+  RERANKER_URL: z.preprocess((val) => {
+    // Treat the legacy HF default as "unset" — it is unreachable from Vercel
+    // and CI and was the cause of the silent [RERANK] fallback in prod.
+    const unset = val === undefined || val === "" || val === "https://api-inference.huggingface.co";
+    const raw = unset
+      ? (process.env.HF_INFERENCE_URL ?? "https://api-inference.huggingface.co")
+      : val;
+    return normalizeUrl(raw);
+  }, z.string().url()),
   /** Token for the reranker endpoint; falls back to HF_TOKEN when unset. */
   RERANKER_TOKEN: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),

@@ -16,13 +16,16 @@ interface RerankResponse {
 }
 
 /**
- * Cross-encoder re-ranker via the HuggingFace Inference API
- * (BAAI/bge-reranker-base). Ported from `src/advanced_retrieval.py:rerank_cross_encoder`,
- * including the sigmoid post-processing of raw scores.
+ * Cross-encoder re-ranker via the Cloudflare worker's text-classification
+ * route (@cf/baai/bge-reranker-base). The worker translates the HF-style
+ * contract the client sends into Workers AI's reranker shape, so this client
+ * is unchanged from the old Hugging Face one. Ported from
+ * `src/advanced_retrieval.py:rerank_cross_encoder`, including the sigmoid
+ * post-processing of raw scores.
  */
 export class HfReranker implements Reranker {
   constructor(
-    private readonly model: string = env.RERANKER_MODEL ?? "BAAI/bge-reranker-v2-m3",
+    private readonly model: string = env.RERANKER_MODEL ?? "@cf/baai/bge-reranker-base",
     private readonly inferenceUrl: string = env.RERANKER_URL,
     private readonly apiToken: string = env.RERANKER_TOKEN ?? env.HF_TOKEN ?? "",
   ) {}

@@ -19,13 +19,19 @@ export interface Env {
   AI: {
     run(
       model: string,
-      inputs: { text: string | string[] },
-    ): Promise<{ shape: number[]; data: number[][] }>;
+      inputs:
+        | { text: string | string[] }
+        | { query: string; documents: string[] },
+    ): Promise<
+      | { shape: number[]; data: number[][] }
+      | { result: Array<{ index: number; score: number }> }
+    >;
   };
   EMBED_TOKEN: string;
 }
 
 const MODEL = "@cf/baai/bge-m3";
+const RERANKER_MODEL = "@cf/baai/bge-reranker-base";
 
 /**
  * Minimal scheduled-event shape — avoids depending on @cloudflare/workers-types
@@ -61,20 +67,28 @@ export default {
   async scheduled(_event: ScheduledEventLike, env: Env): Promise<void> {
     try {
       await env.AI.run(MODEL, { text: "keep-warm" });
+      await env.AI.run(RERANKER_MODEL, { query: "keep-warm", documents: ["keep-warm"] });
     } catch (error) {
       // Best-effort: a failed tick must not crash the worker, but log it so a
       // silently broken keep-warm (wrong input shape, model evicted forever)
       // is diagnosable from wrangler logs instead of looking healthy.
-      console.warn(`[keep-warm] bge-m3 warm-up failed: ${String(error)}`);
+      console.warn(`[keep-warm] warm-up failed: ${String(error)}`);
     }
   },
 
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
-    // Health check (unauthenticated — exposes model name only).
+    // Health check (unauthenticated — exposes model names only).
     if (request.method === "GET" && url.pathname === "/healthz") {
-      return Response.json({ ok: true, model: MODEL });
+      return Response.json({ ok: true, model: MODEL, reranker: RERANKER_MODEL });
+    }
+
+    if (
+      request.method === "POST" &&
+      url.pathname.startsWith("/pipeline/text-classification/")
+    ) {
+      return handleRerank(request, env);
     }
 
     if (request.method !== "POST" || !url.pathname.startsWith("/pipeline/feature-extraction/")) {
@@ -112,8 +126,83 @@ export default {
     // Workers AI returns { shape, data } for embedding models — unwrap data.
     // bge-m3 takes `text` (string | string[]) and pools with CLS internally.
     const result = await env.AI.run(MODEL, { text: texts });
+    if (!("data" in result)) {
+      return Response.json({ error: "unexpected embedding response" }, { status: 502 });
+    }
     const vectors = result.data;
 
     return Response.json(vectors);
   },
 };
+
+/**
+ * Reranker route — serves the web-app's HfReranker with zero client changes.
+ *
+ * The client speaks the Hugging Face Inference API contract:
+ *   POST {inputs: [[query, doc], ...], options: {wait_for_model: true}}
+ *   → [[{label, score}], ...]  (one row per pair, in input order)
+ *
+ * Workers AI's only reranker (@cf/baai/bge-reranker-base) speaks a different
+ * shape: `{query, documents}` in, `{result: [{index, score}]}` out (indices in
+ * relevance order). This handler translates both ways and returns the HF shape
+ * so the app's `extractScores` keeps working unchanged.
+ */
+async function handleRerank(request: Request, env: Env): Promise<Response> {
+  // Token auth — same secret as the embedding route.
+  const auth = request.headers.get("Authorization") ?? "";
+  if (
+    !auth.startsWith("Bearer ") ||
+    !timingSafeEqual(auth.slice("Bearer ".length), env.EMBED_TOKEN)
+  ) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  let body: { inputs?: unknown };
+  try {
+    body = (await request.json()) as { inputs?: unknown };
+  } catch {
+    return Response.json({ error: "invalid JSON body" }, { status: 400 });
+  }
+  if (!Array.isArray(body.inputs) || body.inputs.length === 0) {
+    return Response.json(
+      { error: "inputs must be a non-empty array of [query, document] pairs" },
+      { status: 400 },
+    );
+  }
+
+  const pairs = body.inputs as unknown[];
+  let query = "";
+  const documents: string[] = [];
+  for (const pair of pairs) {
+    if (
+      !Array.isArray(pair) ||
+      pair.length < 2 ||
+      typeof pair[0] !== "string" ||
+      typeof pair[1] !== "string"
+    ) {
+      return Response.json(
+        { error: "each input must be a [query, document] string pair" },
+        { status: 400 },
+      );
+    }
+    if (query === "") {
+      query = pair[0] as string;
+    }
+    documents.push(pair[1] as string);
+  }
+
+  const result = await env.AI.run(RERANKER_MODEL, { query, documents });
+  if (!("result" in result)) {
+    return Response.json({ error: "unexpected reranker response" }, { status: 502 });
+  }
+
+  // Workers AI returns {index, score} sorted by relevance — map back to input
+  // order and wrap each in the HF single-label shape the client parses.
+  const scores = new Array<number>(documents.length).fill(0);
+  for (const entry of result.result) {
+    if (entry.index >= 0 && entry.index < scores.length) {
+      scores[entry.index] = entry.score;
+    }
+  }
+  return Response.json(scores.map((score) => [{ label: "RELEVANT", score }]));
+}

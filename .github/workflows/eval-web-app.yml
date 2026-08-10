@@ -31,12 +31,16 @@ name: Web App CRAG Evaluation
 #
 # Required secrets: GROQ_API_KEY, HF_TOKEN, HF_INFERENCE_URL (all modes),
 # EVAL_DATABASE_URL (full mode).
-# HF_INFERENCE_URL is REQUIRED — it must point at a reachable BGE-M3
-# feature-extraction endpoint (the deployed Cloudflare embeddings worker). The
+# HF_INFERENCE_URL is REQUIRED — it must point at the deployed Cloudflare
+# embeddings worker, which now serves BOTH routes: /pipeline/feature-extraction
+# (BGE-M3) AND /pipeline/text-classification (@cf/baai/bge-reranker-base). The
 # Hugging Face Inference API default is unreachable from many networks (DNS/
 # geo blocks), which fails every ingest as "Hugging Face API is unreachable"
-# — the workflow now fails fast with this message instead of per-PDF errors.
+# and every rerank as "Cross-encoder failed" — the workflow now fails fast
+# with clear messages instead of per-PDF errors.
 # Optional overrides: GROQ_MODEL, EMBEDDING_MODEL, RERANKER_MODEL,
+#                     RERANKER_URL, RERANKER_TOKEN (all default to the
+#                     embedding URL/token — one worker, one token),
 #                     EVAL_DATABASE_URL (full mode).
 
 on:
@@ -156,6 +160,28 @@ jobs:
           fi
           echo "Embedding endpoint verified: $(cat /tmp/healthz.json)"
 
+      - name: Require + verify the reranker endpoint
+        # The reranker must point at the SAME Cloudflare worker (it now serves
+        # /pipeline/text-classification with bge-reranker-base). RERANKER_URL
+        # falls back to the embedding URL; the worker's /healthz reports the
+        # reranker model, which api-inference.huggingface.co does not — so this
+        # check proves the endpoint serves both routes before any eval runs.
+        env:
+          RERANKER_URL: ${{ secrets.RERANKER_URL || secrets.HF_INFERENCE_URL }}
+        run: |
+          set -euo pipefail
+          URL="${RERANKER_URL:-}"
+          if [[ -z "$URL" ]]; then
+            echo "::error::RERANKER_URL is required — set it to your Cloudflare embeddings worker URL (same worker as HF_INFERENCE_URL, which now serves the reranker). See web-app/docs/EVALUATION.md."
+            exit 1
+          fi
+          HEALTH=$(curl -fsS --max-time 20 "${URL%/}/healthz" 2>/tmp/rerank-healthz.err || true)
+          if [[ -z "$HEALTH" ]] || ! printf '%s' "$HEALTH" | grep -q '"reranker"'; then
+            echo "::error::RERANKER_URL (${URL}) did not report a reranker model. It must be the DEPLOYED Cloudflare worker (behoerden-embeddings.<account>.workers.dev) after deploying the text-classification route — not api-inference.huggingface.co. Detail: $(cat /tmp/rerank-healthz.err)"
+            exit 1
+          fi
+          echo "Reranker endpoint verified: $HEALTH"
+
       - name: Seed CI corpus (migrate + ingest small subset)
         if: ${{ steps.corpus.outputs.corpus != 'full' }}
         # Embedding-only step: it needs the model + HF endpoint + token.
@@ -213,7 +239,9 @@ jobs:
           EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL || 'BAAI/bge-m3' }}
           HF_INFERENCE_URL: ${{ secrets.HF_INFERENCE_URL }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          RERANKER_MODEL: ${{ secrets.RERANKER_MODEL || 'BAAI/bge-reranker-v2-m3' }}
+          RERANKER_URL: ${{ secrets.RERANKER_URL || secrets.HF_INFERENCE_URL }}
+          RERANKER_TOKEN: ${{ secrets.RERANKER_TOKEN || secrets.HF_TOKEN }}
+          RERANKER_MODEL: ${{ secrets.RERANKER_MODEL || '@cf/baai/bge-reranker-base' }}
           CORPUS_MODE: ${{ steps.corpus.outputs.corpus }}
         run: pnpm exec tsx scripts/eval-crag-webapp.ts
 
