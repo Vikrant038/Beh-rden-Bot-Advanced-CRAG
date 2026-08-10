@@ -1,6 +1,5 @@
 import type { MetadataRoute } from "next";
-
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://behoerden-bot.vercel.app";
+import { SEO_BASE_URL } from "@/config/app";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -11,6 +10,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/api/", "/chat/", "/history", "/sources", "/settings", "/admin"],
       },
     ],
-    sitemap: `${BASE_URL}/sitemap.xml`,
+    sitemap: `${SEO_BASE_URL}/sitemap.xml`,
   };
 }

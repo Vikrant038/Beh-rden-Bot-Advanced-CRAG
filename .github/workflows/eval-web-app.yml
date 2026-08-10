@@ -118,14 +118,17 @@ jobs:
 
       - name: Resolve corpus mode
         id: corpus
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          INPUTS_CORPUS: ${{ inputs.corpus || 'small' }}
         run: |
           # Scheduled (weekly) runs evaluate the FULL production corpus — that
           # is the authoritative scorecard and the only mode whose gates fail
           # the run. Manual dispatch defaults to small unless overridden.
-          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
             echo "corpus=full" >> "$GITHUB_OUTPUT"
           else
-            echo "corpus=${{ inputs.corpus || 'small' }}" >> "$GITHUB_OUTPUT"
+            echo "corpus=${INPUTS_CORPUS}" >> "$GITHUB_OUTPUT"
           fi
           echo "Resolved corpus mode: $(grep '^corpus=' "$GITHUB_OUTPUT" | cut -d= -f2)"
 

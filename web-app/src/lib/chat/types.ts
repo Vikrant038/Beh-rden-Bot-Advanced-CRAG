@@ -6,10 +6,7 @@ export type ChatMode = "standard" | "agentic";
  * (`api/chat/stream/route.ts`, `routers/chat.ts`). Keeping the value here
  * prevents the client from accepting input the server will reject with a 422.
  */
-export const MAX_QUERY_LENGTH = 4000;
-
-/** Cap on a stopped/partial assistant response persisted via `chat.savePartial`. */
-export const MAX_PARTIAL_CONTENT_LENGTH = 20_000;
+export { MAX_QUERY_LENGTH, MAX_PARTIAL_CONTENT_LENGTH } from "@/config/app";
 
 export interface ChatSource {
   name: string;

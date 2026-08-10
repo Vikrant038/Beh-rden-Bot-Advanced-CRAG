@@ -135,24 +135,24 @@ the per-query cost is dominated by generation.
 
 ### Providers & pricing basis
 
-| Component | Provider | Model / endpoint | Basis |
-|---|---|---|---|
-| Generation | Groq | `llama-3.1-8b-instant` (primary), `llama-3.3-70b-versatile` (fallback) | $0.05/1M in · $0.08/1M out (8b); $0.59/1M in · $0.79/1M out (70b) |
-| Query expansion | Groq | same model | counted per call above |
-| Embeddings | HF worker (self-hosted) | `BAAI/bge-m3`, batched | inference credits, no per-token charge |
-| Rerank | HF endpoint | cross-encoder | inference credits, no per-token charge |
-| Semantic cache | Postgres pgvector (HNSW) | — | $0 after the first cold run |
+| Component       | Provider                 | Model / endpoint                                                       | Basis                                                             |
+| --------------- | ------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Generation      | Groq                     | `llama-3.1-8b-instant` (primary), `llama-3.3-70b-versatile` (fallback) | $0.05/1M in · $0.08/1M out (8b); $0.59/1M in · $0.79/1M out (70b) |
+| Query expansion | Groq                     | same model                                                             | counted per call above                                            |
+| Embeddings      | HF worker (self-hosted)  | `BAAI/bge-m3`, batched                                                 | inference credits, no per-token charge                            |
+| Rerank          | HF endpoint              | cross-encoder                                                          | inference credits, no per-token charge                            |
+| Semantic cache  | Postgres pgvector (HNSW) | —                                                                      | $0 after the first cold run                                       |
 
 ### Typical per-query cost
 
 Estimates at current token budgets (system prompt + context chunks + memory
 for input; 400–600 token answers):
 
-| Pipeline | LLM calls | Typical input tokens | Typical output tokens | Est. cost / query |
-|---|---|---|---|---|
-| **Standard CRAG** | 2 (expansion + generation) | ~2,000–3,000 | ~500 | **~$0.0002** |
-| **Agentic** | 5–7 (research iterations + analyst + writer) | ~5,000–8,000 | ~1,200 | **~$0.0006–0.0010** |
-| Cache hit (either) | 0 | — (1 embedding lookup) | — | **~$0.00001** |
+| Pipeline           | LLM calls                                    | Typical input tokens   | Typical output tokens | Est. cost / query   |
+| ------------------ | -------------------------------------------- | ---------------------- | --------------------- | ------------------- |
+| **Standard CRAG**  | 2 (expansion + generation)                   | ~2,000–3,000           | ~500                  | **~$0.0002**        |
+| **Agentic**        | 5–7 (research iterations + analyst + writer) | ~5,000–8,000           | ~1,200                | **~$0.0006–0.0010** |
+| Cache hit (either) | 0                                            | — (1 embedding lookup) | —                     | **~$0.00001**       |
 
 At ~1,000 queries/day with a ~40% cache-hit rate, the blended cost lands well
 under **$1/day** on the 8b model — the cache is the dominant lever, which is

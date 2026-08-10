@@ -1,2 +1,1 @@
-export const APP_NAME = "Behörden-Bot";
-export const APP_VERSION = "0.6.0";
+export { APP_NAME, APP_VERSION } from "@/config/app";

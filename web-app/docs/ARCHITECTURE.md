@@ -181,11 +181,14 @@ web-app/
 │   │   ├── guest.ts                  # Guest session logic
 │   │   └── tracing.ts                # Langfuse integration
 │   │
+│   ├── config/                       # Centralized single-source config
+│   │   └── app.ts                    #   Names, limits, pipeline tuning, model params
+│   │
 │   ├── lib/                          # Client-side utilities
 │   │   ├── chat/types.ts             # Frontend chat types
 │   │   ├── trpc/client.ts            # tRPC client setup
 │   │   ├── conversation-groups.ts    # Group conversations by date
-│   │   ├── guest.ts                  # Guest mode constants
+│   │   ├── guest.ts                  # Guest mode constants (re-exports from config)
 │   │   ├── toast.tsx                 # Toast notifications
 │   │   └── utils.ts                  # Helper functions
 │   │

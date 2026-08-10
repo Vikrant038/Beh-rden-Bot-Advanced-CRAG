@@ -11,6 +11,7 @@ import {
   recentQueries,
   topQuestions,
 } from "@/server/db/analytics";
+import { DAILY_QUERY_MAX_DAYS, RECENT_QUERY_LIMIT } from "@/config/app";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { createLogger } from "@/server/lib/logger";
 import { NotFoundError } from "@/server/lib/errors";
@@ -79,10 +80,6 @@ export interface PipelineRunListItem {
   error: string | null;
   createdAt: Date;
 }
-
-const DAILY_QUERY_MAX_DAYS = 90;
-
-const RECENT_QUERY_LIMIT = 10;
 
 /**
  * In-memory memory adapter for `admin.testPipeline`: prevents the orchestrator's

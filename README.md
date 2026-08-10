@@ -285,6 +285,7 @@ Repo-2/
 ├── web-app/                        # ★ Production app (TypeScript)
 │   ├── src/
 │   │   ├── app/                    #   Pages, API routes, layouts
+│   │   ├── config/                 #   Centralized single-source config (app.ts)
 │   │   ├── components/             #   Chat UI, landing, admin, visualizer
 │   │   ├── server/
 │   │   │   ├── rag/                #   TS RAG pipeline (guardrail → CRAG)
@@ -307,7 +308,7 @@ Repo-2/
 │   └── docs/                       #   MVP docs: fine-tuning guide, 30-phase plan, …
 │
 ├── docs/                           # ★ Project design + engineering docs (see map)
-└── .github/workflows/              # CI, E2E, security, CRAG-eval gates
+└── .github/workflows/              # CI, E2E, security, DB migrate, Neon keep-alive, CRAG-eval gates
 ```
 
 ---
@@ -320,9 +321,9 @@ We treat quality as a **four-layer system** — not a single test command (detai
 |---|---|---|
 | **Lint + format** | Style, unused code, secrets (Husky pre-commit + Gitleaks) | ✅ green |
 | **Typecheck** | `tsc --noEmit` across the whole app | ✅ clean |
-| **Unit + integration** | 600+ tests across 60+ files (Vitest) — routers, RAG stages, components | ✅ green |
-| **Coverage gate** | **85% floor** enforced in CI (`vitest run --coverage`) | ✅ passing |
-| **E2E** | 6 Playwright specs — chat, history, admin, landing, documents upload, pipeline tester | ✅ green |
+| **Unit + integration** | **670+ tests** across 77 files (Vitest) — routers, RAG stages, components, admin pages | ✅ green |
+| **Coverage gate** | **85% branch-coverage floor** enforced in CI (`vitest run --coverage`) | ✅ passing (85.4%) |
+| **E2E** | **7 Playwright specs** (54 tests) — chat, history, admin, landing, documents upload, pipeline tester, read-only admin view | ✅ green |
 | **Production build** | `next build` (turbopack + CSP nonce path) | ✅ succeeds |
 | **RAG evals** | RAGAS-style multilingual evaluation, both pipelines | see below |
 

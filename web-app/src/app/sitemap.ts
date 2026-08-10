@@ -1,6 +1,5 @@
 import type { MetadataRoute } from "next";
-
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://behoerden-bot.vercel.app";
+import { SEO_BASE_URL } from "@/config/app";
 
 /**
  * Public, indexable routes. Authenticated areas (/chat, /history, /settings,
@@ -11,13 +10,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
   return [
     {
-      url: `${BASE_URL}/`,
+      url: `${SEO_BASE_URL}/`,
       lastModified: now,
       changeFrequency: "weekly",
       priority: 1,
     },
     {
-      url: `${BASE_URL}/login`,
+      url: `${SEO_BASE_URL}/login`,
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.6,

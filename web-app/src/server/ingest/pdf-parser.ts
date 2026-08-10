@@ -1,7 +1,10 @@
 import { PdfParseError } from "@/server/lib/errors";
 import type { PdfParseResult } from "pdf-parse/lib/pdf-parse.js";
 
-export const MAX_PDF_PAGES = 200;
+import { MAX_PDF_BYTES, ACCEPTED_MIME, MAX_PDF_PAGES } from "@/config/app";
+
+// Re-exported so files that import from pdf-parser keep working.
+export { MAX_PDF_BYTES, ACCEPTED_MIME, MAX_PDF_PAGES };
 
 /**
  * Page-cap violations are parser-independent (a 250-page file is over the cap
@@ -9,11 +12,6 @@ export const MAX_PDF_PAGES = 200;
  * falling back would re-parse the whole document just to throw the same error.
  */
 class PdfPageLimitError extends PdfParseError {}
-
-/** Upload-side limits, kept here so the API route module only exports
- *  Next.js Route fields (runtime/maxDuration/HTTP verbs). */
-export const MAX_PDF_BYTES = 4 * 1024 * 1024;
-export const ACCEPTED_MIME = "application/pdf";
 
 export interface ParsedPdf {
   text: string;
