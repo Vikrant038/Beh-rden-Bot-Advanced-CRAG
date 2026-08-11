@@ -182,6 +182,69 @@ describe("HybridRetriever (pgvector + BM25 + RRF)", () => {
     expect(mockedBuildBm25).toHaveBeenCalledTimes(1);
   });
 
+  it("wide mode fetches 2x dense/sparse candidates and widens the rerank window", async () => {
+    mockedDenseRetrieve.mockResolvedValue([corpus[0]]);
+    mockedQueryRaw.mockResolvedValue([
+      {
+        id: 1,
+        parentId: null,
+        documentId: "doc-a",
+        sourceName: "doc-a",
+        sourceUrl: "https://a.example",
+        text: corpus[0].text,
+        rank: 0.9,
+      },
+    ] as never);
+
+    await retriever.retrieve("Compare TU Berlin vs LMU vs FU Berlin", ["Compare TU Berlin"], 0, {
+      wide: true,
+    });
+
+    // Dense top-K widened 15 → 30.
+    expect(mockedDenseRetrieve).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({ topK: 30, minSimilarity: expect.any(Number) }),
+    );
+    // Rerank window widened 5 → 12 (mock reranker honors topK).
+    expect(mockReranker.rerank).toHaveBeenCalledWith(
+      "Compare TU Berlin vs LMU vs FU Berlin",
+      expect.any(Array),
+      12,
+    );
+    // Telemetry records that wide retrieval ran.
+    const result = await retriever.retrieve("Compare TU Berlin vs LMU vs FU Berlin", ["Compare TU Berlin"], 0, {
+      wide: true,
+    });
+    expect(result.telemetry.wideRetrieval).toBe(true);
+  });
+
+  it("default retrieval keeps the narrow 15/15/5 window and omits the wide telemetry flag", async () => {
+    mockedDenseRetrieve.mockResolvedValue([corpus[0]]);
+    mockedQueryRaw.mockResolvedValue([
+      {
+        id: 1,
+        parentId: null,
+        documentId: "doc-a",
+        sourceName: "doc-a",
+        sourceUrl: "https://a.example",
+        text: corpus[0].text,
+        rank: 0.9,
+      },
+    ] as never);
+
+    const result = await retriever.retrieve("blocked account visa", ["blocked account visa"]);
+    expect(mockedDenseRetrieve).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({ topK: 15 }),
+    );
+    expect(mockReranker.rerank).toHaveBeenCalledWith(
+      "blocked account visa",
+      expect.any(Array),
+      5,
+    );
+    expect(result.telemetry.wideRetrieval).toBeUndefined();
+  });
+
   it("triggers the CRAG web-fallback verdict when nothing survives reranking", async () => {
     const emptyReranker: Reranker = {
       rerank: vi.fn(async () => []),

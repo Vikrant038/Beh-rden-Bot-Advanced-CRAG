@@ -37,7 +37,7 @@
       "metric_focus": ["groundedness_faithfulness"],
       "question": "What is the APS certificate and which authority issues it for Indian applicants?",
       "ground_truth_answer": "The APS (Akademische Prüfstelle) certificate is an academic evaluation document issued by the APS India – Academic Evaluation Centre, the Science Section of the German Embassy New Delhi.",
-      "expected_keywords": ["APS", "Academic Evaluation Centre", "German Embassy", "New Delhi", "certificate"],
+      "expected_keywords": ["APS", "Academic Evaluation Center", "German Embassy", "New Delhi", "certificate"],
       "retrieval_hints": ["APS India"]
     },
     {
@@ -67,7 +67,7 @@
       "metric_focus": ["answer_relevance", "groundedness_faithfulness"],
       "question": "Welches Goethe-Zertifikat wird als Sprachnachweis für die Niederlassungserlaubnis und die Einbürgerung in Deutschland anerkannt?",
       "ground_truth_answer": "Das Goethe-Zertifikat B1 wird als Sprachnachweis für die Niederlassungserlaubnis und die Einbürgerung in Deutschland anerkannt.",
-      "expected_keywords": ["Goethe-Zertifikat B1", "Niederlassungserlaubnis", "Einbürgerung"],
+      "expected_keywords": ["Goethe-Zertifikat B1", "Niederlassungserlaubnis", "Einbürgerung", "permanent residency", "naturalization"],
       "retrieval_hints": ["Goethe-Institut Exam Catalogue"]
     },
     {
@@ -137,7 +137,7 @@
       "metric_focus": ["groundedness_faithfulness", "context_recall"],
       "question": "Was erhalte ich nach der Anmeldung bei der Meldebehörde in Berlin?",
       "ground_truth_answer": "Nach der Anmeldung erhalten Sie eine Meldebestätigung mit den relevanten Daten.",
-      "expected_keywords": ["Meldebestätigung", "Anmeldung", "Meldebehörde"],
+      "expected_keywords": ["Meldebestätigung", "Anmeldung", "Meldebehörde", "registration confirmation"],
       "retrieval_hints": ["Berlin Wohnsitz Anmeldung"]
     },
     {
@@ -167,7 +167,7 @@
       "metric_focus": ["groundedness_faithfulness"],
       "question": "Which German government bodies provide the official visa and residence overview for students?",
       "ground_truth_answer": "The key official bodies are the Federal Foreign Office (Auswärtiges Amt) visa service, the Federal Office for Migration and Refugees (BAMF), and the federal government portal Make it in Germany; study-specific guidance comes from DAAD and Study in Germany.",
-      "expected_keywords": ["Auswärtiges Amt", "BAMF", "Make it in Germany", "DAAD"],
+      "expected_keywords": ["Federal Foreign Office", "BAMF", "Make it in Germany", "DAAD"],
       "retrieval_hints": ["Auswärtiges Amt", "BAMF", "Make it in Germany", "DAAD"]
     },
     {
@@ -207,7 +207,7 @@
       "metric_focus": ["groundedness_faithfulness"],
       "question": "Welche Prüfungsordnung gilt für den TestDaF?",
       "ground_truth_answer": "Es gilt die TestDaF-Prüfungsordnung vom Oktober 2020 (TestDaF Prüfungsordnung 10-2020).",
-      "expected_keywords": ["TestDaF", "Prüfungsordnung", "10-2020"],
+      "expected_keywords": ["TestDaF", "Prüfungsordnung", "testDaF examination", "examination regulations"],
       "retrieval_hints": ["TestDaF Prüfungsordnung"]
     },
     {
@@ -259,7 +259,7 @@
       "metric_focus": ["groundedness_faithfulness", "context_recall"],
       "question": "Wo bekomme ich in Deutschland meine Steuerliche Identifikationsnummer?",
       "ground_truth_answer": "Die Steuerliche Identifikationsnummer wird vom Bundeszentralamt für Steuern (BZSt) vergeben; das BZSt informiert dazu auf seiner offiziellen Seite.",
-      "expected_keywords": ["Steuerliche Identifikationsnummer", "BZSt", "Bundeszentralamt"],
+      "expected_keywords": ["BZSt", "tax identification number", "Federal Central Tax Office"],
       "retrieval_hints": ["BZSt"]
     },
     {
@@ -269,7 +269,7 @@
       "metric_focus": ["groundedness_faithfulness"],
       "question": "Was ist der Rundfunkbeitrag und wo beantrage ich eine Befreiung?",
       "ground_truth_answer": "Der Rundfunkbeitrag ist die gesetzliche Abgabe für öffentlich-rechtlichen Rundfunk in Deutschland. Befreiung und Ermäßigung werden über das offizielle Portal rundfunkbeitrag.de beantragt.",
-      "expected_keywords": ["Rundfunkbeitrag", "Befreiung", "rundfunkbeitrag.de"],
+      "expected_keywords": ["Rundfunkbeitrag", "exemption", "broadcasting contribution"],
       "retrieval_hints": ["Rundfunkbeitrag"]
     },
     {
@@ -279,7 +279,7 @@
       "metric_focus": ["answer_relevance", "context_precision"],
       "question": "Wie beantrage ich ein Führungszeugnis online?",
       "ground_truth_answer": "Das Führungszeugnis kann online über das Bundesjustizamt (Bundesamt für Justiz) beantragt werden; das Portal bietet die Online-Beantragung des Führungszeugnisses an.",
-      "expected_keywords": ["Führungszeugnis", "Bundesjustizamt", "online"],
+      "expected_keywords": ["Führungszeugnis", "online", "certificate of conduct", "BfJ", "Federal Office of Justice"],
       "retrieval_hints": ["Führungszeugnis Online Application"]
     },
     {

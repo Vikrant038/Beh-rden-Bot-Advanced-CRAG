@@ -130,6 +130,20 @@ POSTGRESQL (16 + pgvector extension)
 - `src/hooks/` — Client-side hooks
 - `prisma/` — Schema + migrations
 
+**Stage 1 is English-first** (`src/server/rag/query-expansion.ts`): the
+corpus is stored entirely in English (ingest normalizes every document:
+detect → translate → chunk → embed), so one LLM call detects the user's
+query language, translates it to English, and returns
+`{ language, queries }` — always-English queries where `queries[0]` is the
+canonical translation **and the canonical cache key**: answers are
+dual-written under the raw query and `queries[0]`, so a German ask and its
+English equivalent share one cached answer. Each cache entry stores the
+language it was written in; a hit whose language differs from the current
+user's query language is flagged as `languageMismatch` in `ChatMetadata`.
+The detected `language` also flows into the writer's system prompt
+("Answer in {language}") so answers come back in the user's language, and
+into `ChatMetadata`/traces.
+
 ---
 
 ## 🔄 How They Connect
@@ -320,6 +334,6 @@ README.md (quick start — flagship doc)
 
 ---
 
-**Last Updated:** 2026-08-09  
+**Last Updated:** 2026-08-11  
 **Status:** Complete ✅  
 **Ready for:** New hires, code reviews, architecture decisions

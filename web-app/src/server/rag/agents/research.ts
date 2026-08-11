@@ -5,7 +5,7 @@ import type {
   ToolCallTelemetry,
 } from "@/server/rag/types";
 import type { HybridRetriever } from "@/server/rag/retrieval/hybrid";
-import { generateSubQueries } from "@/server/rag/query-expansion";
+import { generateSubQueries, type QueryExpansion } from "@/server/rag/query-expansion";
 import { webSearch } from "@/server/rag/tools/web-search";
 import { calculateVisaRequirements } from "@/server/rag/tools/visa-calculator";
 import { RESEARCH_AGENT_INSTRUCTION } from "@/server/rag/prompt";
@@ -50,6 +50,12 @@ export async function agentResearchReact(
   hybridRetriever: HybridRetriever,
   sessionMemory: string = "",
   onEvent?: (event: PipelineEvent) => void,
+  /**
+   * Precomputed expansion from the orchestrator. The agentic path expands ONCE
+   * (in the orchestrator, so the canonical-English query can drive the cache)
+   * and hands the queries down — skipping this re-expands internally.
+   */
+  preExpansion?: QueryExpansion,
 ): Promise<ResearchResult> {
   logger.info("[AGENT 1] Research agent starting ReAct loop");
   // Framing contract documented in src/server/rag/prompt.ts — surfaced in the
@@ -69,9 +75,9 @@ export async function agentResearchReact(
 
   const lower = userQuery.toLowerCase();
 
-  // ReAct iteration 1: retrieve from the knowledge base. Bilingual sub-query
-  // expansion (EN + DE) so BM25 matches both halves of the corpus. Each phase
-  // emits stage_start/stage_end so the chat status bar tracks it live.
+  // ReAct iteration 1: retrieve from the knowledge base. English-only sub-query
+  // expansion (translated canonical + paraphrases) against the English corpus.
+  // Each phase emits stage_start/stage_end so the chat status bar tracks it.
   const t0_qe = performance.now();
   onEvent?.({
     type: "stage_start",
@@ -79,7 +85,8 @@ export async function agentResearchReact(
     label: "Query Expansion",
     timestamp: Date.now(),
   });
-  const searchQueries = await generateSubQueries(userQuery, 5);
+  const expansion = preExpansion ?? (await generateSubQueries(userQuery));
+  const searchQueries = expansion.queries;
   const qeDuration = performance.now() - t0_qe;
   onEvent?.({
     type: "stage_end",
@@ -97,7 +104,19 @@ export async function agentResearchReact(
     label: "Hybrid Retrieval (Dense + BM25 + RRF + Rerank)",
     timestamp: Date.now(),
   });
-  const retrieval = await hybridRetriever.retrieve(userQuery, searchQueries, qeDuration);
+  const retrieval = await hybridRetriever.retrieve(
+    // Rerank with the CANONICAL ENGLISH query (queries[0]), not the raw user
+    // query: the cross-encoder is English-only and the corpus is English, so
+    // a non-English rerank query produced noise (see pipeline.ts).
+    searchQueries[0] ?? userQuery,
+    searchQueries,
+    qeDuration,
+    {
+      // Multi-entity/synthesis questions widen retrieval so the 5-chunk
+      // rerank limit can't truncate recall across 4-6 entities.
+      wide: expansion.needsDeepRerank === true,
+    },
+  );
   const retrieveDuration = performance.now() - t0_retrieve;
   const chunks = retrieval.chunks;
   onEvent?.({
@@ -173,7 +192,10 @@ export async function agentResearchReact(
   if (COMPARE_TRIGGERS.some((trigger) => lower.includes(trigger))) {
     const subQuery = `${userQuery} requirements breakdown`;
     const t0_sec = performance.now();
-    const secondary = await hybridRetriever.retrieve(subQuery, [subQuery]);
+    const secondary = await hybridRetriever.retrieve(subQuery, [subQuery], 0, {
+      // Comparative questions are inherently multi-entity — widen too.
+      wide: expansion.needsDeepRerank === true,
+    });
     const secDuration = performance.now() - t0_sec;
     toolCalls.push({
       id: `call-hybrid-sec-${Date.now()}`,

@@ -89,6 +89,8 @@ pnpm build
 pnpm test:e2e                     # requires Playwright browsers
 ```
 
+**Latest full-corpus CRAG eval** (`scripts/eval-crag-webapp.ts`, 30 multilingual questions + adversarial traps, English-first corpus): all six gates pass — context recall **79.1%** (threshold 70%), context precision 100%, faithfulness 4.02/5.0, answer relevance 4.60/5.0 (BGE-M3 cos 0.724), traps 2/2. See [`docs/EVALUATION.md`](docs/EVALUATION.md).
+
 ## Project structure
 
 ```

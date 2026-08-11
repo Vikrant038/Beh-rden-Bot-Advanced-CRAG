@@ -47,6 +47,8 @@ export interface SparseSearchRow {
 
 export interface CacheSimRow {
   responseJson: unknown;
+  /** ISO 639-1 language the cached answer was written in (nullable, pre-migration rows). */
+  language: string | null;
   sim: number;
 }
 
@@ -61,6 +63,8 @@ export interface UpsertCacheEntryParams {
   queryVector: number[];
   responseJson: string;
   parentDocIds: string[];
+  /** ISO 639-1 language the answer was written in (optional — old rows lack it). */
+  language?: string | null;
   now: Date;
   expiresAt: Date;
 }
@@ -132,7 +136,7 @@ async function findSimilarCacheEntry(
   const literal = toVectorLiteral(queryVector);
 
   return prisma.$queryRaw<CacheSimRow[]>`
-    SELECT "responseJson", 1 - ("queryVector" <=> ${literal}::vector) AS sim
+    SELECT "responseJson", "language", 1 - ("queryVector" <=> ${literal}::vector) AS sim
     FROM semantic_cache
     WHERE "expiresAt" > ${now}
     ORDER BY "queryVector" <=> ${literal}::vector
@@ -153,7 +157,7 @@ async function upsertCacheEntry(
 
   await prisma.$executeRaw`
     INSERT INTO semantic_cache
-      (id, "queryHash", "queryText", "queryVector", "responseJson", "parentDocIds", "createdAt", "expiresAt")
+      (id, "queryHash", "queryText", "queryVector", "responseJson", "parentDocIds", "language", "createdAt", "expiresAt")
     VALUES (
       nextval(pg_get_serial_sequence('semantic_cache', 'id')),
       ${params.queryHash},
@@ -161,11 +165,13 @@ async function upsertCacheEntry(
       ${literal}::vector,
       ${params.responseJson}::jsonb,
       ${params.parentDocIds},
+      ${params.language ?? null},
       ${params.now},
       ${params.expiresAt}
     )
     ON CONFLICT ("queryHash") DO UPDATE
       SET "responseJson" = EXCLUDED."responseJson",
+          "language"     = EXCLUDED."language",
           "expiresAt"    = EXCLUDED."expiresAt";
   `;
 }

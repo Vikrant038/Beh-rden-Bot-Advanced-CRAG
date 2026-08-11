@@ -5,11 +5,34 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   createTranslationRateLimiter,
   detectLanguage,
+  detectLanguageLlm,
   GroqRateLimiter,
   GroqRateLimiterPool,
   splitIntoChunks,
   translateToEnglish,
+  type TranslationRateLimiter,
 } from "@/server/ingest/translate";
+
+// The LLM detection call is replaced with a stub so the translateToEnglish
+// tests below keep exercising the segment-translation path in isolation — the
+// real detection behavior is covered in tests/unit/translate-detection.test.ts.
+// NOTE: translateToEnglish closes over the REAL detectLanguageLlm internally,
+// so replacing just the export would leak real detection calls into these
+// tests (each one would burn a client call + regex-fallback). The wrapper
+// routes detection through the injected mock instead.
+vi.mock("@/server/ingest/translate", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/server/ingest/translate")>("@/server/ingest/translate");
+  const detectLanguageLlmMock = vi.fn();
+  return {
+    ...actual,
+    detectLanguageLlm: detectLanguageLlmMock,
+    translateToEnglish: (text: string, rateLimiter: TranslationRateLimiter) =>
+      actual.translateToEnglish(text, rateLimiter, detectLanguageLlmMock),
+  };
+});
+
+const mockedDetectLanguageLlm = vi.mocked(detectLanguageLlm);
 
 describe("detectLanguage", () => {
   it("detects German text", () => {
@@ -273,6 +296,34 @@ describe("createTranslationRateLimiter", () => {
 });
 
 describe("translateToEnglish parallel dedupe", () => {
+  beforeEach(() => {
+    mockedDetectLanguageLlm.mockReset();
+    mockedDetectLanguageLlm.mockResolvedValue("de");
+  });
+
+  it("skips translation when the LLM detects English", async () => {
+    mockedDetectLanguageLlm.mockResolvedValueOnce("en");
+    const limiter = new GroqRateLimiter({
+      apiKey: "test-key",
+      tpm: 1_000_000,
+      rpm: 1000,
+      rpd: 100_000,
+    });
+    const createSpy = vi.spyOn(limiter.client.chat.completions, "create");
+
+    const result = await translateToEnglish(
+      "The residence permit is required for studying in Germany.",
+      limiter,
+    );
+
+    expect(result.translated).toBe(false);
+    expect(result.language).toBe("en");
+    expect(result.englishText).toBe(
+      "The residence permit is required for studying in Germany.",
+    );
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
   it("translates a shared segment only once under concurrent callers", async () => {
     const limiter = new GroqRateLimiter({
       apiKey: "test-key",
@@ -308,6 +359,12 @@ describe("translateToEnglish parallel dedupe", () => {
     expect(r2.englishText).toBe("The translated segment.");
     // Only one API call despite two concurrent callers.
     expect(createSpy).toHaveBeenCalledTimes(1);
+    // The LLM detection is consulted once per document (via the shared
+    // in-flight dedupe below the mock) and decides "de" → translate.
+    expect(mockedDetectLanguageLlm).toHaveBeenCalledWith(
+      expect.stringContaining("Aufenthaltserlaubnis"),
+      limiter,
+    );
   });
 
   it("retries the segment on the next model after a hard model error", async () => {

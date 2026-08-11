@@ -313,6 +313,8 @@ model SemanticCacheEntry {
   queryVector  Unsupported("vector(1024)")
   responseJson Json
   parentDocIds String[]
+  /** ISO 639-1 of the language the cached answer was written in (null for pre-migration rows). */
+  language     String?
   createdAt    DateTime @default(now())
   expiresAt    DateTime
 

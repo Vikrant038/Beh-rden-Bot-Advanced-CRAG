@@ -3,10 +3,13 @@ import {
   CRAG_THRESHOLD,
   DEFAULT_MIN_SIMILARITY,
   DENSE_TOP_K,
+  DENSE_TOP_K_WIDE,
   QUERY_EMBEDDING_PREFIX,
   RERANK_TOP_K,
+  RERANK_TOP_K_WIDE,
   RRF_K,
   SPARSE_TOP_K,
+  SPARSE_TOP_K_WIDE,
 } from "@/server/rag/types";
 import { denseRetrieve } from "@/server/rag/retrieval/dense";
 import { reciprocalRankFusion } from "@/server/rag/retrieval/rrf";
@@ -27,6 +30,16 @@ export interface HybridRetrieverOptions {
 }
 
 /**
+ * Optional retrieval-width escalation. `wide` is set by the caller when the
+ * query expansion flagged a multi-entity/synthesis question (needsDeepRerank):
+ * dense + sparse fetch 2× candidates and the rerank window (and thus the
+ * parent window the generator sees) grows from 5 → 12 chunks.
+ */
+export interface HybridRetrieveOptions {
+  wide?: boolean;
+}
+
+/**
  * Hybrid retriever: dense (pgvector) + sparse (BM25) → RRF fusion →
  * cross-encoder rerank → CRAG confidence gate.
  * Ported from `src/advanced_retrieval.py:advanced_crag_retrieve`.
@@ -42,6 +55,7 @@ export class HybridRetriever {
     query: string,
     queries: string[],
     queryExpansionDurationMs: number = 0,
+    options: HybridRetrieveOptions = {},
   ): Promise<HybridRetrievalResultWithTelemetry> {
     // Sparse search runs in Postgres (tsvector + GIN) so the full corpus is
     // never transferred on the hot path. The corpus is only loaded (and BM25
@@ -54,6 +68,11 @@ export class HybridRetriever {
     const denseRankings: Chunk[][] = [];
     const sparseRankings: Chunk[][] = [];
 
+    const wide = options.wide === true;
+    const denseTopK = wide ? DENSE_TOP_K_WIDE : DENSE_TOP_K;
+    const sparseTopK = wide ? SPARSE_TOP_K_WIDE : SPARSE_TOP_K;
+    const rerankTopK = wide ? RERANK_TOP_K_WIDE : RERANK_TOP_K;
+
     const t0_dense = performance.now();
     const queryVectors = await this.options.embeddingClient.embedTexts(
       queries.map((subQuery) => `${QUERY_EMBEDDING_PREFIX}${subQuery.trim()}`),
@@ -61,7 +80,7 @@ export class HybridRetriever {
     const perQueryDense = await Promise.all(
       queries.map(async (subQuery, index) => {
         return await denseRetrieve(queryVectors[index], {
-          topK: DENSE_TOP_K,
+          topK: denseTopK,
           minSimilarity: DEFAULT_MIN_SIMILARITY,
         });
       }),
@@ -70,7 +89,7 @@ export class HybridRetriever {
 
     const t0_sparse = performance.now();
     const perQuerySparse = await Promise.all(
-      queries.map((subQuery) => sparseRetriever.search(subQuery, SPARSE_TOP_K)),
+      queries.map((subQuery) => sparseRetriever.search(subQuery, sparseTopK)),
     );
     const sparseBm25DurationMs = performance.now() - t0_sparse;
     // Queries fall back to BM25 independently, so engines can mix (FTS for
@@ -98,7 +117,7 @@ export class HybridRetriever {
     logger.info(`[HYBRID] RRF fusion produced ${fused.length} unique chunks`);
 
     const t0_rerank = performance.now();
-    const reranked = await this.options.reranker.rerank(query, fused, RERANK_TOP_K);
+    const reranked = await this.options.reranker.rerank(query, fused, rerankTopK);
     const rerankDurationMs = performance.now() - t0_rerank;
 
     const bestCrossScore = reranked[0]?.crossScore ?? 0;
@@ -131,6 +150,7 @@ export class HybridRetriever {
         cragFallbackTriggered: needsWebFallback,
         corpusLoadDurationMs,
         sparseEngine,
+        wideRetrieval: wide || undefined,
       },
     };
   }

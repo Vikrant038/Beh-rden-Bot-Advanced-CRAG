@@ -252,6 +252,8 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
     latencyMs: number;
     isGrounded: boolean;
     isCached: boolean;
+    language?: string;
+    languageMismatch?: boolean;
   };
 
   // True once the writer has streamed its answer live, so the finished string
@@ -275,6 +277,8 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
         latencyMs: standardResult.latencyMs,
         isGrounded: standardResult.isGrounded,
         isCached: standardResult.isCached,
+        language: standardResult.language,
+        languageMismatch: standardResult.languageMismatch,
       };
     } else {
       // No coarse `agent_research` status here: the orchestrator emits a
@@ -313,6 +317,8 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
         latencyMs: agenticResult.totalLatencyMs,
         isGrounded: agenticResult.finalAnswer.includes("Out of Domain") ? false : true,
         isCached: agenticResult.researchSteps[0]?.action === "Semantic Cache Hit",
+        language: agenticResult.language,
+        languageMismatch: agenticResult.languageMismatch,
       };
     }
   } catch (error) {
@@ -351,6 +357,8 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
     latencyMs: result.latencyMs,
     isGrounded: result.isGrounded,
     isCached: result.isCached,
+    language: result.language,
+    languageMismatch: result.languageMismatch,
     mode,
   });
 
@@ -368,6 +376,8 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
       latencyMs: result.latencyMs,
       isGrounded: result.isGrounded,
       isCached: result.isCached,
+      language: result.language,
+      languageMismatch: result.languageMismatch,
       mode,
     },
   };

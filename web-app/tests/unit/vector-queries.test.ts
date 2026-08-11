@@ -82,6 +82,78 @@ describe("vectorQueries.findSimilarChunks", () => {
   });
 });
 
+describe("vectorQueries.upsertCacheEntry (storage-shape regression)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("writes exactly the fixed column set and a 1024-dim vector literal", async () => {
+    const prisma = makePrisma();
+    prisma.$executeRaw.mockResolvedValue(1);
+    const vector = Array.from({ length: 1024 }, (_, i) => 0.1 + i * 0.0001);
+    const now = new Date("2026-08-11T00:00:00Z");
+
+    await vectorQueries.upsertCacheEntry(prisma as never, {
+      queryHash: "a".repeat(64),
+      queryText: "How do I apply for a blocked account?",
+      queryVector: vector,
+      responseJson: JSON.stringify({ answer: "x", sources: [] }),
+      parentDocIds: ["doc-1"],
+      language: "de",
+      now,
+      expiresAt: new Date(now.getTime() + 1000),
+    });
+
+    const [strings, ...values] = prisma.$executeRaw.mock.calls[0] as [
+      TemplateStringsArray,
+      ...unknown[],
+    ];
+    const sql = strings.join("?");
+
+    // Storage regression: the cache entry's column set is pinned. Adding a
+    // column to the INSERT must update this test — otherwise cache storage
+    // (already ~25-30 KB/row dominated by the 1024-dim vector) grows silently.
+    // `id` is written unquoted in the raw SQL; the rest are quoted.
+    expect(sql).toContain(
+      '(id, "queryHash", "queryText", "queryVector", "responseJson", "parentDocIds", "language", "createdAt", "expiresAt")',
+    );
+    // No fat columns snuck into the cache entry shape.
+    expect(sql).not.toContain("fullText");
+    expect(sql).not.toContain("embeddingText");
+
+    // The vector literal is exactly EMBEDDING_DIM floats — a dimension change
+    // would silently change every row's storage footprint.
+    const literal = values.find(
+      (value): value is string => typeof value === "string" && value.startsWith("["),
+    );
+    expect(literal?.split(",")).toHaveLength(1024);
+
+    // The cache key is a 64-char sha256 hex hash.
+    expect(values[0]).toMatch(/^[0-9a-f]{64}$/);
+    // The answer language is a short ISO code, not a blob.
+    expect(values).toContain("de");
+  });
+
+  it("passes language null for pre-migration entries (no stored language)", async () => {
+    const prisma = makePrisma();
+    prisma.$executeRaw.mockResolvedValue(1);
+
+    await vectorQueries.upsertCacheEntry(prisma as never, {
+      queryHash: "b".repeat(64),
+      queryText: "visa requirements",
+      queryVector: Array.from({ length: 1024 }, () => 0.5),
+      responseJson: JSON.stringify({ answer: "x", sources: [] }),
+      parentDocIds: [],
+      language: null,
+      now: new Date(),
+      expiresAt: new Date(Date.now() + 1000),
+    });
+
+    const values = prisma.$executeRaw.mock.calls[0]!.slice(1) as unknown[];
+    expect(values).toContain(null);
+  });
+});
+
 describe("vectorQueries.sparseSearch", () => {
   beforeEach(() => {
     vi.clearAllMocks();

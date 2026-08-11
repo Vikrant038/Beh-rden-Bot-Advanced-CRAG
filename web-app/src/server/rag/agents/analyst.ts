@@ -88,11 +88,14 @@ export async function agentWriterSynthesis(
   researchData: ResearchResult,
   analysisMatrix: AnalystMatrix,
   onToken?: (delta: string) => void,
+  /** ISO 639-1 language detected by query expansion — forces the answer into
+   * the user's language even though the retrieval context is English. */
+  answerLanguage?: string,
 ): Promise<string> {
   logger.info("[AGENT 3] Writer agent synthesizing executive response");
 
   const prompt =
-    `${buildWriterPrompt()}\n\n` +
+    `${buildWriterPrompt(answerLanguage)}\n\n` +
     `You are the Executive Technical Writer for Behoerden-Bot.\n` +
     `User Query: ${userQuery}\n\n` +
     `ANALYST EXECUTIVE SUMMARY:\n${analysisMatrix.summary}\n\n` +

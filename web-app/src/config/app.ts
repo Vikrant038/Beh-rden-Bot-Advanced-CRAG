@@ -235,7 +235,7 @@ export const SAFETY_TERMS = [
 // ─── Query expansion ────────────────────────────────────────────────────────
 
 /**
- * Max chars of each generated sub-query (bilingual expansion, Stage 1).
+ * Max chars of each generated sub-query (English-first expansion, Stage 1).
  * Sub-queries longer than this are truncated before retrieval.
  */
 export const MAX_SUBQUERY_CHARS = 500;

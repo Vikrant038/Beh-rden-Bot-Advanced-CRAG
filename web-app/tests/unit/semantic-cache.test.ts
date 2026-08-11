@@ -48,6 +48,7 @@ describe("SemanticCache", () => {
       queryText: "visa",
       responseJson: { answer: "Blocked account: 11904 EUR", sources: [] },
       parentDocIds: [],
+      language: "en",
       createdAt: now,
       expiresAt: future,
     } as never);
@@ -55,20 +56,43 @@ describe("SemanticCache", () => {
     const result = await cache.checkCache("visa", makeVector());
     expect(result?.answer).toBe("Blocked account: 11904 EUR");
     expect(result?.retrievalPath).toContain("TIER_1_EXACT");
+    // The language the cached answer was written in rides along on the hit.
+    expect(result?.language).toBe("en");
+  });
+
+  it("returns the stored language on a tier-1 hit with a null language", async () => {
+    mockedFindUnique.mockResolvedValue({
+      queryHash: "abc",
+      queryText: "visa",
+      responseJson: { answer: "old", sources: [] },
+      parentDocIds: [],
+      language: null,
+      createdAt: now,
+      expiresAt: future,
+    } as never);
+
+    const result = await cache.checkCache("visa", makeVector());
+    // Pre-migration rows have no language — the hit stays usable, just unlabeled.
+    expect(result?.language).toBeUndefined();
   });
 
   it("should match cosine similarity >= threshold", async () => {
     mockedFindUnique.mockResolvedValue(null);
-    mockedQueryRaw.mockResolvedValue([{ responseJson: { answer: "ok", sources: [] }, sim: 0.98 }]);
+    mockedQueryRaw.mockResolvedValue([
+      { responseJson: { answer: "ok", sources: [] }, sim: 0.98, language: "de" },
+    ]);
 
     const result = await cache.checkCache("blocked account", makeVector());
     expect(result?.isCached).toBe(true);
     expect(result?.retrievalPath).toContain("TIER_2_VECTOR");
+    expect(result?.language).toBe("de");
   });
 
   it("should return null for below-threshold similarity", async () => {
     mockedFindUnique.mockResolvedValue(null);
-    mockedQueryRaw.mockResolvedValue([{ responseJson: { answer: "ok", sources: [] }, sim: 0.5 }]);
+    mockedQueryRaw.mockResolvedValue([
+      { responseJson: { answer: "ok", sources: [] }, sim: 0.5, language: null },
+    ]);
 
     const result = await cache.checkCache("blocked account", makeVector());
     expect(result).toBeNull();
@@ -127,11 +151,15 @@ describe("SemanticCache", () => {
         sources: [{ name: "d", url: "u", score: 0.9 }],
       },
       ["doc-1"],
+      "de",
     );
 
     // Atomic upsert: $executeRaw called once, findUnique never called
     expect(prisma.$executeRaw).toHaveBeenCalledOnce();
     expect(mockedFindUnique).not.toHaveBeenCalled();
+    // The answer language is persisted with the entry.
+    const callArgs = vi.mocked(prisma.$executeRaw).mock.calls[0] ?? [];
+    expect(callArgs).toContain("de");
   });
 
   it("addToCache should use same upsert path whether entry exists or not", async () => {

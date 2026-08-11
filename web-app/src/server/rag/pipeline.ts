@@ -14,7 +14,7 @@ import { callLLM } from "@/server/llm/client";
 import type { LlmMessage } from "@/server/llm/client";
 import { maskPii } from "@/server/pii/masker";
 import { formatChunksForPrompt } from "@/server/rag/tools/web-search";
-import type { SemanticCache } from "@/server/rag/cache/semantic-cache";
+import type { SemanticCache, CachedResponse } from "@/server/rag/cache/semantic-cache";
 import { buildStandardSystemPrompt } from "@/server/rag/prompt";
 import { LLM_MAX_TOKENS_ANSWER, LLM_TEMPERATURE_MEDIUM } from "@/config/app";
 import { LlmUsageCollector, withLlmUsageCollector, type LlmCallRecord } from "@/server/llm/usage";
@@ -61,6 +61,14 @@ export interface StandardRagResult {
   latencyMs: number;
   isGrounded: boolean;
   isCached: boolean;
+  /** ISO 639-1 language of the user's query, detected during expansion. */
+  language?: string;
+  /**
+   * True when a cache hit served an answer written in a different language
+   * than the current user's query (known only on the canonical-English path,
+   * where expansion ran to produce the cache key).
+   */
+  languageMismatch?: boolean;
   /** Glass-box trace — present only when `collectTrace` was set. */
   trace?: StandardRagTrace;
 }
@@ -81,6 +89,10 @@ export interface StandardRagTrace {
   retrievalPath: string;
   isGrounded: boolean;
   isCached: boolean;
+  /** ISO 639-1 language of the user's query, detected during expansion. */
+  language?: string;
+  /** True when a cache hit's answer language differs from the query language. */
+  languageMismatch?: boolean;
   disambiguation?: { durationMs: number; isAmbiguous: boolean; options: string[] };
   retrievalTelemetry?: RetrievalTelemetry;
   totalLatencyMs: number;
@@ -90,9 +102,6 @@ export interface StandardRagTrace {
   preProcessing?: PreProcessingTelemetry;
   postProcessing?: PostProcessingTelemetry;
 }
-
-// Shared, unit-tested generation contract (src/server/rag/prompt.ts).
-const SYSTEM_PROMPT = buildStandardSystemPrompt();
 
 /** CRAG stage names, indexed to match `PipelineStage.index`. */
 const CRAG_STAGE_NAMES = [
@@ -140,24 +149,35 @@ export async function runStandardCrag(
     const maskedQuestion = options.maskedQuery ?? maskPii(question).text;
     const piiMaskingDurationMs = options.maskedQuery !== undefined ? 0 : Date.now() - t_pii;
 
-    const t_cache = Date.now();
-    const queryVector = await hybridRetriever.embedQuery(maskedQuestion);
-    const cached = await cache.checkCache(maskedQuestion, queryVector);
-    const cacheLookupDurationMs = Date.now() - t_cache;
-
-    if (cached) {
+    // Serves a cache hit: persists the turn to memory and shapes the result
+    // (including the glass-box trace when the admin tester asked for one).
+    // Shared by the original-query hit and the canonical-English hit below.
+    // `requestLanguage` is the current user's query language (only known on
+    // the canonical path, where expansion ran); when it differs from the
+    // cached answer's language, the caller can flag/re-render the reply.
+    const serveCached = async (
+      entry: CachedResponse,
+      lookupDurationMs: number,
+      requestLanguage?: string,
+    ): Promise<StandardRagResult> => {
       const t_mem = Date.now();
-      await memory.addTurn(question, cached.answer);
+      await memory.addTurn(question, entry.answer);
       const memoryWriteDurationMs = Date.now() - t_mem;
       const latencyMs = Date.now() - startTime;
+      const languageMismatch =
+        requestLanguage !== undefined &&
+        entry.language !== undefined &&
+        requestLanguage !== entry.language;
       const result: StandardRagResult = {
         question,
-        answer: cached.answer,
-        sources: cached.sources,
-        retrievalPath: cached.retrievalPath,
+        answer: entry.answer,
+        sources: entry.sources,
+        retrievalPath: entry.retrievalPath,
         latencyMs,
         isGrounded: true,
         isCached: true,
+        language: entry.language,
+        languageMismatch: languageMismatch || undefined,
       };
       if (collectTrace) {
         result.trace = {
@@ -165,16 +185,22 @@ export async function runStandardCrag(
           userQuery: question,
           maskedQuery: maskedQuestion,
           guardrail: { passed: true },
-          finalAnswer: cached.answer,
-          sources: cached.sources,
-          retrievalPath: cached.retrievalPath,
+          finalAnswer: entry.answer,
+          sources: entry.sources,
+          retrievalPath: entry.retrievalPath,
           isGrounded: true,
           isCached: true,
+          language: entry.language,
+          languageMismatch: languageMismatch || undefined,
           totalLatencyMs: latencyMs,
-          stages: buildCragStages([piiMaskingDurationMs + cacheLookupDurationMs], 0, true),
+          stages: buildCragStages([piiMaskingDurationMs + lookupDurationMs], 0, true),
           llmCalls: collector.calls,
           totalCostUsd: collector.totalCostUsd,
-          preProcessing: { piiMaskingDurationMs, cacheLookupDurationMs, cacheHit: true },
+          preProcessing: {
+            piiMaskingDurationMs,
+            cacheLookupDurationMs: lookupDurationMs,
+            cacheHit: true,
+          },
           postProcessing: {
             cacheWriteDurationMs: 0,
             memoryWriteDurationMs,
@@ -183,16 +209,62 @@ export async function runStandardCrag(
         };
       }
       return result;
+    };
+
+    const t_cache = Date.now();
+    const queryVector = await hybridRetriever.embedQuery(maskedQuestion);
+    const cached = await cache.checkCache(maskedQuestion, queryVector);
+    const cacheLookupDurationMs = Date.now() - t_cache;
+
+    if (cached) {
+      return serveCached(cached, cacheLookupDurationMs);
     }
 
     const t_subq = Date.now();
-    const subQueries = await generateSubQueries(maskedQuestion, 5);
+    const expansion = await generateSubQueries(maskedQuestion);
+    const subQueries = expansion.queries;
     const subQueryDurationMs = Date.now() - t_subq;
 
+    // Canonical-English cache key. Expansion returns the translated (or
+    // original) English form first, so queries[0] is the canonical English
+    // question — the stable cross-language cache key. Checking the cache
+    // under it (and writing under it below) lets a German ask and its English
+    // equivalent share ONE cached answer instead of two full pipeline runs.
+    // Tier-1 exact hash covers identical re-asks in either language; the
+    // BGE-M3 vector tier bridges close paraphrases. Skipped when expansion
+    // fell back to the original query alone, or the cache is bypassed.
+    const englishCanonical = subQueries[0] ?? maskedQuestion;
+    let englishCached: CachedResponse | null = null;
+    let englishQueryVector: number[] | null = null;
+    let englishCacheLookupDurationMs = 0;
+    if (!bypassCache && englishCanonical !== maskedQuestion) {
+      const t_engCache = Date.now();
+      englishQueryVector = await hybridRetriever.embedQuery(englishCanonical);
+      englishCached = await cache.checkCache(englishCanonical, englishQueryVector);
+      englishCacheLookupDurationMs = Date.now() - t_engCache;
+    }
+    if (englishCached) {
+      // The user's query language is known here (expansion produced it), so
+      // a cross-language hit can be flagged for the client.
+      return serveCached(
+        englishCached,
+        cacheLookupDurationMs + englishCacheLookupDurationMs,
+        expansion.language,
+      );
+    }
+
     const retrieval = await hybridRetriever.retrieve(
-      maskedQuestion,
+      // Rerank with the CANONICAL ENGLISH query (queries[0]), not the raw
+      // (possibly German) user query: the cross-encoder is English-only, so
+      // German-query-vs-English-chunk pairs produced noise (Working Holiday
+      // chunks outranking Berlin registration content on CRAG-13). Search
+      // itself still runs on every expanded English query.
+      subQueries[0] ?? maskedQuestion,
       subQueries,
       subQueryDurationMs,
+      // Multi-entity/synthesis questions widen retrieval so the 5-chunk
+      // rerank limit can't truncate recall across 4-6 entities.
+      { wide: expansion.needsDeepRerank === true },
     );
     const retrievalTelemetry: RetrievalTelemetry = retrieval.telemetry;
 
@@ -224,7 +296,9 @@ export async function runStandardCrag(
         `Generate a structured, professional markdown response with subheadings, bullet points, and an 'Actionable Next Steps' section.`;
 
       const messages: LlmMessage[] = [
-        { role: "system", content: SYSTEM_PROMPT },
+        // The detected language makes "answer in the user's language"
+        // deterministic even though the retrieval context is English.
+        { role: "system", content: buildStandardSystemPrompt(expansion.language) },
         { role: "user", content: userPrompt },
       ];
       try {
@@ -265,7 +339,26 @@ export async function runStandardCrag(
         queryVector,
         { answer: answerText, sources },
         parentDocIds,
+        expansion.language,
       );
+      // Also cache under the canonical English form so future German and
+      // English re-asks of the same question converge on this answer. Skipped
+      // for English-only asks (language === "en"): the canonical English form
+      // IS the query itself, so writing a second key would duplicate the row
+      // for a reworded/truncated canonical with zero convergence benefit.
+      if (
+        englishQueryVector &&
+        englishCanonical !== maskedQuestion &&
+        expansion.language !== "en"
+      ) {
+        await cache.addToCache(
+          englishCanonical,
+          englishQueryVector,
+          { answer: answerText, sources },
+          parentDocIds,
+          expansion.language,
+        );
+      }
       cacheWritten = true;
     }
     const cacheWriteDurationMs = Date.now() - t_cacheWrite;
@@ -283,6 +376,7 @@ export async function runStandardCrag(
       latencyMs,
       isGrounded,
       isCached: false,
+      language: expansion.language,
     };
     if (collectTrace) {
       const stage1DurationMs =
@@ -301,6 +395,7 @@ export async function runStandardCrag(
         retrievalPath: pathUsed,
         isGrounded,
         isCached: false,
+        language: expansion.language,
         retrievalTelemetry,
         totalLatencyMs: latencyMs,
         stages: buildCragStages(

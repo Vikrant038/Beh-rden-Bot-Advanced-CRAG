@@ -4,9 +4,10 @@ import type { HybridRetriever } from "@/server/rag/retrieval/hybrid";
 import type { Chunk, PipelineEvent } from "@/server/rag/types";
 
 vi.mock("@/server/rag/query-expansion", () => ({
-  generateSubQueries: vi.fn(async (_query: string, count: number) =>
-    Array.from({ length: count }, (_v, i) => `subquery-${i}`),
-  ),
+  generateSubQueries: vi.fn(async (_query: string) => ({
+    language: "en",
+    queries: ["subquery-0", "subquery-1", "subquery-2"],
+  })),
 }));
 
 vi.mock("@/server/rag/tools/web-search", () => ({
@@ -21,9 +22,11 @@ vi.mock("@/server/rag/tools/visa-calculator", () => ({
 
 import { webSearch } from "@/server/rag/tools/web-search";
 import { calculateVisaRequirements } from "@/server/rag/tools/visa-calculator";
+import { generateSubQueries } from "@/server/rag/query-expansion";
 
 const mockedWebSearch = vi.mocked(webSearch);
 const mockedCalculator = vi.mocked(calculateVisaRequirements);
+const mockedGenerateSubQueries = vi.mocked(generateSubQueries);
 
 function makeChunk(overrides: Partial<Chunk> = {}): Chunk {
   return {
@@ -186,6 +189,87 @@ describe("agentResearchReact", () => {
     );
     expect(result.toolCalls).toContainEqual(
       expect.objectContaining({ tool: "visa_calculator", status: "success" }),
+    );
+  });
+
+  it("uses the precomputed expansion when provided (no re-expansion)", async () => {
+    const retrieve = vi.fn(async () => ({
+      chunks: [],
+      bestCrossScore: 0,
+      needsWebFallback: true,
+      pathUsed: "CRAG_CONFIDENCE_GATE_WEB_FALLBACK",
+      telemetry: {
+        queryExpansionDurationMs: 1,
+        expandedQueries: [],
+        denseDurationMs: 1,
+        sparseBm25DurationMs: 1,
+        rrfFusionDurationMs: 1,
+        rerankDurationMs: 1,
+        bestCrossScore: 0,
+        cragFallbackTriggered: true,
+        corpusLoadDurationMs: 0,
+        sparseEngine: "pg_fts" as const,
+      },
+    }));
+    const retriever = makeRetriever({ retrieve });
+
+    await agentResearchReact("Was ist ein Sperrkonto?", retriever, "", undefined, {
+      language: "de",
+      queries: ["What is a blocked account?", "Blocked account deposit amount", "Sperrkonto rules"],
+    });
+
+    expect(mockedGenerateSubQueries).not.toHaveBeenCalled();
+    // The rerank query is the CANONICAL ENGLISH form (queries[0]), not the raw
+    // German user query — the cross-encoder is English-only.
+    expect(retrieve).toHaveBeenCalledWith(
+      "What is a blocked account?",
+      ["What is a blocked account?", "Blocked account deposit amount", "Sperrkonto rules"],
+      expect.any(Number),
+      { wide: false },
+    );
+  });
+
+  it("widens retrieval when the expansion flags a multi-entity/synthesis question", async () => {
+    const retrieve = vi.fn(async () => ({
+      chunks: [],
+      bestCrossScore: 0,
+      needsWebFallback: true,
+      pathUsed: "CRAG_CONFIDENCE_GATE_WEB_FALLBACK",
+      telemetry: {
+        queryExpansionDurationMs: 1,
+        expandedQueries: [],
+        denseDurationMs: 1,
+        sparseBm25DurationMs: 1,
+        rrfFusionDurationMs: 1,
+        rerankDurationMs: 1,
+        bestCrossScore: 0,
+        cragFallbackTriggered: true,
+        corpusLoadDurationMs: 0,
+        sparseEngine: "pg_fts" as const,
+      },
+    }));
+    const retriever = makeRetriever({ retrieve });
+
+    await agentResearchReact("Compare TU Berlin vs LMU vs FU Berlin", retriever, "", undefined, {
+      language: "en",
+      queries: ["Compare TU Berlin vs LMU vs FU Berlin"],
+      needsDeepRerank: true,
+    });
+
+    expect(retrieve).toHaveBeenCalledWith(
+      "Compare TU Berlin vs LMU vs FU Berlin",
+      ["Compare TU Berlin vs LMU vs FU Berlin"],
+      expect.any(Number),
+      { wide: true },
+    );
+    // Comparative trigger also widens the secondary pass.
+    expect(retrieve).toHaveBeenCalledTimes(2);
+    expect(retrieve).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      expect.any(Array),
+      expect.any(Number),
+      { wide: true },
     );
   });
 

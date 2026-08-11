@@ -252,7 +252,6 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
           </div>
 
           <div className="flex flex-col items-center gap-2">
-            <ThemeToggle compact />
             {session?.user ? (
               <div ref={profileRef} className="relative">
                 <button
@@ -274,24 +273,26 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
                     aria-label="Profile menu"
                     className="absolute bottom-0 left-full z-50 ml-2 w-44 overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-2xl"
                   >
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setProfileOpen(false);
-                        go("/settings");
-                      }}
-                      className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground transition hover:bg-surface-hover"
-                    >
-                      <Settings className="h-4 w-4 text-muted" />
-                      Settings
-                    </button>
-                    <div className="my-1 h-px bg-border" />
+                    <div className="flex items-center justify-between rounded-lg px-3 py-2">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setProfileOpen(false);
+                          go("/settings");
+                        }}
+                        className="flex items-center gap-2 text-sm text-foreground"
+                      >
+                        <Settings className="h-4 w-4 text-muted" />
+                        Settings
+                      </button>
+                      <ThemeToggle compact />
+                    </div>
                     <button
                       type="button"
                       role="menuitem"
                       onClick={() => void signOut({ callbackUrl: "/" })}
-                      className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive transition hover:bg-destructive/10"
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive transition hover:bg-destructive/10"
                     >
                       <LogOut className="h-4 w-4" />
                       Sign out
@@ -482,30 +483,21 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
                   aria-label="Profile menu"
                   className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-[50vh] overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-2xl"
                 >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setProfileOpen(false);
-                      go("/settings");
-                    }}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground transition hover:bg-surface-hover"
-                  >
-                    <UserRound className="h-4 w-4 text-muted" />
-                    Settings
-                  </button>
-                  <div
-                    role="menuitem"
-                    aria-label="Theme"
-                    className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm text-foreground"
-                  >
-                    <span className="flex items-center gap-2">
+                  <div className="flex items-center justify-between rounded-lg px-3 py-2">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setProfileOpen(false);
+                        go("/settings");
+                      }}
+                      className="flex items-center gap-2 text-sm text-foreground"
+                    >
                       <Settings className="h-4 w-4 text-muted" />
-                      Theme
-                    </span>
+                      Settings
+                    </button>
                     <ThemeToggle compact />
                   </div>
-                  <div className="my-1 h-px bg-border" />
                   <button
                     type="button"
                     role="menuitem"

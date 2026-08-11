@@ -86,7 +86,10 @@ dispatch), using the `MIGRATION_DATABASE_URL` **repository secret** (Settings �
 variables → Actions → New repository secret). Add that secret once — the same Neon pooled
 connection string Vercel uses for production. The manual command above is only needed for the
 initial database setup or ad-hoc runs; additive migrations (nullable columns, `CREATE INDEX
-IF NOT EXISTS`) are safe to apply while the app is live.
+IF NOT EXISTS`) are safe to apply while the app is live. The latest migrations add the
+chunk language + trigram indexes (`20260810000003_add_search_trgm_and_chunk_language`) and
+the semantic-cache answer-language column (`20260811000001_add_semantic_cache_language`) —
+all additive, safe to deploy while the app is running.
 
 ---
 
@@ -215,6 +218,46 @@ anyone on the internet.
 > re-embedded with that model (same-space rule again). The web-app doesn't use the
 > fine-tuned model today; revisit only if retrieval quality demands it.
 
+### 3.6 Query pipeline — English-first expansion, canonical cache key, language-aware writer
+
+The corpus is stored **entirely in English**: ingest normalizes every document
+(LLM-detect language → translate to English → parent/child chunk → embed), so dense,
+sparse (FTS), and the cross-encoder reranker all operate in **one language space**.
+The query side is built to match:
+
+**Stage 1 — English-first expansion** (`src/server/rag/query-expansion.ts`). One LLM
+call returns `{ language, queries }`:
+
+- `language` — ISO 639-1 of the user's query, detected by the LLM **inside the same
+  call** (no regex heuristic).
+- `queries` — always-English: `[canonical-english, paraphrase-1, paraphrase-2]`
+  (3 in production; 5 in the eval harness). `queries[0]` is the exact translation of
+  the user's query, or the query itself when already English.
+
+**Canonical cache key.** The semantic cache is checked **twice**: under the raw query
+(tier-1 SHA-256 exact + tier-2 pgvector cosine ≥ 0.97, 7-day TTL) and under
+`queries[0]` — the canonical English form — so a German ask and its English equivalent
+converge on **one cached answer** (no second pipeline run). Answers are **dual-written**
+under both keys, and each entry records the language it was written in
+(`semantic_cache.language`, migration `20260811000001_add_semantic_cache_language`).
+On a hit, that `language` rides along in the metadata; when it differs from the current
+user's query language (known on the canonical path, where expansion ran),
+`languageMismatch` is flagged in `ChatMetadata` so the client can show a notice or
+re-render the answer.
+
+**Language-aware writer.** The detected `language` flows into the writer's system prompt
+(`buildStandardSystemPrompt(language?)` / `buildWriterPrompt(language?)` — "Answer in
+{language}") and into `ChatMetadata.language` / the admin trace. Retrieval is English;
+the answer comes back in the **user's language**. On a cache hit there is no expansion,
+so the served answer's stored language is used instead (a cross-language hit is exactly
+what `languageMismatch` flags).
+
+**Runtime cost:** expansion = 1 Groq call per cache-missed query; the canonical check
+costs 1 extra query embed; a hit skips retrieval + generation entirely. The reranker is
+the Cloudflare worker's `@cf/baai/bge-reranker-base` (`RERANKER_URL` / `RERANKER_TOKEN` /
+`RERANKER_MODEL` default to the embedding worker + token) — **no HF dependency at query
+time**.
+
 ---
 
 ## 4. Vercel project + environment variables
@@ -249,10 +292,12 @@ anyone on the internet.
 
 ### Optional env vars (fill as you create accounts)
 
-`GROQ_API_KEY` (+ `GROQ_MODEL`), `HF_TOKEN`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`,
-`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`,
-`UPSTASH_REDIS_URL`, `UPSTASH_REDIS_TOKEN` (rate limiting), `LANGFUSE_PUBLIC_KEY`,
-`LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`.
+`GROQ_API_KEY` (+ `GROQ_MODEL`), `HF_TOKEN`, `RERANKER_URL` / `RERANKER_TOKEN` /
+`RERANKER_MODEL` (default to the embedding worker + token + `@cf/baai/bge-reranker-base`;
+set only to point the reranker at a different provider), `GITHUB_CLIENT_ID`,
+`GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`,
+`EMAIL_FROM`, `UPSTASH_REDIS_URL`, `UPSTASH_REDIS_TOKEN` (rate limiting),
+`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`.
 
 > ⚠️ `src/app/layout.tsx` hardcodes `APP_URL = "https://behoerden-bot.vercel.app"` for
 > `metadataBase`/OG. **Update it to your real domain** before the SEO step or social links

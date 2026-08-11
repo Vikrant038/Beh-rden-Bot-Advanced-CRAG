@@ -119,7 +119,7 @@ web-app/
 │   │   │   │   └── web-search.ts     # DDGS web search fallback
 │   │   │   ├── guardrail.ts          # Stage 0A: domain + safety filter
 │   │   │   ├── stage-zero.ts         # Stage 0B: disambiguation
-│   │   │   ├── query-expansion.ts    # Stage 1: generates sub-queries
+│   │   │   ├── query-expansion.ts    # Stage 1: English-first → { language, queries }
 │   │   │   ├── crag-gate.ts          # Stage 4: confidence gate
 │   │   │   ├── chat-pipeline.ts      # Main orchestration entry
 │   │   │   ├── pipeline.ts           # Standard CRAG pipeline
@@ -253,12 +253,15 @@ web-app/
    │  └─ Checks: negative terms cache → LLM classifier
    ├─ Stage 0B: Disambiguation (≤3 words vague?)
    │  └─ Returns: 3 clarification options → emit via SSE
-   └─ Cache check (semantic cosine ≥0.93?)
+   └─ Cache check (SHA-256 exact match + pgvector cosine ≥0.97)
       └─ HIT: return cached response → DONE
       └─ MISS: proceed to retrieval
 
 4. RETRIEVAL (rag/retrieval/hybrid.ts)
-   ├─ Query expansion → 3 sub-queries
+   ├─ Query expansion (query-expansion.ts) → { language, queries } —
+   │  one LLM call detects the query language, translates it to English
+   │  (queries[0] = canonical form = the semantic-cache key), and emits
+   │  3 English queries total (5 in the eval harness)
    ├─ Dense search: FAISS vector similarity (k=15)
    ├─ Sparse search: BM25 full-text (k=15)
    ├─ Fusion: RRF (Reciprocal Rank Fusion)
@@ -305,6 +308,26 @@ web-app/
     ├─ Display sources
     └─ Show conversation in history
 ```
+
+### 🔑 English-first retrieval — canonical cache key & language-aware writer
+
+The corpus is English-first (ingest translates every document before chunking), so
+expansion, retrieval, FTS, and reranking all work in **one English space**:
+
+1. **Expansion** (`query-expansion.ts`) — one LLM call returns `{ language, queries }`:
+   the query's ISO 639-1 `language` and always-English queries, `queries[0]` being the
+   canonical translation (or the query itself when already English).
+2. **Canonical cache key** — the semantic cache is checked under the raw query
+   (SHA-256 exact + pgvector ≥ 0.97, 7-day TTL) **and** under `queries[0]`; answers are
+   **dual-written** under both keys. A German ask and its English equivalent converge on
+   one cached answer. Each entry stores the language it was written in
+   (`semantic_cache.language`); a hit whose language differs from the current user's
+   query language (known on the canonical path) surfaces `languageMismatch` in
+   `ChatMetadata` so the client can flag or re-render it.
+3. **Language-aware writer** — `buildStandardSystemPrompt(language)` /
+   `buildWriterPrompt(language)` append "Answer in {language}"; the language is
+   persisted in `ChatMetadata.language` and the admin trace. Retrieval is English; the
+   answer comes back in the user's language.
 
 ---
 
@@ -574,12 +597,13 @@ All generation agents share **one versioned, unit-tested prompt contract** in `s
 | Citations: every factual claim mapped to a source | — | ✅ `WRITER_CITATION_CONTRACT` | — | — |
 | Untrusted-context handling (prompt injection) | — | — | ✅ | ✅ |
 
-- `buildStandardSystemPrompt()` is the single `system` message for the standard CRAG path.
-- `buildWriterPrompt()` = base + citation contract + format contract (subheadings, "Actionable Next Steps").
+- `buildStandardSystemPrompt(language?)` is the single `system` message for the standard CRAG path — the detected query language (from expansion) is appended as an explicit "Answer in {language}" instruction.
+- `buildWriterPrompt(language?)` = base + citation contract + format contract (subheadings, "Actionable Next Steps") + the same explicit language instruction.
+- The `language` value also lands in `ChatMetadata` and the admin trace, so every answer is persisted with the language it was written in.
 - `RESEARCH_AGENT_INSTRUCTION` documents the (currently deterministic) research agent's intended framing for any future LLM-based research step.
 - Contract assertions live in `tests/unit/rag-prompt.test.ts` — a weakening edit fails CI.
 
 ---
 
-**Last Updated:** 2026-08-10  
+**Last Updated:** 2026-08-11  
 **Architecture Review Status:** COMPLETE ✅

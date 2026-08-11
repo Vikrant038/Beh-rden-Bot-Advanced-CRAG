@@ -35,7 +35,7 @@ import { createDefaultEmbeddingClient } from "@/server/embeddings/client";
 import { maskPii } from "@/server/pii/masker";
 import { formatChunksForPrompt } from "@/server/rag/tools/web-search";
 import { callLLM } from "@/server/llm/client";
-import { CRAG_THRESHOLD, RERANK_TOP_K } from "@/server/rag/types";
+import { CRAG_THRESHOLD, RERANK_TOP_K, RERANK_TOP_K_WIDE } from "@/server/rag/types";
 import type { Chunk } from "@/server/rag/types";
 import { createLogger } from "@/server/lib/logger";
 
@@ -228,17 +228,28 @@ async function runItem(
   }
 
   // Stage 1-3 — the exact runStandardCrag flow (pipeline.ts), cache/memory skipped.
-  const subQueries = await withTimeout(
+  const expansion = await withTimeout(
     generateSubQueries(masked, 5),
     ITEM_TIMEOUT_MS,
     "query-expansion",
   );
+  const subQueries = expansion.queries;
   const retrieval = await withTimeout(
-    retriever.retrieve(masked, subQueries),
+    // Multi-entity/synthesis questions widen retrieval so the 5-chunk rerank
+    // limit can't truncate recall across 4-6 entities.
+    // Rerank with the canonical English query (queries[0]), mirroring the
+    // production pipeline: the cross-encoder is English-only, so a German
+    // rerank query produced noisy orderings (see pipeline.ts).
+    retriever.retrieve(subQueries[0] ?? masked, subQueries, 0, {
+      wide: expansion.needsDeepRerank === true,
+    }),
     ITEM_TIMEOUT_MS,
     "retrieve",
   );
   const rawChunks = retrieval.chunks;
+  // Recall/precision measure the context window the generator actually sees —
+  // the widened rerank window for flagged questions, else the default 5.
+  const effectiveTopK = expansion.needsDeepRerank ? RERANK_TOP_K_WIDE : RERANK_TOP_K;
 
   const needsWebFallback =
     retrieval.bestCrossScore < CRAG_THRESHOLD || retrieval.needsWebFallback;
@@ -280,8 +291,8 @@ async function runItem(
   const latencyMs = Date.now() - t0;
 
   // ── Metrics ──────────────────────────────────────────────────────────────
-  const precision = contextPrecision(rawChunks.slice(0, RERANK_TOP_K));
-  const recall = contextRecall(rawChunks.slice(0, RERANK_TOP_K), item.expected_keywords);
+  const precision = contextPrecision(rawChunks.slice(0, effectiveTopK));
+  const recall = contextRecall(rawChunks.slice(0, effectiveTopK), item.expected_keywords);
 
   const isTrap = Boolean(item.expected_refusal);
   let faithfulness: number;

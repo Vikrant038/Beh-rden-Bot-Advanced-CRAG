@@ -9,7 +9,10 @@ vi.mock("@/server/rag/query-expansion", async () => {
   const actual = await vi.importActual<typeof import("@/server/rag/query-expansion")>(
     "@/server/rag/query-expansion",
   );
-  return { ...actual, generateSubQueries: vi.fn(async (q: string) => [q]) };
+  return {
+    ...actual,
+    generateSubQueries: vi.fn(async (q: string) => ({ language: "en", queries: [q] })),
+  };
 });
 
 vi.mock("@/server/rag/crag-gate", async () => {
@@ -51,10 +54,12 @@ vi.mock("@/server/db", async () => {
 import { runCragGate } from "@/server/rag/crag-gate";
 import { callLLM } from "@/server/llm/client";
 import { isQueryOutOfDomain } from "@/server/rag/guardrail";
+import { generateSubQueries } from "@/server/rag/query-expansion";
 
 const mockedRunCragGate = vi.mocked(runCragGate);
 const mockedCallLLM = vi.mocked(callLLM);
 const mockedGuardrail = vi.mocked(isQueryOutOfDomain);
+const mockedGenerateSubQueries = vi.mocked(generateSubQueries);
 
 const mockHybridRetriever = {
   embedQuery: vi.fn(async () => Array.from({ length: 3 }, (_, i) => i * 0.1)),
@@ -135,6 +140,7 @@ describe("RAG Pipeline Orchestrators", () => {
       expect.any(Array),
       expect.objectContaining({ answer: expect.any(String) }),
       ["doc-1"],
+      "en", // the detected query language is stored with the cached answer
     );
     expect(mockedCallLLM).toHaveBeenCalled();
   });
@@ -181,6 +187,176 @@ describe("RAG Pipeline Orchestrators", () => {
     expect(result.researchSteps.length).toBeGreaterThan(0);
     expect(result.sources.length).toBeGreaterThan(0);
     expect(result.analysisMatrix.summary).toBeTruthy();
+  });
+
+  it("agentic: serves a cache hit keyed on the canonical English sub-query", async () => {
+    // German ask → expansion returns the English canonical first → it hits a
+    // previously cached English ask, so no research/analyst/writer runs.
+    mockedGenerateSubQueries.mockResolvedValueOnce({
+      language: "de",
+      queries: [
+        "What is a blocked account?",
+        "How much money do I need in a blocked account?",
+        "Blocked account requirements for a German student visa",
+      ],
+    });
+    vi.mocked(mockCache.checkCache).mockImplementation(async (query: string) => {
+      if (query === "What is a blocked account?") {
+        return {
+          answer: "Cached English answer.",
+          sources: [{ name: "doc", url: "https://example.com", score: 1 }],
+          retrievalPath: "TIER_1_EXACT_CACHE_HIT",
+          latencyMs: 1.2,
+          isCached: true,
+          language: "en", // the cached answer was written in English
+        };
+      }
+      return null;
+    });
+
+    const memory = new SummaryBufferMemory("conv-eng5", 8);
+    const result = await runAgenticRag("Was ist ein Sperrkonto?", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    expect(result.researchSteps[0]?.action).toBe("Semantic Cache Hit");
+    expect(result.finalAnswer).toBe("Cached English answer.");
+    // Agentic path flags the cross-language hit the same way as standard.
+    expect(result.language).toBe("en");
+    expect(result.languageMismatch).toBe(true);
+    expect(mockHybridRetriever.embedQuery).toHaveBeenCalledWith("What is a blocked account?");
+    expect(mockCache.checkCache).toHaveBeenCalledWith(
+      "What is a blocked account?",
+      expect.any(Array),
+    );
+    expect(mockedCallLLM).not.toHaveBeenCalled();
+    expect(mockCache.addToCache).not.toHaveBeenCalled();
+  });
+
+  it("agentic: serves an original-key cache hit without a mismatch flag (no expansion ran)", async () => {
+    // Exact re-ask hits the cache under the raw query before expansion runs,
+    // so the user's language is unknown — the answer language is surfaced but
+    // nothing is flagged.
+    vi.mocked(mockCache.checkCache).mockResolvedValueOnce({
+      answer: "Cached answer.",
+      sources: [],
+      retrievalPath: "TIER_1_EXACT_CACHE_HIT",
+      latencyMs: 1.2,
+      isCached: true,
+      language: "en",
+    });
+
+    const memory = new SummaryBufferMemory("conv-eng-orig", 8);
+    const result = await runAgenticRag("visa requirements", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    expect(result.researchSteps[0]?.action).toBe("Semantic Cache Hit");
+    expect(result.language).toBe("en");
+    expect(result.languageMismatch).toBeUndefined();
+    expect(mockedGenerateSubQueries).not.toHaveBeenCalled();
+  });
+
+  it("agentic: canonical hit with matching languages carries no mismatch flag", async () => {
+    mockedGenerateSubQueries.mockResolvedValueOnce({
+      language: "de",
+      queries: [
+        "What is a blocked account?",
+        "How much money do I need in a blocked account?",
+        "Blocked account requirements for a German student visa",
+      ],
+    });
+    vi.mocked(mockCache.checkCache).mockImplementation(async (query: string) => {
+      if (query === "What is a blocked account?") {
+        return {
+          answer: "Cached German answer.",
+          sources: [],
+          retrievalPath: "TIER_1_EXACT_CACHE_HIT",
+          latencyMs: 1.2,
+          isCached: true,
+          language: "de",
+        };
+      }
+      return null;
+    });
+
+    const memory = new SummaryBufferMemory("conv-eng-match2", 8);
+    const result = await runAgenticRag("Was ist ein Sperrkonto?", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    expect(result.finalAnswer).toBe("Cached German answer.");
+    expect(result.language).toBe("de");
+    expect(result.languageMismatch).toBeUndefined();
+  });
+
+  it("agentic: writes the answer under both the original and canonical English key", async () => {
+    mockedGenerateSubQueries.mockResolvedValueOnce({
+      language: "de",
+      queries: [
+        "What is a blocked account?",
+        "How much money do I need in a blocked account?",
+        "Blocked account requirements for a German student visa",
+      ],
+    });
+    vi.mocked(mockCache.checkCache).mockResolvedValue(null);
+
+    const memory = new SummaryBufferMemory("conv-eng6", 8);
+    await runAgenticRag("Was ist ein Sperrkonto?", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    const writeKeys = vi.mocked(mockCache.addToCache).mock.calls.map((call) => call[0]);
+    expect(writeKeys).toEqual(["Was ist ein Sperrkonto?", "What is a blocked account?"]);
+    // The answer language is stored on BOTH cache keys (original + canonical).
+    const writeLanguages = vi.mocked(mockCache.addToCache).mock.calls.map((call) => call[4]);
+    expect(writeLanguages).toEqual(["de", "de"]);
+  });
+
+  it("agentic: English-only ask writes the cache exactly once (no canonical dual-write)", async () => {
+    // Default expansion mock returns queries[0] === input → canonical key
+    // equals the original key → the dual-write must be skipped.
+    vi.mocked(mockCache.checkCache).mockResolvedValue(null);
+    const memory = new SummaryBufferMemory("conv-eng3", 8);
+    await runAgenticRag("How do I apply for a blocked account?", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    const writeKeys = vi.mocked(mockCache.addToCache).mock.calls.map((call) => call[0]);
+    expect(writeKeys).toEqual(["How do I apply for a blocked account?"]);
+    expect(mockCache.addToCache).toHaveBeenCalledTimes(1);
+  });
+
+  it("agentic: reworded English canonical still writes only the original key (language guard)", async () => {
+    mockedGenerateSubQueries.mockResolvedValueOnce({
+      language: "en",
+      queries: [
+        "How do I apply for a blocked account for my student visa?",
+        "What are the steps to open a blocked account?",
+        "Sperrkonto application steps for a student visa",
+      ],
+    });
+    vi.mocked(mockCache.checkCache).mockResolvedValue(null);
+    const memory = new SummaryBufferMemory("conv-eng4", 8);
+    await runAgenticRag("How to get a blocked account?", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    const writeKeys = vi.mocked(mockCache.addToCache).mock.calls.map((call) => call[0]);
+    expect(writeKeys).toEqual(["How to get a blocked account?"]);
+    expect(mockCache.addToCache).toHaveBeenCalledTimes(1);
   });
 
   it("agentic: skips the query embed entirely when the cache is bypassed", async () => {
@@ -237,6 +413,269 @@ describe("RAG Pipeline Orchestrators", () => {
     }
   });
 
+  it("standard CRAG: serves a cache hit keyed on the canonical English sub-query", async () => {
+    // German ask → expansion returns the English canonical first → it hits
+    // a previously cached English ask, so no retrieval/generation runs.
+    mockedGenerateSubQueries.mockResolvedValueOnce({
+      language: "de",
+      queries: [
+        "What is a blocked account?",
+        "How much money do I need in a blocked account?",
+        "Blocked account requirements for a German student visa",
+      ],
+    });
+    vi.mocked(mockCache.checkCache).mockImplementation(async (query: string) => {
+      if (query === "What is a blocked account?") {
+        return {
+          answer: "Cached English answer.",
+          sources: [{ name: "doc", url: "https://example.com", score: 1 }],
+          retrievalPath: "TIER_1_EXACT_CACHE_HIT",
+          latencyMs: 1.2,
+          isCached: true,
+          language: "en", // the cached answer was written in English
+        };
+      }
+      return null;
+    });
+
+    const memory = new SummaryBufferMemory("conv-eng", 8);
+    const result = await runStandardCrag("Was ist ein Sperrkonto?", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    expect(result.isCached).toBe(true);
+    expect(result.answer).toBe("Cached English answer.");
+    // The stored answer language is surfaced, and flagged as mismatching the
+    // German ask so the client can re-render or show a notice.
+    expect(result.language).toBe("en");
+    expect(result.languageMismatch).toBe(true);
+    expect(mockCache.checkCache).toHaveBeenCalledWith(
+      "What is a blocked account?",
+      expect.any(Array),
+    );
+    expect(mockHybridRetriever.embedQuery).toHaveBeenCalledWith("What is a blocked account?");
+    expect(mockedCallLLM).not.toHaveBeenCalled();
+    expect(mockCache.addToCache).not.toHaveBeenCalled();
+  });
+
+  it("standard CRAG: canonical hit with matching languages carries no mismatch flag", async () => {
+    // German ask whose canonical English key holds a German-written answer:
+    // request and answer languages agree, so nothing is flagged.
+    mockedGenerateSubQueries.mockResolvedValueOnce({
+      language: "de",
+      queries: [
+        "What is a blocked account?",
+        "How much money do I need in a blocked account?",
+        "Blocked account requirements for a German student visa",
+      ],
+    });
+    vi.mocked(mockCache.checkCache).mockImplementation(async (query: string) => {
+      if (query === "What is a blocked account?") {
+        return {
+          answer: "Cached German answer.",
+          sources: [],
+          retrievalPath: "TIER_1_EXACT_CACHE_HIT",
+          latencyMs: 1.2,
+          isCached: true,
+          language: "de",
+        };
+      }
+      return null;
+    });
+
+    const memory = new SummaryBufferMemory("conv-eng-match", 8);
+    const result = await runStandardCrag("Was ist ein Sperrkonto?", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    expect(result.language).toBe("de");
+    expect(result.languageMismatch).toBeUndefined();
+  });
+
+  it("standard CRAG: canonical hit from a pre-migration entry (no stored language) → no mismatch flag", async () => {
+    // A German ask hits an entry written before the language column existed:
+    // the answer is served, but there is no stored language to compare.
+    mockedGenerateSubQueries.mockResolvedValueOnce({
+      language: "de",
+      queries: [
+        "What is a blocked account?",
+        "How much money do I need in a blocked account?",
+        "Blocked account requirements for a German student visa",
+      ],
+    });
+    vi.mocked(mockCache.checkCache).mockImplementation(async (query: string) => {
+      if (query === "What is a blocked account?") {
+        return {
+          answer: "Cached pre-migration answer.",
+          sources: [],
+          retrievalPath: "TIER_1_EXACT_CACHE_HIT",
+          latencyMs: 1.2,
+          isCached: true,
+        };
+      }
+      return null;
+    });
+
+    const memory = new SummaryBufferMemory("conv-eng-legacy", 8);
+    const result = await runStandardCrag("Was ist ein Sperrkonto?", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    expect(result.isCached).toBe(true);
+    expect(result.language).toBeUndefined();
+    expect(result.languageMismatch).toBeUndefined();
+  });
+
+  it("standard CRAG: writes the answer under both the original and canonical English key", async () => {
+    mockedGenerateSubQueries.mockResolvedValueOnce({
+      language: "de",
+      queries: [
+        "What is a blocked account?",
+        "How much money do I need in a blocked account?",
+        "Blocked account requirements for a German student visa",
+      ],
+    });
+    // Pin the cache to a miss so the write path runs (overrides any leaked
+    // mockImplementation from an earlier test).
+    vi.mocked(mockCache.checkCache).mockResolvedValue(null);
+    const memory = new SummaryBufferMemory("conv-eng2", 8);
+    const result = await runStandardCrag("Was ist ein Sperrkonto?", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    const writeKeys = vi.mocked(mockCache.addToCache).mock.calls.map((call) => call[0]);
+    expect(writeKeys).toEqual(["Was ist ein Sperrkonto?", "What is a blocked account?"]);
+    // The answer language is stored on BOTH cache keys (original + canonical).
+    const writeLanguages = vi.mocked(mockCache.addToCache).mock.calls.map((call) => call[4]);
+    expect(writeLanguages).toEqual(["de", "de"]);
+    // The detected language flows into the result AND the writer system prompt.
+    expect(result.language).toBe("de");
+    const systemContent = mockedCallLLM.mock.calls
+      .flatMap((call) => call[0] as Array<{ role: string; content: unknown }>)
+      .filter((message) => message.role === "system")
+      .map((message) => String(message.content))
+      .join("\n");
+    expect(systemContent).toContain("German (de)");
+  });
+
+  it("standard CRAG: English-only ask writes the cache exactly once (no canonical dual-write)", async () => {
+    // Default expansion mock returns queries[0] === input, so the canonical
+    // English key equals the original key — the dual-write must be skipped.
+    vi.mocked(mockCache.checkCache).mockResolvedValue(null);
+    const memory = new SummaryBufferMemory("conv-eng1", 8);
+    await runStandardCrag("How do I apply for a blocked account?", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    const writeKeys = vi.mocked(mockCache.addToCache).mock.calls.map((call) => call[0]);
+    expect(writeKeys).toEqual(["How do I apply for a blocked account?"]);
+    expect(mockCache.addToCache).toHaveBeenCalledTimes(1);
+  });
+
+  it("standard CRAG: passes wide retrieval when expansion flags a multi-entity question", async () => {
+    mockedGenerateSubQueries.mockResolvedValueOnce({
+      language: "en",
+      queries: ["Compare TU Berlin vs LMU vs FU Berlin"],
+      needsDeepRerank: true,
+    });
+    vi.mocked(mockCache.checkCache).mockResolvedValue(null);
+    const memory = new SummaryBufferMemory("conv-wide1", 8);
+    await runStandardCrag("Compare TU Berlin vs LMU vs FU Berlin", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    expect(mockHybridRetriever.retrieve).toHaveBeenCalledWith(
+      "Compare TU Berlin vs LMU vs FU Berlin",
+      ["Compare TU Berlin vs LMU vs FU Berlin"],
+      expect.any(Number),
+      { wide: true },
+    );
+  });
+
+  it("standard CRAG: single-fact questions keep the narrow retrieval window", async () => {
+    mockedGenerateSubQueries.mockResolvedValueOnce({
+      language: "en",
+      queries: ["What is the blocked account total?"],
+    });
+    vi.mocked(mockCache.checkCache).mockResolvedValue(null);
+    const memory = new SummaryBufferMemory("conv-narrow1", 8);
+    await runStandardCrag("What is the blocked account total?", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    expect(mockHybridRetriever.retrieve).toHaveBeenCalledWith(
+      "What is the blocked account total?",
+      ["What is the blocked account total?"],
+      expect.any(Number),
+      { wide: false },
+    );
+  });
+
+  it("standard CRAG: reworded English canonical still writes only the original key (language guard)", async () => {
+    // The LLM paraphrases even an English query — canonical differs from the
+    // input, but language is "en" so the canonical dual-write must NOT happen.
+    mockedGenerateSubQueries.mockResolvedValueOnce({
+      language: "en",
+      queries: [
+        "How do I apply for a blocked account for my student visa?",
+        "What are the steps to open a blocked account?",
+        "Sperrkonto application steps for a student visa",
+      ],
+    });
+    vi.mocked(mockCache.checkCache).mockResolvedValue(null);
+    const memory = new SummaryBufferMemory("conv-eng2", 8);
+    await runStandardCrag("How to get a blocked account?", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    const writeKeys = vi.mocked(mockCache.addToCache).mock.calls.map((call) => call[0]);
+    expect(writeKeys).toEqual(["How to get a blocked account?"]);
+    expect(mockCache.addToCache).toHaveBeenCalledTimes(1);
+  });
+
+  it("agentic: threads the detected language into the writer prompt and result", async () => {
+    mockedGenerateSubQueries.mockResolvedValueOnce({
+      language: "de",
+      queries: [
+        "What is a blocked account?",
+        "How much money do I need in a blocked account?",
+        "Blocked account requirements for a German student visa",
+      ],
+    });
+    vi.mocked(mockCache.checkCache).mockResolvedValue(null);
+
+    const memory = new SummaryBufferMemory("conv-lang", 8);
+    const result = await runAgenticRag("Was ist ein Sperrkonto?", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    expect(result.language).toBe("de");
+    const userContent = mockedCallLLM.mock.calls
+      .flatMap((call) => call[0] as Array<{ role: string; content: unknown }>)
+      .filter((message) => message.role === "user")
+      .map((message) => String(message.content))
+      .join("\n");
+    expect(userContent).toContain("German (de)");
+  });
+
   it("should return cached response when cache hit", async () => {
     vi.mocked(mockCache.checkCache).mockResolvedValueOnce({
       answer: "Cached answer.",
@@ -244,6 +683,7 @@ describe("RAG Pipeline Orchestrators", () => {
       retrievalPath: "TIER_1_EXACT_CACHE_HIT",
       latencyMs: 1.2,
       isCached: true,
+      language: "en",
     });
 
     const memory = new SummaryBufferMemory("conv-3", 8);
@@ -255,6 +695,11 @@ describe("RAG Pipeline Orchestrators", () => {
 
     expect(result.isCached).toBe(true);
     expect(result.answer).toBe("Cached answer.");
+    // Original-key hit: the answer's language is surfaced…
+    expect(result.language).toBe("en");
+    // …but no mismatch flag: expansion never ran, so the user's query
+    // language is unknown on this fast path.
+    expect(result.languageMismatch).toBeUndefined();
     expect(mockedCallLLM).not.toHaveBeenCalled();
   });
 

@@ -1,5 +1,6 @@
 import type { HybridRetriever } from "@/server/rag/retrieval/hybrid";
 import { agentResearchReact, type ResearchStep } from "@/server/rag/agents/research";
+import { generateSubQueries, type QueryExpansion } from "@/server/rag/query-expansion";
 import {
   agentAnalystEvaluation,
   agentWriterSynthesis,
@@ -66,6 +67,14 @@ export interface AgenticRagResponse {
   maskedQuery: string;
   guardrail: { passed: boolean; reason?: string; durationMs?: number };
   finalAnswer: string;
+  /** ISO 639-1 language of the user's query, detected during expansion. */
+  language?: string;
+  /**
+   * True when a cache hit served an answer written in a different language
+   * than the current user's query (known only on the canonical-English path,
+   * where expansion ran to produce the cache key).
+   */
+  languageMismatch?: boolean;
   researchSteps: ResearchStep[];
   analysisMatrix: AnalystMatrix;
   sources: Source[];
@@ -164,24 +173,59 @@ export async function runAgenticRag(
       cached = await cache.checkCache(maskedQuery, queryVector);
       cacheLookupDurationMs = Date.now() - t_cacheStart;
     }
+
+    // English-first expansion — the SAME shared module the standard CRAG path
+    // uses, so both pipelines can never drift apart. On a cache miss the LLM
+    // detects the query's language, translates it to English when needed, and
+    // emits English paraphrases. queries[0] is the canonical English form,
+    // which doubles as the cross-language cache key checked below (a German
+    // ask and its English equivalent share one cached answer).
+    let expansion: QueryExpansion | null = null;
+    if (!cached) {
+      expansion = await generateSubQueries(maskedQuery);
+    }
+    let englishCached: CachedResponse | null = null;
+    let englishQueryVector: number[] | null = null;
+    let englishCacheLookupDurationMs = 0;
+    const englishCanonical = expansion?.queries[0] ?? maskedQuery;
+    if (!bypassCache && englishCanonical !== maskedQuery) {
+      const t_engCache = Date.now();
+      englishQueryVector = await hybridRetriever.embedQuery(englishCanonical);
+      englishCached = await cache.checkCache(englishCanonical, englishQueryVector);
+      englishCacheLookupDurationMs = Date.now() - t_engCache;
+    }
+
     const preProcessing: PreProcessingTelemetry = {
       piiMaskingDurationMs,
-      cacheLookupDurationMs,
-      cacheHit: Boolean(cached),
+      cacheLookupDurationMs: cacheLookupDurationMs + englishCacheLookupDurationMs,
+      cacheHit: Boolean(cached) || Boolean(englishCached),
     };
-    if (cached) {
-      await memory.addTurn(userQuery, cached.answer);
+
+    // Shared cache-hit return — used by both the original-key and the
+    // canonical-English hits: persists the turn to memory and shapes the
+    // traced response.
+    const serveCached = async (entry: CachedResponse): Promise<AgenticRagResponse> => {
+      await memory.addTurn(userQuery, entry.answer);
+      // The answer's language comes from the cache entry; when expansion ran
+      // (canonical-English hit) the user's query language is known too, so a
+      // cross-language hit is flagged for the client.
+      const languageMismatch =
+        expansion?.language !== undefined &&
+        entry.language !== undefined &&
+        expansion.language !== entry.language;
       return withStageZero(
         {
           userQuery,
-          finalAnswer: cached.answer,
+          finalAnswer: entry.answer,
+          language: entry.language,
+          languageMismatch: languageMismatch || undefined,
           researchSteps: [
             {
               iteration: 0,
               thought: "Check cache.",
               action: "Semantic Cache Hit",
               observation: "Found matching response in cache.",
-              durationMs: cacheLookupDurationMs,
+              durationMs: cacheLookupDurationMs + englishCacheLookupDurationMs,
             },
           ],
           analysisMatrix: {
@@ -190,7 +234,7 @@ export async function runAgenticRag(
             key_insights: [],
             verified_facts: [],
           },
-          sources: cached.sources,
+          sources: entry.sources,
           disambiguation,
           retrievalTelemetry: undefined,
           toolCalls: [],
@@ -204,6 +248,14 @@ export async function runAgenticRag(
         maskedQuery,
         { passed: true, reason: "In-domain", durationMs: Date.now() - stage0Start },
       );
+    };
+
+    if (cached) {
+      return serveCached(cached);
+    }
+    if (englishCached) {
+      logger.info("[AGENT ORCHESTRATOR] Canonical-English cache hit for a non-English query");
+      return serveCached(englishCached);
     }
 
     const t0_guardrail = Date.now();
@@ -229,6 +281,7 @@ export async function runAgenticRag(
         {
           userQuery,
           finalAnswer: OUT_OF_DOMAIN_MESSAGE,
+          language: expansion?.language ?? undefined,
           researchSteps: [
             {
               iteration: 1,
@@ -266,7 +319,13 @@ export async function runAgenticRag(
     const stage1Start = Date.now();
     onEvent?.({ type: "agent_start", agent: "research", timestamp: stage1Start });
     collector.setStage("Stage 1 — Research agent (ReAct)");
-    const research = await agentResearchReact(maskedQuery, hybridRetriever, memoryContext, onEvent);
+    const research = await agentResearchReact(
+      maskedQuery,
+      hybridRetriever,
+      memoryContext,
+      onEvent,
+      expansion ?? undefined,
+    );
 
     // Emit telemetry events
     if (research.retrievalTelemetry) {
@@ -314,6 +373,7 @@ export async function runAgenticRag(
       onEvent
         ? (delta) => onEvent({ type: "token", content: delta, timestamp: Date.now() })
         : undefined,
+      expansion?.language,
     );
     const stage3Duration = Date.now() - stage3Start;
     onEvent?.({
@@ -339,7 +399,22 @@ export async function runAgenticRag(
         queryVector,
         { answer: finalAnswer, sources: research.sources },
         parentDocIds,
+        expansion?.language,
       );
+      // Also cache under the canonical English form so future German and
+      // English re-asks of the same question converge on this answer. Skipped
+      // for English-only asks (language === "en"): the canonical English form
+      // IS the query itself, so writing a second key would duplicate the row
+      // for a reworded/truncated canonical with zero convergence benefit.
+      if (englishQueryVector && englishCanonical !== maskedQuery && expansion?.language !== "en") {
+        await cache.addToCache(
+          englishCanonical,
+          englishQueryVector,
+          { answer: finalAnswer, sources: research.sources },
+          parentDocIds,
+          expansion?.language,
+        );
+      }
       cacheWriteDurationMs = Date.now() - t_cacheWriteStart;
       cacheWritten = true;
     }
@@ -357,6 +432,7 @@ export async function runAgenticRag(
       {
         userQuery,
         finalAnswer,
+        language: expansion?.language ?? undefined,
         researchSteps: research.researchSteps,
         analysisMatrix: analysis,
         sources: research.sources,

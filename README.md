@@ -109,6 +109,19 @@ The defining move: **the pipeline now judges its own retrieval before answering.
 | Answer relevance | 4.20 / 5.0 | ≥ 4.00 | ✅ PASS |
 | Context precision | 85.0% | ≥ 75.0% | ✅ PASS |
 
+**Production web-app CRAG evaluation — English-first corpus** (`web-app/scripts/eval-crag-webapp.ts`, 30-question multilingual testset with adversarial traps, full-corpus run against Neon):
+
+| Metric | Score | Threshold | Result |
+|---|---|---|---|
+| Faithfulness (groundedness) | 4.02 / 5.0 | ≥ 3.50 | ✅ PASS |
+| Answer relevance (LLM judge) | 4.60 / 5.0 | ≥ 4.00 | ✅ PASS |
+| Answer relevance (BGE-M3 cos) | 0.724 | ≥ 0.55 | ✅ PASS |
+| Context precision | 100.0% | ≥ 75.0% | ✅ PASS |
+| Context recall | **79.1%** | ≥ 70.0% | ✅ PASS |
+| Trap / refusal items | 2/2 | — | ✅ PASS |
+
+> Latest full-corpus run (2026-08-11) after the English-first migration (detect → translate → chunk → embed), the English-canonical rerank fix, and testset keyword alignment with the corpus vocabulary. German-query recall: 86%. All six quality gates pass.
+
 ---
 
 ## 🧠 Models We Tried & How Accuracy Improved

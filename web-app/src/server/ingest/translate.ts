@@ -20,12 +20,18 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import OpenAI from "openai";
+import { parseJsonLoose } from "@/server/llm/json";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("translate");
 
 // ─── Language detection ─────────────────────────────────────────────────────
-// Fast, regex-based — no LLM call needed at ingest time.
+// PRIMARY: LLM-based (detectLanguageLlm) — one small Groq call per document.
+// The regex below survives only as an EMERGENCY FALLBACK when the LLM call
+// fails (and for the corpus-estimate script's sampling), because the regex
+// misses German without umlauts ("Wie kann ich mich anmelden?") and treats
+// every non-German language as "en" — meaning Hindi/Turkish docs would never
+// be translated.
 
 /** Regex for German-specific characters (not shared with other languages). */
 const GERMAN_CHARS = /[äöüßÄÖÜ]/;
@@ -58,6 +64,68 @@ export function detectLanguage(text: string): DetectedLanguage {
   // If no German chars, strongly English. "other" detected → treat as English
   // (the translation prompt will handle it; any non-English gets translated).
   return "en";
+}
+
+const LANGUAGE_DETECT_SYSTEM_PROMPT =
+  "You are a language detector for a German administrative-document corpus. " +
+  "Detect the language of the user's text. If it is English, reply with en. " +
+  'Reply ONLY with a JSON object: {"language": "<ISO 639-1 code>"}.';
+
+/** Normalizes an LLM-supplied language code for safe downstream use. */
+function sanitizeLanguageCode(raw: unknown): string {
+  const value = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z-]/g, "")
+    .slice(0, 8);
+  return /^[a-z]{2,3}(-[a-z]{2,3})?$/.test(value) ? value : "en";
+}
+
+/**
+ * Detects a text's language via the LLM (Groq, through the same rate limiter
+ * as translation). Returns an ISO 639-1 code ("en" for English). This is the
+ * ingest pipeline's decision-maker: it catches German without umlauts and
+ * correctly flags OTHER languages (hi, tr, …) as non-English so they get
+ * translated too — both things the regex heuristic got wrong.
+ *
+ * One small call on the first ~2,000 chars per document. On ANY failure it
+ * falls back to the regex heuristic (de → "de", else "en") so a detection
+ * hiccup never blocks a document from being processed.
+ */
+export async function detectLanguageLlm(
+  text: string,
+  rateLimiter: TranslationRateLimiter,
+): Promise<string> {
+  const sample = text.slice(0, 2000).trim();
+  if (!sample) {
+    return "en";
+  }
+  const requestTokens = estimateTokens(sample) + 20;
+  try {
+    const limiter = await rateLimiter.waitForTokens(requestTokens);
+    const response = await limiter.client.chat.completions.create({
+      model: limiter.model,
+      messages: [
+        { role: "system", content: LANGUAGE_DETECT_SYSTEM_PROMPT },
+        { role: "user", content: sample },
+      ],
+      max_tokens: 20,
+      temperature: 0,
+    });
+    const raw = response.choices[0]?.message?.content?.trim() ?? "";
+    const parsed = parseJsonLoose(raw) as { language?: unknown };
+    const code = sanitizeLanguageCode(parsed?.language);
+    if (code !== "en") {
+      logger.info("[TRANSLATE] detected language '%s' — translating to English", code);
+    }
+    return code;
+  } catch (error) {
+    logger.warn(
+      { error: String(error) },
+      "[TRANSLATE] LLM language detection failed — using regex fallback",
+    );
+    return detectLanguage(text) === "de" ? "de" : "en";
+  }
 }
 
 // ─── Groq rate limiter (free-tier compliant) ────────────────────────────────
@@ -656,7 +724,7 @@ interface TranslationRecord {
   originalHash: string;
   translatedText: string;
   model: string;
-  language: DetectedLanguage;
+  language: string;
 }
 
 /**
@@ -682,7 +750,7 @@ function cacheStore(
   originalHash: string,
   translatedText: string,
   model: string,
-  language: DetectedLanguage,
+  language: string,
 ): void {
   try {
     mkdirSync(CACHE_DIR, { recursive: true });
@@ -738,8 +806,8 @@ function isTpdExhaustion(error: unknown): boolean {
  * Result of a translation operation.
  */
 export interface TranslationResult {
-  /** The original detected language. */
-  language: DetectedLanguage;
+  /** ISO 639-1 code of the original text's language (LLM-detected). */
+  language: string;
   /** The English-normalized text. */
   englishText: string;
   /** Whether translation was actually performed (vs. already English). */
@@ -755,13 +823,19 @@ export interface TranslationResult {
  *
  * @param text - The extracted document text (cleaned, not chunked).
  * @param rateLimiter - A GroqRateLimiter or GroqRateLimiterPool.
+ * @param detect - Language detector (default: LLM-based detectLanguageLlm).
+ *   Injectable so tests can stub detection without hitting the API; production
+ *   callers pass only the first two args.
  * @returns TranslationResult with the English text + metadata.
  */
 export async function translateToEnglish(
   text: string,
   rateLimiter: TranslationRateLimiter,
+  detect: (text: string, limiter: TranslationRateLimiter) => Promise<string> = detectLanguageLlm,
 ): Promise<TranslationResult> {
-  const language = detectLanguage(text);
+  // LLM-based detection is the decision-maker; the regex is only the fallback
+  // inside detectLanguageLlm when the call fails. One cheap call per document.
+  const language = await detect(text, rateLimiter);
 
   if (language === "en") {
     return { language, englishText: text, translated: false, tokensUsed: 0 };

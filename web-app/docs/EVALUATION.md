@@ -2,7 +2,7 @@
 
 The production-quality gate for the **TypeScript** RAG pipeline. It runs a
 30-question multilingual testset through the *real* pipeline the chat app
-uses — guardrail → bilingual sub-query expansion → hybrid retrieval
+uses — guardrail → English-first query expansion → hybrid retrieval
 (pgvector dense + Postgres FTS sparse → RRF → cross-encoder rerank) → CRAG
 confidence gate → grounded LLM generation — and scores every answer on the
 same four axes the original Python eval (`tests/eval_ragas_30.py`) measured.
@@ -29,6 +29,41 @@ scored 0 and flagged as `blocked_non_trap`.
 The judge sees **the same context the generator saw** (parent-expanded chunk
 text), so faithfulness measures the answer against what the pipeline
 actually retrieved — not a truncated proxy window.
+
+## English-first query expansion (the `{ language, queries }` contract)
+
+The corpus is stored **entirely in English** — the ingest pipeline normalizes
+every document (detect language → translate → chunk → embed) — so retrieval
+must happen in English. Stage 1 (`generateSubQueries` in
+`src/server/rag/query-expansion.ts`) is **one LLM call** that does three steps
+in a single prompt:
+
+1. **Detect** the language of the user's query (ISO 639-1 code).
+2. **Translate** the query to English when it isn't already — this canonical
+   English form becomes `queries[0]`.
+3. **Paraphrase** — `numQueries - 1` additional English variants of the
+   canonical form.
+
+The return shape is always English-only:
+
+```ts
+interface QueryExpansion {
+  language: string;   // ISO 639-1 of the user's query, e.g. "en" | "de" | "hi" | "tr"
+  queries: string[];  // [canonical-english, paraphrase-1, paraphrase-2, …]
+}
+```
+
+- **`queries[0]` (the translated original) is the stable semantic-cache
+  key.** A German ask and its English equivalent converge on the same key, so
+  one pipeline run serves re-asks in any language (the cache is checked under
+  this key *and* dual-written under it alongside the raw query).
+- **`language` flows into `ChatMetadata` and the writer's system prompt**, so
+  answers come back in the user's language even though retrieval is English.
+- The eval harness requests **5** queries (`generateSubQueries(masked, 5)`)
+  for broader retrieval coverage; production defaults to 3.
+- If the LLM response is unusable it degrades to `{ language: "en", queries:
+  [query] }` so retrieval still runs on the original text (BGE-M3's
+  multilingual embeddings keep dense search viable for a non-English query).
 
 ## Files
 

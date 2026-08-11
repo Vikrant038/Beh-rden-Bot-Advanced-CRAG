@@ -54,6 +54,15 @@ export const RRF_K = 60;
 export const DENSE_TOP_K = 15;
 export const SPARSE_TOP_K = 15;
 export const RERANK_TOP_K = 5;
+/**
+ * Wide-retrieval variants for multi-entity / synthesis questions
+ * (expansion.needsDeepRerank). Dense + sparse fetch 2× candidates and the
+ * rerank + parent window grows from 5 → 12, so a question spanning 4-6
+ * entities can't have its recall truncated by the narrow 5-chunk window.
+ */
+export const DENSE_TOP_K_WIDE = 30;
+export const SPARSE_TOP_K_WIDE = 30;
+export const RERANK_TOP_K_WIDE = 12;
 export const CRAG_THRESHOLD = 0.5;
 export const CACHE_SIMILARITY_THRESHOLD = 0.97;
 export const CACHE_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -76,6 +85,11 @@ export interface RetrievalTelemetry {
   corpusLoadDurationMs: number;
   /** Sparse engine used: Postgres FTS (default) or in-process BM25 fallback. */
   sparseEngine: "pg_fts" | "bm25_inproc";
+  /**
+   * True when wide retrieval ran (multi-entity/synthesis question): dense +
+   * sparse fetched 2× candidates and the rerank/parent window grew.
+   */
+  wideRetrieval?: boolean;
 }
 
 /** Telemetry for an individual tool call during Research Agent execution. */

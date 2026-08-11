@@ -20,6 +20,8 @@ export interface CachedResponse {
   retrievalPath: string;
   latencyMs: number;
   isCached: boolean;
+  /** ISO 639-1 language the cached answer was written in (absent for pre-migration rows). */
+  language?: string;
 }
 
 // Re-exported from vector-queries for backward compatibility with any existing
@@ -55,7 +57,11 @@ export class SemanticCache {
       });
       if (exact && exact.expiresAt > now) {
         logger.info(`[CACHE HIT - TIER 1 EXACT] query: '${query.slice(0, 40)}'`);
-        return this.toCachedResponse(exact, "TIER_1_EXACT_CACHE_HIT", 1.2);
+        return this.toCachedResponse(
+          { ...exact, language: exact.language ?? undefined },
+          "TIER_1_EXACT_CACHE_HIT",
+          1.2,
+        );
       }
 
       if (queryVector && queryVector.length > 0) {
@@ -74,6 +80,7 @@ export class SemanticCache {
               retrievalPath: `TIER_2_VECTOR_CACHE_HIT (Sim: ${sim.toFixed(3)})`,
               latencyMs: 12,
               isCached: true,
+              language: rows[0].language ?? undefined,
             };
           }
         }
@@ -90,6 +97,7 @@ export class SemanticCache {
     queryVector: number[],
     responseData: CachePayload,
     parentDocIds: string[] = [],
+    language?: string,
   ): Promise<void> {
     const qHash = this.hashQuery(query);
     const now = new Date();
@@ -110,6 +118,7 @@ export class SemanticCache {
         queryVector,
         responseJson: JSON.stringify(payload),
         parentDocIds,
+        language,
         now,
         expiresAt,
       });
@@ -150,6 +159,7 @@ export class SemanticCache {
   private toCachedResponse(
     row: {
       responseJson: unknown;
+      language?: string;
     },
     retrievalPath: string,
     latencyMs: number,
@@ -161,6 +171,7 @@ export class SemanticCache {
       retrievalPath,
       latencyMs,
       isCached: true,
+      language: row.language,
     };
   }
 }

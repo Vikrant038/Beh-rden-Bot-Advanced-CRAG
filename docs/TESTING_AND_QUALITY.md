@@ -82,7 +82,7 @@ A normal test suite cannot answer "is the answer correct?" — only the pipeline
 ### The harnesses
 
 - **Python reference:** `mvp-python/tests/eval_ragas_30.py` — runs the 30 questions through `mvp-python/src/rag.py`, scores with BGE-M3 + LLM judge, and supports **resume via an atomic checkpoint** (rate limits can no longer kill a run — items time out individually and the run skips finished ones).
-- **Production TS pipeline:** `web-app/scripts/eval-crag-webapp.ts` — runs the *same 30 questions* through the real web-app CRAG (guardrail → bilingual sub-queries → pgvector+BM25 hybrid → cross-encoder rerank → Groq), using the local embed/rerank servers when HF inference is unreachable.
+- **Production TS pipeline:** `web-app/scripts/eval-crag-webapp.ts` — runs the *same 30 questions* through the real web-app CRAG (guardrail → English-first query expansion (`{ language, queries }`) → pgvector+BM25 hybrid → cross-encoder rerank → Groq), using the local embed/rerank servers when HF inference is unreachable.
 
 ### What the evals found (and fixed)
 
