@@ -49,7 +49,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning:
   highlight; 16px form inputs so iOS Safari stops auto-zooming; hover-only
   reveals always show on touch devices; heading type scales down; markdown
   tables/code stay swipeable; mobile menu closes on Escape/route change. See
-  `docs/responsive-ui-upgrade-checklist.md`.
+  `docs/ROADMAP.md` §2 (Archived plans — responsive checklist).
 
 - **Seed corpus hardening:** `scripts/seed-corpus.sh` now guards the
   `document_chunks_embedding_idx` pgvector HNSW index the same way it guards
@@ -90,8 +90,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning:
   responses). E2E specs added for the pipeline tester (4 stages, child→parent
   expansion, guardrail BLOCKED short-circuit, cache-hit badge) and PDF upload
   (valid PDF, server 413, image-only 422, client-side >4 MB rejection), backed by
-  hand-generated `tests/e2e/fixtures/{valid-guide,image-only}.pdf`. Full suite now
-  280 tests / 41 files; verification guide at `docs/TESTING_PHASE4.md`.
+   hand-generated `tests/e2e/fixtures/{valid-guide,image-only}.pdf`. Full suite now
+   280 tests / 41 files; verification guide archived at `docs/ROADMAP.md` §2.
 
 - **Pipeline visualizer (admin):** `admin.testPipeline` runs the full 3-agent ReAct
   pipeline glass-box with `NoopMemory` + `bypassCache`, returns a full trace
