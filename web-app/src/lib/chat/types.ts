@@ -21,13 +21,6 @@ export interface ChatMetadata {
   isGrounded?: boolean;
   isCached?: boolean;
   mode?: ChatMode;
-  /** ISO 639-1 language of the user's query, detected during query expansion. */
-  language?: string;
-  /**
-   * True when a cache hit served an answer written in a different language
-   * than the current user's query — the client can flag it or re-render.
-   */
-  languageMismatch?: boolean;
   blocked?: boolean;
   requiresDisambiguation?: boolean;
   disambiguationOptions?: string[];

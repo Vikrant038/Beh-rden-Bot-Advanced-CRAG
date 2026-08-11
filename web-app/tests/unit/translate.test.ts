@@ -465,7 +465,13 @@ describe("translateToEnglish parallel dedupe", () => {
 
 describe("GroqRateLimiter TPD guard", () => {
   it("accumulates a daily token counter per request", async () => {
-    const limiter = new GroqRateLimiter({ rpm: 1000, tpm: 1_000_000, rpd: 1_000_000, tpd: 100 });
+    const limiter = new GroqRateLimiter({
+      apiKey: "test-key",
+      rpm: 1000,
+      tpm: 1_000_000,
+      rpd: 1_000_000,
+      tpd: 100,
+    });
     await limiter.waitForTokens(40);
     await limiter.waitForTokens(40);
     const state = limiter as unknown as { tokensToday: number };
@@ -473,7 +479,12 @@ describe("GroqRateLimiter TPD guard", () => {
   });
 
   it("does not count tokens when tpd is unset", async () => {
-    const limiter = new GroqRateLimiter({ rpm: 1000, tpm: 1_000_000, rpd: 1_000_000 });
+    const limiter = new GroqRateLimiter({
+      apiKey: "test-key",
+      rpm: 1000,
+      tpm: 1_000_000,
+      rpd: 1_000_000,
+    });
     await limiter.waitForTokens(40);
     const state = limiter as unknown as { tokensToday: number };
     expect(state.tokensToday).toBe(0);

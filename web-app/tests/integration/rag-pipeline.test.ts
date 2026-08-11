@@ -223,9 +223,6 @@ describe("RAG Pipeline Orchestrators", () => {
 
     expect(result.researchSteps[0]?.action).toBe("Semantic Cache Hit");
     expect(result.finalAnswer).toBe("Cached English answer.");
-    // Answers are always English, so no cross-language mismatch is surfaced.
-    expect(result.language).toBe("en");
-    expect(result.languageMismatch).toBeUndefined();
     expect(mockHybridRetriever.embedQuery).toHaveBeenCalledWith("What is a blocked account?");
     expect(mockCache.checkCache).toHaveBeenCalledWith(
       "What is a blocked account?",
@@ -256,12 +253,10 @@ describe("RAG Pipeline Orchestrators", () => {
     });
 
     expect(result.researchSteps[0]?.action).toBe("Semantic Cache Hit");
-    expect(result.language).toBe("en");
-    expect(result.languageMismatch).toBeUndefined();
     expect(mockedGenerateSubQueries).not.toHaveBeenCalled();
   });
 
-  it("agentic: canonical hit with matching languages carries no mismatch flag", async () => {
+  it("agentic: serves a canonical-English cache hit regardless of the stored language tag", async () => {
     mockedGenerateSubQueries.mockResolvedValueOnce({
       language: "de",
       queries: [
@@ -292,10 +287,6 @@ describe("RAG Pipeline Orchestrators", () => {
     });
 
     expect(result.finalAnswer).toBe("Cached German answer.");
-    // Answers are always English; storage language predates the change but the
-    // surfaced answer language is English and no mismatch flag is raised.
-    expect(result.language).toBe("en");
-    expect(result.languageMismatch).toBeUndefined();
   });
 
   it("agentic: writes the answer under both the original and canonical English key", async () => {
@@ -450,9 +441,6 @@ describe("RAG Pipeline Orchestrators", () => {
 
     expect(result.isCached).toBe(true);
     expect(result.answer).toBe("Cached English answer.");
-    // Answers are always English, so no cross-language mismatch is surfaced.
-    expect(result.language).toBe("en");
-    expect(result.languageMismatch).toBeUndefined();
     expect(mockCache.checkCache).toHaveBeenCalledWith(
       "What is a blocked account?",
       expect.any(Array),
@@ -462,9 +450,7 @@ describe("RAG Pipeline Orchestrators", () => {
     expect(mockCache.addToCache).not.toHaveBeenCalled();
   });
 
-  it("standard CRAG: canonical hit with matching languages carries no mismatch flag", async () => {
-    // German ask whose canonical English key holds a German-written answer:
-    // request and answer languages agree, so nothing is flagged.
+  it("standard CRAG: serves a canonical-English cache hit regardless of the stored language tag", async () => {
     mockedGenerateSubQueries.mockResolvedValueOnce({
       language: "de",
       queries: [
@@ -494,13 +480,13 @@ describe("RAG Pipeline Orchestrators", () => {
       memory,
     });
 
-    expect(result.language).toBe("en"); // answers are always English
-    expect(result.languageMismatch).toBeUndefined();
+    expect(result.isCached).toBe(true);
+    expect(result.answer).toBe("Cached German answer.");
   });
 
-  it("standard CRAG: canonical hit from a pre-migration entry (no stored language) → no mismatch flag", async () => {
+  it("standard CRAG: serves a canonical hit from a pre-migration entry (no stored language)", async () => {
     // A German ask hits an entry written before the language column existed:
-    // the answer is served, but there is no stored language to compare.
+    // the answer is served with no stored language tag to worry about.
     mockedGenerateSubQueries.mockResolvedValueOnce({
       language: "de",
       queries: [
@@ -530,9 +516,7 @@ describe("RAG Pipeline Orchestrators", () => {
     });
 
     expect(result.isCached).toBe(true);
-    // Answers are always English, surfaced as such even for a legacy entry.
-    expect(result.language).toBe("en");
-    expect(result.languageMismatch).toBeUndefined();
+    expect(result.answer).toBe("Cached pre-migration answer.");
   });
 
   it("standard CRAG: writes the answer under both the original and canonical English key", async () => {
@@ -560,8 +544,6 @@ describe("RAG Pipeline Orchestrators", () => {
     // keys is "en" even for a German query.
     const writeLanguages = vi.mocked(mockCache.addToCache).mock.calls.map((call) => call[4]);
     expect(writeLanguages).toEqual(["en", "en"]);
-    // The result language is English and the system prompt enforces it.
-    expect(result.language).toBe("en");
     const systemContent = mockedCallLLM.mock.calls
       .flatMap((call) => call[0] as Array<{ role: string; content: unknown }>)
       .filter((message) => message.role === "system")
@@ -671,7 +653,7 @@ describe("RAG Pipeline Orchestrators", () => {
       memory,
     });
 
-    expect(result.language).toBe("en");
+    expect(result.finalAnswer).toContain("Blocked Account");
     const userContent = mockedCallLLM.mock.calls
       .flatMap((call) => call[0] as Array<{ role: string; content: unknown }>)
       .filter((message) => message.role === "user")
@@ -700,11 +682,6 @@ describe("RAG Pipeline Orchestrators", () => {
 
     expect(result.isCached).toBe(true);
     expect(result.answer).toBe("Cached answer.");
-    // Original-key hit: the answer's language is surfaced…
-    expect(result.language).toBe("en");
-    // …but no mismatch flag: expansion never ran, so the user's query
-    // language is unknown on this fast path.
-    expect(result.languageMismatch).toBeUndefined();
     expect(mockedCallLLM).not.toHaveBeenCalled();
   });
 

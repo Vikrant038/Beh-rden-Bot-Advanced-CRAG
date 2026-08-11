@@ -22,6 +22,12 @@ vi.mock("@/server/ingest/pipeline", () => ({
   ingestUrl: vi.fn(),
   ingestPdf: vi.fn(),
 }));
+// `runJob` builds a translation rate limiter before calling ingestUrl/ingestPdf.
+// The worker tests exercise orchestration only, so stub the factory with a
+// minimal limiter instead of requiring a GROQ key (absent in CI).
+vi.mock("@/server/ingest/translate", () => ({
+  createTranslationRateLimiter: vi.fn(() => ({ size: 1 })),
+}));
 
 import { ingestUrl, ingestPdf } from "@/server/ingest/pipeline";
 import {

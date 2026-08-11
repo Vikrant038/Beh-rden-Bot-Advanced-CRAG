@@ -61,14 +61,6 @@ export interface StandardRagResult {
   latencyMs: number;
   isGrounded: boolean;
   isCached: boolean;
-  /** ISO 639-1 language of the user's query, detected during expansion. */
-  language?: string;
-  /**
-   * True when a cache hit served an answer written in a different language
-   * than the current user's query (known only on the canonical-English path,
-   * where expansion ran to produce the cache key).
-   */
-  languageMismatch?: boolean;
   /** Glass-box trace — present only when `collectTrace` was set. */
   trace?: StandardRagTrace;
 }
@@ -89,10 +81,6 @@ export interface StandardRagTrace {
   retrievalPath: string;
   isGrounded: boolean;
   isCached: boolean;
-  /** ISO 639-1 language of the user's query, detected during expansion. */
-  language?: string;
-  /** True when a cache hit's answer language differs from the query language. */
-  languageMismatch?: boolean;
   disambiguation?: { durationMs: number; isAmbiguous: boolean; options: string[] };
   retrievalTelemetry?: RetrievalTelemetry;
   totalLatencyMs: number;
@@ -152,20 +140,16 @@ export async function runStandardCrag(
     // Serves a cache hit: persists the turn to memory and shapes the result
     // (including the glass-box trace when the admin tester asked for one).
     // Shared by the original-query hit and the canonical-English hit below.
-    // `requestLanguage` is the current user's query language (only known on
-    // the canonical path, where expansion ran); when it differs from the
-    // cached answer's language, the caller can flag/re-render the reply.
+    // Answers are always English (shared writer contract), so no language
+    // metadata is surfaced on the response.
     const serveCached = async (
       entry: CachedResponse,
       lookupDurationMs: number,
-      requestLanguage?: string,
     ): Promise<StandardRagResult> => {
       const t_mem = Date.now();
       await memory.addTurn(question, entry.answer);
       const memoryWriteDurationMs = Date.now() - t_mem;
       const latencyMs = Date.now() - startTime;
-      // Answers are always English (shared writer contract), so no
-      // cross-language mismatch flag is surfaced.
       const result: StandardRagResult = {
         question,
         answer: entry.answer,
@@ -174,8 +158,6 @@ export async function runStandardCrag(
         latencyMs,
         isGrounded: true,
         isCached: true,
-        language: "en",
-        languageMismatch: undefined,
       };
       if (collectTrace) {
         result.trace = {
@@ -188,8 +170,6 @@ export async function runStandardCrag(
           retrievalPath: entry.retrievalPath,
           isGrounded: true,
           isCached: true,
-          language: "en",
-          languageMismatch: undefined,
           totalLatencyMs: latencyMs,
           stages: buildCragStages([piiMaskingDurationMs + lookupDurationMs], 0, true),
           llmCalls: collector.calls,
@@ -242,13 +222,7 @@ export async function runStandardCrag(
       englishCacheLookupDurationMs = Date.now() - t_engCache;
     }
     if (englishCached) {
-      // The user's query language is known here (expansion produced it), so
-      // a cross-language hit can be flagged for the client.
-      return serveCached(
-        englishCached,
-        cacheLookupDurationMs + englishCacheLookupDurationMs,
-        expansion.language,
-      );
+      return serveCached(englishCached, cacheLookupDurationMs + englishCacheLookupDurationMs);
     }
 
     const retrieval = await hybridRetriever.retrieve(
@@ -345,14 +319,11 @@ export async function runStandardCrag(
       );
       // Also cache under the canonical English form so future German and
       // English re-asks of the same question converge on this answer. Skipped
-      // for English-only asks (language === "en"): the canonical English form
-      // IS the query itself, so writing a second key would duplicate the row
-      // for a reworded/truncated canonical with zero convergence benefit.
-      if (
-        englishQueryVector &&
-        englishCanonical !== maskedQuestion &&
-        expansion.language !== "en"
-      ) {
+      // for English-only asks: the canonical English form IS the query itself
+      // (guaranteed by `expansion.language !== "en"`), so writing a second
+      // key would duplicate the row for a reworded/truncated canonical with
+      // zero convergence benefit.
+      if (englishQueryVector && expansion.language !== "en") {
         await cache.addToCache(
           englishCanonical,
           englishQueryVector,
@@ -378,7 +349,6 @@ export async function runStandardCrag(
       latencyMs,
       isGrounded,
       isCached: false,
-      language: "en", // answers are always English
     };
     if (collectTrace) {
       const stage1DurationMs =
@@ -397,7 +367,6 @@ export async function runStandardCrag(
         retrievalPath: pathUsed,
         isGrounded,
         isCached: false,
-        language: "en", // answers are always English
         retrievalTelemetry,
         totalLatencyMs: latencyMs,
         stages: buildCragStages(

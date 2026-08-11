@@ -19,11 +19,16 @@ explained in English.
 - **Canonical-English cache convergence is preserved.** A German ask and its English re-ask
   still converge on one cached answer via the canonical-English dual-write. Only the answer
   *language tag* stored on cache entries is now honestly `"en"`.
-- **`languageMismatch` is no longer surfaced.** Because answers are always English, there is no
-  cross-language mismatch to flag. The server always returns `language:"en"` and
-  `languageMismatch:undefined`. The optional `languageMismatch` field remains in the client type
-  (`src/lib/chat/types.ts`) but is never set by the server and read by no component — kept to
-  avoid an unrelated API-breaking change.
+- **`languageMismatch` is removed.** Because answers are always English, there is no cross-language
+  mismatch to flag. The field was deleted from `StandardRagResult`, `StandardRagTrace`,
+  `AgenticRagResponse`, `ChatMetadata`, and `chat-pipeline.ts` — nothing ever set it to a real value
+  and nothing read it. Query-language detection still lives on `QueryExpansion.language` (the only
+  honest per-query signal), used to gate the canonical-English dual cache write and available for
+  future analytics.
+- **The result `language` fields are removed.** `StandardRagResult.language`, `StandardRagTrace.language`
+  and `AgenticRagResponse.language` were always `"en"` and read by no component; the constants and
+  the `serveCached(requestLanguage)` pass-through are deleted. The only language metadata that
+  remains is the cache's honest answer-language tag (`SemanticCacheEntry.language`, written as `"en"`).
 
 ## Implementation
 
@@ -31,10 +36,10 @@ explained in English.
 |------|--------|
 | `src/server/rag/prompt.ts` | Base contract `LANGUAGE` line now reads "Always answer in English, regardless of the language of the user's query." Removed the per-language override (`languageLine`, `LANGUAGE_NAMES`, `languageName`) and dropped the `language` argument from `buildStandardSystemPrompt()` / `buildWriterPrompt()`. |
 | `src/server/rag/agents/analyst.ts` | Analyst instruction 4 and Writer instruction 3 now say "Answer in English, regardless of the language"; removed the `answerLanguage` parameter from `agentWriterSynthesis`. |
-| `src/server/rag/agents/orchestrator.ts` | Agentic path: response `language` is always `"en"`, `languageMismatch` removed from the cache-hit serve, and cache writes record `"en"` as the answer language. |
-| `src/server/rag/pipeline.ts` | Standard path: same — response `language:"en"`, `languageMismatch` removed, cache writes record `"en"`. |
+| `src/server/rag/agents/orchestrator.ts` | Agentic path: `language`/`languageMismatch` removed from `AgenticRagResponse`, the cache-hit serve, and the blocked/out-of-domain branch; dual-write gate keeps `expansion?.language !== "en"`; cache writes record `"en"` as the answer language. |
+| `src/server/rag/pipeline.ts` | Standard path: `language`/`languageMismatch` removed from `StandardRagResult`/`StandardRagTrace` and the dead `serveCached(requestLanguage)` pass-through; dual-write gate keeps `expansion.language !== "en"`; cache writes record `"en"`. |
 | `tests/unit/rag-prompt.test.ts` | Updated the "answers in the user's language" test to assert the English-only contract; removed the per-language builder tests. |
-| `tests/integration/rag-pipeline.test.ts` | Updated all cache-hit / dual-key / writer / standard tests to expect `language:"en"`, no mismatch flag, and the English-only prompt text. |
+| `tests/integration/rag-pipeline.test.ts` | Updated all cache-hit / dual-key / writer / standard tests to expect English answers, drop the `language`/`languageMismatch` assertions, and assert the English-only prompt text. |
 
 ## Verification
 

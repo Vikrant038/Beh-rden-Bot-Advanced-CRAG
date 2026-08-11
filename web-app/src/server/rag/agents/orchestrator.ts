@@ -67,14 +67,6 @@ export interface AgenticRagResponse {
   maskedQuery: string;
   guardrail: { passed: boolean; reason?: string; durationMs?: number };
   finalAnswer: string;
-  /** ISO 639-1 language of the user's query, detected during expansion. */
-  language?: string;
-  /**
-   * True when a cache hit served an answer written in a different language
-   * than the current user's query (known only on the canonical-English path,
-   * where expansion ran to produce the cache key).
-   */
-  languageMismatch?: boolean;
   researchSteps: ResearchStep[];
   analysisMatrix: AnalystMatrix;
   sources: Source[];
@@ -213,8 +205,6 @@ export async function runAgenticRag(
         {
           userQuery,
           finalAnswer: entry.answer,
-          language: "en",
-          languageMismatch: undefined,
           researchSteps: [
             {
               iteration: 0,
@@ -277,7 +267,6 @@ export async function runAgenticRag(
         {
           userQuery,
           finalAnswer: OUT_OF_DOMAIN_MESSAGE,
-          language: expansion?.language ?? undefined,
           researchSteps: [
             {
               iteration: 1,
@@ -403,10 +392,11 @@ export async function runAgenticRag(
       );
       // Also cache under the canonical English form so future German and
       // English re-asks of the same question converge on this answer. Skipped
-      // for English-only asks (language === "en"): the canonical English form
-      // IS the query itself, so writing a second key would duplicate the row
-      // for a reworded/truncated canonical with zero convergence benefit.
-      if (englishQueryVector && englishCanonical !== maskedQuery && expansion?.language !== "en") {
+      // for English-only asks: the canonical English form IS the query itself
+      // (guaranteed by `expansion?.language !== "en"`), so writing a second
+      // key would duplicate the row for a reworded/truncated canonical with
+      // zero convergence benefit.
+      if (englishQueryVector && expansion?.language !== "en") {
         await cache.addToCache(
           englishCanonical,
           englishQueryVector,
@@ -432,7 +422,6 @@ export async function runAgenticRag(
       {
         userQuery,
         finalAnswer,
-        language: "en", // answers are always English
         researchSteps: research.researchSteps,
         analysisMatrix: analysis,
         sources: research.sources,
