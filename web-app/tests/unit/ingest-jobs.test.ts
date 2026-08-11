@@ -26,7 +26,10 @@ vi.mock("@/server/ingest/pipeline", () => ({
 // The worker tests exercise orchestration only, so stub the factory with a
 // minimal limiter instead of requiring a GROQ key (absent in CI).
 vi.mock("@/server/ingest/translate", () => ({
-  createTranslationRateLimiter: vi.fn(() => ({ size: 1 })),
+  createTranslationRateLimiter: vi.fn(() => ({
+    size: 1,
+    waitForTokens: vi.fn(async () => {}),
+  })),
 }));
 
 import { ingestUrl, ingestPdf } from "@/server/ingest/pipeline";
