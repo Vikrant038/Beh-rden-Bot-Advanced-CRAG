@@ -206,19 +206,15 @@ export async function runAgenticRag(
     // traced response.
     const serveCached = async (entry: CachedResponse): Promise<AgenticRagResponse> => {
       await memory.addTurn(userQuery, entry.answer);
-      // The answer's language comes from the cache entry; when expansion ran
-      // (canonical-English hit) the user's query language is known too, so a
-      // cross-language hit is flagged for the client.
-      const languageMismatch =
-        expansion?.language !== undefined &&
-        entry.language !== undefined &&
-        expansion.language !== entry.language;
+      // Answers are always English (shared writer contract), so no
+      // cross-language mismatch flag is surfaced — a cached answer language
+      // other than "en" predates the English-only change.
       return withStageZero(
         {
           userQuery,
           finalAnswer: entry.answer,
-          language: entry.language,
-          languageMismatch: languageMismatch || undefined,
+          language: "en",
+          languageMismatch: undefined,
           researchSteps: [
             {
               iteration: 0,
@@ -373,7 +369,6 @@ export async function runAgenticRag(
       onEvent
         ? (delta) => onEvent({ type: "token", content: delta, timestamp: Date.now() })
         : undefined,
-      expansion?.language,
     );
     const stage3Duration = Date.now() - stage3Start;
     onEvent?.({
@@ -394,12 +389,17 @@ export async function runAgenticRag(
             .filter((id): id is string => Boolean(id)),
         ),
       );
+      // Answers are always written in English (enforced by the shared writer
+      // prompt), so the cache records "en" as the answer language regardless
+      // of the query language. The canonical-English dual-write still lets
+      // German and English re-asks of the same question converge on one answer.
+      const ANSWER_LANGUAGE = "en";
       await cache.addToCache(
         maskedQuery,
         queryVector,
         { answer: finalAnswer, sources: research.sources },
         parentDocIds,
-        expansion?.language,
+        ANSWER_LANGUAGE,
       );
       // Also cache under the canonical English form so future German and
       // English re-asks of the same question converge on this answer. Skipped
@@ -412,7 +412,7 @@ export async function runAgenticRag(
           englishQueryVector,
           { answer: finalAnswer, sources: research.sources },
           parentDocIds,
-          expansion?.language,
+          ANSWER_LANGUAGE,
         );
       }
       cacheWriteDurationMs = Date.now() - t_cacheWriteStart;
@@ -432,7 +432,7 @@ export async function runAgenticRag(
       {
         userQuery,
         finalAnswer,
-        language: expansion?.language ?? undefined,
+        language: "en", // answers are always English
         researchSteps: research.researchSteps,
         analysisMatrix: analysis,
         sources: research.sources,

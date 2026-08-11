@@ -164,10 +164,8 @@ export async function runStandardCrag(
       await memory.addTurn(question, entry.answer);
       const memoryWriteDurationMs = Date.now() - t_mem;
       const latencyMs = Date.now() - startTime;
-      const languageMismatch =
-        requestLanguage !== undefined &&
-        entry.language !== undefined &&
-        requestLanguage !== entry.language;
+      // Answers are always English (shared writer contract), so no
+      // cross-language mismatch flag is surfaced.
       const result: StandardRagResult = {
         question,
         answer: entry.answer,
@@ -176,8 +174,8 @@ export async function runStandardCrag(
         latencyMs,
         isGrounded: true,
         isCached: true,
-        language: entry.language,
-        languageMismatch: languageMismatch || undefined,
+        language: "en",
+        languageMismatch: undefined,
       };
       if (collectTrace) {
         result.trace = {
@@ -190,8 +188,8 @@ export async function runStandardCrag(
           retrievalPath: entry.retrievalPath,
           isGrounded: true,
           isCached: true,
-          language: entry.language,
-          languageMismatch: languageMismatch || undefined,
+          language: "en",
+          languageMismatch: undefined,
           totalLatencyMs: latencyMs,
           stages: buildCragStages([piiMaskingDurationMs + lookupDurationMs], 0, true),
           llmCalls: collector.calls,
@@ -296,9 +294,8 @@ export async function runStandardCrag(
         `Generate a structured, professional markdown response with subheadings, bullet points, and an 'Actionable Next Steps' section.`;
 
       const messages: LlmMessage[] = [
-        // The detected language makes "answer in the user's language"
-        // deterministic even though the retrieval context is English.
-        { role: "system", content: buildStandardSystemPrompt(expansion.language) },
+        // Answers are always in English (enforced by BASE_SYSTEM_PROMPT).
+        { role: "system", content: buildStandardSystemPrompt() },
         { role: "user", content: userPrompt },
       ];
       try {
@@ -334,12 +331,17 @@ export async function runStandardCrag(
     const t_cacheWrite = Date.now();
     let cacheWritten = false;
     if (!bypassCache && isGrounded) {
+      // Answers are always written in English (shared writer contract), so the
+      // cache records "en" as the answer language regardless of the query
+      // language. The canonical-English dual-write still lets German and
+      // English re-asks of the same question converge on one answer.
+      const ANSWER_LANGUAGE = "en";
       await cache.addToCache(
         maskedQuestion,
         queryVector,
         { answer: answerText, sources },
         parentDocIds,
-        expansion.language,
+        ANSWER_LANGUAGE,
       );
       // Also cache under the canonical English form so future German and
       // English re-asks of the same question converge on this answer. Skipped
@@ -356,7 +358,7 @@ export async function runStandardCrag(
           englishQueryVector,
           { answer: answerText, sources },
           parentDocIds,
-          expansion.language,
+          ANSWER_LANGUAGE,
         );
       }
       cacheWritten = true;
@@ -376,7 +378,7 @@ export async function runStandardCrag(
       latencyMs,
       isGrounded,
       isCached: false,
-      language: expansion.language,
+      language: "en", // answers are always English
     };
     if (collectTrace) {
       const stage1DurationMs =
@@ -395,7 +397,7 @@ export async function runStandardCrag(
         retrievalPath: pathUsed,
         isGrounded,
         isCached: false,
-        language: expansion.language,
+        language: "en", // answers are always English
         retrievalTelemetry,
         totalLatencyMs: latencyMs,
         stages: buildCragStages(

@@ -19,8 +19,8 @@ describe("shared RAG prompt contract", () => {
     expect(BASE_SYSTEM_PROMPT).toMatch(/official source/i);
   });
 
-  it("answers in the user's language", () => {
-    expect(BASE_SYSTEM_PROMPT).toMatch(/language the user wrote in/i);
+  it("always answers in English, regardless of the query language", () => {
+    expect(BASE_SYSTEM_PROMPT).toMatch(/always answer in English, regardless of the language/i);
   });
 
   it("re-checks PII: never echoes masked data or outputs sensitive identifiers", () => {
@@ -53,22 +53,12 @@ describe("shared RAG prompt contract", () => {
     expect(buildWriterPrompt()).toContain(BASE_SYSTEM_PROMPT);
   });
 
-  it("appends the detected language to the standard system prompt", () => {
+  it("ignores any detected query language — output is always English", () => {
+    // The builders no longer accept a language override; the base contract
+    // already forces English output regardless of the query language.
     expect(buildStandardSystemPrompt()).toBe(BASE_SYSTEM_PROMPT);
-    const withLang = buildStandardSystemPrompt("de");
-    expect(withLang).toContain("German (de)");
-    expect(withLang).toContain("Answer in that language");
-    expect(buildStandardSystemPrompt("en")).toContain("English (en)");
-  });
-
-  it("appends the detected language to the writer prompt", () => {
     expect(buildWriterPrompt()).toContain(BASE_SYSTEM_PROMPT);
-    expect(buildWriterPrompt("hi")).toContain("Hindi (hi)");
-    expect(buildWriterPrompt("hi")).toContain("Answer in that language");
-  });
-
-  it("falls back to the raw code when the language is unmapped", () => {
-    expect(buildStandardSystemPrompt("xx")).toContain("xx");
+    expect(BASE_SYSTEM_PROMPT).toMatch(/always answer in English/i);
   });
 
   it("documents the research-agent framing (gather, don't answer; sources traceable)", () => {

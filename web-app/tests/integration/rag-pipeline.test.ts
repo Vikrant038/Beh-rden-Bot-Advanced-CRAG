@@ -223,9 +223,9 @@ describe("RAG Pipeline Orchestrators", () => {
 
     expect(result.researchSteps[0]?.action).toBe("Semantic Cache Hit");
     expect(result.finalAnswer).toBe("Cached English answer.");
-    // Agentic path flags the cross-language hit the same way as standard.
+    // Answers are always English, so no cross-language mismatch is surfaced.
     expect(result.language).toBe("en");
-    expect(result.languageMismatch).toBe(true);
+    expect(result.languageMismatch).toBeUndefined();
     expect(mockHybridRetriever.embedQuery).toHaveBeenCalledWith("What is a blocked account?");
     expect(mockCache.checkCache).toHaveBeenCalledWith(
       "What is a blocked account?",
@@ -292,7 +292,9 @@ describe("RAG Pipeline Orchestrators", () => {
     });
 
     expect(result.finalAnswer).toBe("Cached German answer.");
-    expect(result.language).toBe("de");
+    // Answers are always English; storage language predates the change but the
+    // surfaced answer language is English and no mismatch flag is raised.
+    expect(result.language).toBe("en");
     expect(result.languageMismatch).toBeUndefined();
   });
 
@@ -316,9 +318,10 @@ describe("RAG Pipeline Orchestrators", () => {
 
     const writeKeys = vi.mocked(mockCache.addToCache).mock.calls.map((call) => call[0]);
     expect(writeKeys).toEqual(["Was ist ein Sperrkonto?", "What is a blocked account?"]);
-    // The answer language is stored on BOTH cache keys (original + canonical).
+    // Answers are always written in English, so the answer language stored on
+    // both cache keys is "en" even for a German query.
     const writeLanguages = vi.mocked(mockCache.addToCache).mock.calls.map((call) => call[4]);
-    expect(writeLanguages).toEqual(["de", "de"]);
+    expect(writeLanguages).toEqual(["en", "en"]);
   });
 
   it("agentic: English-only ask writes the cache exactly once (no canonical dual-write)", async () => {
@@ -447,10 +450,9 @@ describe("RAG Pipeline Orchestrators", () => {
 
     expect(result.isCached).toBe(true);
     expect(result.answer).toBe("Cached English answer.");
-    // The stored answer language is surfaced, and flagged as mismatching the
-    // German ask so the client can re-render or show a notice.
+    // Answers are always English, so no cross-language mismatch is surfaced.
     expect(result.language).toBe("en");
-    expect(result.languageMismatch).toBe(true);
+    expect(result.languageMismatch).toBeUndefined();
     expect(mockCache.checkCache).toHaveBeenCalledWith(
       "What is a blocked account?",
       expect.any(Array),
@@ -492,7 +494,7 @@ describe("RAG Pipeline Orchestrators", () => {
       memory,
     });
 
-    expect(result.language).toBe("de");
+    expect(result.language).toBe("en"); // answers are always English
     expect(result.languageMismatch).toBeUndefined();
   });
 
@@ -528,7 +530,8 @@ describe("RAG Pipeline Orchestrators", () => {
     });
 
     expect(result.isCached).toBe(true);
-    expect(result.language).toBeUndefined();
+    // Answers are always English, surfaced as such even for a legacy entry.
+    expect(result.language).toBe("en");
     expect(result.languageMismatch).toBeUndefined();
   });
 
@@ -553,17 +556,18 @@ describe("RAG Pipeline Orchestrators", () => {
 
     const writeKeys = vi.mocked(mockCache.addToCache).mock.calls.map((call) => call[0]);
     expect(writeKeys).toEqual(["Was ist ein Sperrkonto?", "What is a blocked account?"]);
-    // The answer language is stored on BOTH cache keys (original + canonical).
+    // Answers are always English, so the answer language stored on both cache
+    // keys is "en" even for a German query.
     const writeLanguages = vi.mocked(mockCache.addToCache).mock.calls.map((call) => call[4]);
-    expect(writeLanguages).toEqual(["de", "de"]);
-    // The detected language flows into the result AND the writer system prompt.
-    expect(result.language).toBe("de");
+    expect(writeLanguages).toEqual(["en", "en"]);
+    // The result language is English and the system prompt enforces it.
+    expect(result.language).toBe("en");
     const systemContent = mockedCallLLM.mock.calls
       .flatMap((call) => call[0] as Array<{ role: string; content: unknown }>)
       .filter((message) => message.role === "system")
       .map((message) => String(message.content))
       .join("\n");
-    expect(systemContent).toContain("German (de)");
+    expect(systemContent).toMatch(/always answer in English/i);
   });
 
   it("standard CRAG: English-only ask writes the cache exactly once (no canonical dual-write)", async () => {
@@ -649,7 +653,7 @@ describe("RAG Pipeline Orchestrators", () => {
     expect(mockCache.addToCache).toHaveBeenCalledTimes(1);
   });
 
-  it("agentic: threads the detected language into the writer prompt and result", async () => {
+  it("agentic: answers are always English even for a German query", async () => {
     mockedGenerateSubQueries.mockResolvedValueOnce({
       language: "de",
       queries: [
@@ -667,13 +671,14 @@ describe("RAG Pipeline Orchestrators", () => {
       memory,
     });
 
-    expect(result.language).toBe("de");
+    expect(result.language).toBe("en");
     const userContent = mockedCallLLM.mock.calls
       .flatMap((call) => call[0] as Array<{ role: string; content: unknown }>)
       .filter((message) => message.role === "user")
       .map((message) => String(message.content))
       .join("\n");
-    expect(userContent).toContain("German (de)");
+    // Both the analyst and writer prompts enforce English output.
+    expect(userContent).toMatch(/answer in English, regardless of the language/i);
   });
 
   it("should return cached response when cache hit", async () => {
