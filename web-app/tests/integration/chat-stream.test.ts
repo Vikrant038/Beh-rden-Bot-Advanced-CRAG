@@ -96,7 +96,7 @@ const agenticResult: AgenticRagResponse = {
     {
       stage: "Stage 2 — Analyst (comparison matrix)",
       provider: "groq",
-      model: "llama-3.1-8b-instant",
+      model: "openai/gpt-oss-120b",
       latencyMs: 150,
       promptTokens: 900,
       completionTokens: 220,

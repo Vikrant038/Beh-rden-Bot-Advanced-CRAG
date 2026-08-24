@@ -1,5 +1,6 @@
 import { env } from "@/server/env";
 import { createLogger } from "@/server/lib/logger";
+import { toErrorMessage } from "@/server/lib/errors";
 import { QUERY_EMBEDDING_PREFIX } from "@/server/rag/types";
 import { LLMProviderError } from "@/server/llm/errors";
 import { observeGeneration } from "@/server/tracing";
@@ -270,9 +271,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
     } catch (error) {
       logger.warn({ error: String(error) }, "[EMBED] Gemini API fetch failed");
       generation.endError(error);
-      throw new LLMProviderError(
-        `Gemini Embedding API error: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      throw new LLMProviderError(`Gemini Embedding API error: ${toErrorMessage(error)}`);
     }
   }
 

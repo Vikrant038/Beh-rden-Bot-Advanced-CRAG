@@ -240,8 +240,12 @@ export const SAFETY_TERMS = [
  */
 export const MAX_SUBQUERY_CHARS = 500;
 
-/** Max tokens for the query-expansion JSON response. */
-export const QUERY_EXPANSION_MAX_TOKENS = 250;
+/** Max tokens for the query-expansion JSON response.
+ * 450 gives enough room for 3 English paraphrases (avg ~15 tokens each) plus
+ * language/needsDeepRerank fields. The old 250-token cap caused
+ * "SyntaxError: Unterminated string" on longer queries because the LLM's
+ * response was cut off mid-JSON string. */
+export const QUERY_EXPANSION_MAX_TOKENS = 450;
 
 /** Temperature for query expansion (slightly varied rephrasings). */
 export const QUERY_EXPANSION_TEMPERATURE = 0.2;

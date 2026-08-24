@@ -100,8 +100,7 @@ function DocumentPreviewModal({
     if (chunkNavigator.index > Math.max(0, items.length - 1)) {
       chunkNavigator.select(Math.max(0, items.length - 1));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items.length]);
+  }, [items.length, chunkNavigator]);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-2xl">

@@ -13,7 +13,7 @@ import {
 
 const logger = createLogger("llm");
 
-export const DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant";
+export const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
 export const DEFAULT_HF_MODEL = "meta-llama/Llama-3.1-8B-Instruct";
 export const LLM_SEMAPHORE_LIMIT = 10;
 export const GROQ_MAX_RETRIES = 3;

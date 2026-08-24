@@ -159,8 +159,7 @@ export function SourceBrowser() {
     if (chunkNavigator.index > Math.max(0, visibleChunks.length - 1)) {
       chunkNavigator.select(Math.max(0, visibleChunks.length - 1));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleChunks.length]);
+  }, [visibleChunks.length, chunkNavigator]);
 
   const scoredChunks = useMemo(
     () =>

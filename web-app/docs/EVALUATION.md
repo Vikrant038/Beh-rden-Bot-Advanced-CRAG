@@ -127,7 +127,7 @@ Two corpus modes:
 |--------|----------|-------|
 | `GROQ_API_KEY` | ✅ | generation + judge LLM calls |
 | `HF_TOKEN` | ✅ | BGE-M3 embeddings + cross-encoder reranker (both via the Cloudflare worker's one token) |
-| `GROQ_MODEL` | optional | default `llama-3.1-8b-instant` |
+| `GROQ_MODEL` | optional | default `openai/gpt-oss-120b` |
 | `EMBEDDING_MODEL` | optional | default `BAAI/bge-m3` (must match the corpus space) |
 | `HF_INFERENCE_URL` | ✅ | your deployed Cloudflare embeddings worker, e.g. `https://<worker>.workers.dev`. The worker serves BOTH `/pipeline/feature-extraction` (bge-m3) and `/pipeline/text-classification` (`@cf/baai/bge-reranker-base`) behind one `EMBED_TOKEN`. Required — the HF Inference API default is unreachable from many networks (DNS/geo blocks) and fails every ingest with "Hugging Face API is unreachable". The workflow fails fast if this secret is missing. |
 | `RERANKER_URL` | optional | defaults to `HF_INFERENCE_URL` (one worker, one token). Set it only to point the reranker at a different provider. |

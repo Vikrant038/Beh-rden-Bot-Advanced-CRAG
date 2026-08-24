@@ -12,7 +12,7 @@
 
 **Stack:**
 - Python 3.11, FastAPI, Streamlit UI
-- LLM: Groq API (llama-3.1-8b)
+- LLM: Groq API (`openai/gpt-oss-120b`) with Hugging Face fallback
 - Embeddings: BGE (fine-tuned on domain triples, +21.92% MRR)
 - Retrieval: FAISS (dense) + BM25 (sparse)
 - Database: PostgreSQL + pgvector

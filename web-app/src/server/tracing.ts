@@ -13,6 +13,7 @@ import { Langfuse } from "langfuse";
 import type { LangfuseTraceClient, LangfuseSpanClient, LangfuseGenerationClient } from "langfuse";
 import { env } from "@/server/env";
 import { createLogger } from "@/server/lib/logger";
+import { toErrorMessage } from "@/server/lib/errors";
 
 const logger = createLogger("tracing");
 
@@ -83,8 +84,7 @@ export async function runWithTrace<T>(options: TraceOptions, fn: () => Promise<T
     return result;
   } catch (error) {
     span.end({
-      level: "ERROR",
-      statusMessage: error instanceof Error ? error.message : String(error),
+      statusMessage: toErrorMessage(error),
       output: String(error),
     });
     await flush(client);
@@ -136,8 +136,7 @@ export async function* runWithTraceGen<T>(
     await flush(client);
   } catch (error) {
     span.end({
-      level: "ERROR",
-      statusMessage: error instanceof Error ? error.message : String(error),
+      statusMessage: toErrorMessage(error),
       output: String(error),
     });
     await flush(client);
@@ -182,8 +181,7 @@ export function observeGeneration(
     },
     endError(error) {
       generation.end({
-        level: "ERROR",
-        statusMessage: error instanceof Error ? error.message : String(error),
+        statusMessage: toErrorMessage(error),
         output: String(error),
       });
     },

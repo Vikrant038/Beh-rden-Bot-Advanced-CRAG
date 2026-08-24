@@ -36,19 +36,14 @@ export interface ModelPrice {
 }
 
 /**
- * Public list prices (USD per 1M tokens), kept as a small lookup so the trace
- * can surface "≈$0.0004" style estimates per call. HF Inference API has no
- * per-token list price (serverless/free tier), so HF calls are priced at $0
+ * Per-token list price for each provider, so HF calls are priced at $0
  * and the UI labels them "no list price".
  */
 export const GROQ_PRICES: Record<string, ModelPrice> = {
-  // https://groq.com/pricing (llama-3.1-8b-instant)
-  "llama-3.1-8b-instant": { inputPer1M: 0.05, outputPer1M: 0.08 },
-  "llama-3.3-70b-versatile": { inputPer1M: 0.59, outputPer1M: 0.79 },
-  "llama-3.1-70b-versatile": { inputPer1M: 0.59, outputPer1M: 0.79 },
+  // https://groq.com/pricing (OpenAI GPT OSS 120B)
+  "openai/gpt-oss-120b": { inputPer1M: 0.15, outputPer1M: 0.6 },
 };
-
-const DEFAULT_GROQ_PRICE: ModelPrice = { inputPer1M: 0.05, outputPer1M: 0.08 };
+const DEFAULT_GROQ_PRICE: ModelPrice = { inputPer1M: 0.15, outputPer1M: 0.6 };
 const HF_PRICE: ModelPrice = { inputPer1M: 0, outputPer1M: 0 };
 
 export function estimateLlmCostUsd(

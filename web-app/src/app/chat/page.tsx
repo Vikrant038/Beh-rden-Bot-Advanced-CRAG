@@ -72,7 +72,7 @@ export default function NewChatPage() {
     startedPrefillRef.current = true;
     void startConversation(query, "agentic");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, []);
 
   if (limitReached) {
     return (

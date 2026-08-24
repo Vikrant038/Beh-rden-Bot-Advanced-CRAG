@@ -95,7 +95,7 @@ function fullTrace(): AgenticRagResponse {
       {
         stage: "Stage 2 — Analyst (comparison matrix)",
         provider: "groq",
-        model: "llama-3.1-8b-instant",
+        model: "openai/gpt-oss-120b",
         latencyMs: 500,
         promptTokens: 900,
         completionTokens: 220,
@@ -105,7 +105,7 @@ function fullTrace(): AgenticRagResponse {
       {
         stage: "Stage 3 — Writer (markdown synthesis)",
         provider: "groq",
-        model: "llama-3.1-8b-instant",
+        model: "openai/gpt-oss-120b",
         latencyMs: 300,
         promptTokens: 700,
         completionTokens: 480,

@@ -181,7 +181,9 @@ export async function processIngestJobs(
       // runJob catches its own failures; this is a safety net (e.g. DB outage).
       const message = error instanceof Error ? error.message : String(error);
       logger.error({ jobId: job.id, error: message }, "[INGEST JOB] worker failure");
-      await markJobFailed(job.id, message).catch(() => {});
+      await markJobFailed(job.id, message).catch((error) => {
+        logger.warn({ jobId: job.id, error: String(error) }, "[INGEST JOB] markJobFailed failed");
+      });
       processed += 1;
     }
   }
@@ -315,7 +317,12 @@ async function finalizeJob(
         where: { url: result.url },
         data: { status: "FAILED", lastError: (result.error ?? "").slice(0, 1000) },
       })
-      .catch(() => {});
+      .catch((error) => {
+        logger.warn(
+          { jobId, url: result.url, error: String(error) },
+          "[INGEST JOB] document FAILED update failed",
+        );
+      });
     return;
   }
 
@@ -333,7 +340,12 @@ async function finalizeJob(
       where: { url: result.url },
       data: { status: "SYNCED", lastError: null },
     })
-    .catch(() => {});
+    .catch((error) => {
+      logger.warn(
+        { jobId, url: result.url, error: String(error) },
+        "[INGEST JOB] document SYNCED update failed",
+      );
+    });
 }
 
 async function markJobFailed(jobId: string, error: string): Promise<void> {

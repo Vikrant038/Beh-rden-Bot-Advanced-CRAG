@@ -235,7 +235,7 @@ jobs:
         # quality gates informational; full enforces them.
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'llama-3.1-8b-instant' }}
+          GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'openai/gpt-oss-120b' }}
           EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL || 'BAAI/bge-m3' }}
           HF_INFERENCE_URL: ${{ secrets.HF_INFERENCE_URL }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}

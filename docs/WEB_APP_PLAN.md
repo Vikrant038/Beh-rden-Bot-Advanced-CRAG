@@ -82,7 +82,7 @@
 | Layer | Choice | Rationale |
 |-------|--------|-----------|
 | LLM Client | **Vercel AI SDK** (`ai` package) | Unified streaming interface, provider-agnostic, SSE built-in |
-| Primary LLM | **Groq** (llama-3.1-8b-instant) | Same as original — 14.4k req/day free, 800 tok/s |
+| Primary LLM | **Groq** (`openai/gpt-oss-120b`) | 250K TPM, 1K RPM, ~500 tok/s |
 | Fallback LLM | **HuggingFace Inference** | Same circuit-breaker failover pattern |
 | Embeddings | **Transformers.js** (server-side) OR **HF Inference API** | BGE-base-en-v1.5 768d embeddings without Python |
 | Vector Search | **pgvector** (via Prisma raw queries) | Cosine similarity search directly in PostgreSQL |

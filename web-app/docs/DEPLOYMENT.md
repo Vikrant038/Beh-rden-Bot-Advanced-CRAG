@@ -14,7 +14,7 @@
 | **Hosting** | **Vercel Hobby** | Next.js is a first-class citizen; `vercel.json` cron + deploy workflow already exist; 100 GB/mo bandwidth, 1M function invocations/mo, custom domains free. |
 | **Database** | **Neon Postgres (free)** | Postgres **with `pgvector`** — the schema REQUIRES it (`vector(1024)` + HNSW indexes). 0.5 GB storage, scale-to-zero, **never pauses**. Supabase free (500 MB) also works but **pauses after 1 week inactivity** — bad for a public site. Aiven free (1 GB, pgvector) is a third option. |
 | **LLM** | **Google AI Studio (Gemini)** | `GEMINI_API_KEY` is the only *required* LLM key (`env.ts`). Free tier is generous. |
-| **LLM (primary)** | **Groq** | `GROQ_API_KEY` free tier (14.4k req/day) powers the default `llama-3.1-8b-instant`. |
+| **LLM (primary)** | **Groq** | `GROQ_API_KEY` powers the default `openai/gpt-oss-120b` (1K RPM, 250K TPM). |
 | **LLM (fallback)** | **Hugging Face** | `HF_TOKEN` optional; used for reranking/embeddings fallback. |
 | **Embeddings** | **Cloudflare Workers AI** | `@cf/baai/bge-m3` (1024-dim, multilingual) served by a tiny Worker (`embeddings-worker/`) — $0, serverless, same weights as the local corpus embed (§3). |
 | **File storage** | **None needed yet** | PDF uploads are parsed **in-memory** (4 MiB cap, `ingestPdf`) and stored as chunks in Postgres. Add **Cloudflare R2** (10 GB free, $0 egress) later if you keep raw files. |

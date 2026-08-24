@@ -101,16 +101,27 @@ function extractScores(data: unknown, expectedLength: number): number[] {
 
     if (Array.isArray(first) && typeof first[0] === "number") {
       // Nested numeric arrays: one inner array per input pair ([[0.1], [0.9]]).
-      // Take the first score of each row — previously this returned only the
-      // first row, so every chunk after index 0 got undefined → NaN crossScore.
+      // Take the first score of each row.
       return (data as number[][]).map((row) => row[0] ?? 0).slice(0, expectedLength);
     }
 
+    // Cloudflare Workers AI bge-reranker-base returns:
+    //   [[{label:"RELEVANT", score:0.055}], [{label:"RELEVANT", score:0.00003}], ...]
+    // One inner array per input pair, each containing a single label/score object.
     if (Array.isArray(first) && first[0] && typeof first[0] === "object") {
       const scored = (first as Array<{ score?: number }>)[0];
       if (scored && typeof scored.score === "number") {
-        return (data as Array<Array<{ score?: number }>>).map((entry) => entry[0]?.score ?? 0);
+        return (data as Array<Array<{ score?: number }>>)
+          .map((entry) => entry[0]?.score ?? 0)
+          .slice(0, expectedLength);
       }
+    }
+
+    // Flat array of label/score objects: [{label:"RELEVANT", score:0.055}, ...]
+    if (first && typeof first === "object" && "score" in (first as object)) {
+      return (data as Array<{ score?: number }>)
+        .map((entry) => entry.score ?? 0)
+        .slice(0, expectedLength);
     }
   }
 

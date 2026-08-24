@@ -15,7 +15,7 @@ describe("LlmUsageCollector", () => {
       collector.setStage("Stage 2 — Analyst (comparison matrix)");
       collector.record({
         provider: "groq",
-        model: "llama-3.1-8b-instant",
+        model: "openai/gpt-oss-120b",
         latencyMs: 500,
         promptTokens: 900,
         completionTokens: 220,
@@ -40,7 +40,7 @@ describe("LlmUsageCollector", () => {
     collector.setStage("Stage 3 — Writer (markdown synthesis)");
     collector.record({
       provider: "groq",
-      model: "llama-3.1-8b-instant",
+      model: "openai/gpt-oss-120b",
       latencyMs: 300,
       promptTokens: 700,
       completionTokens: 480,
@@ -49,7 +49,7 @@ describe("LlmUsageCollector", () => {
     });
     collector.record({
       provider: "groq",
-      model: "llama-3.1-8b-instant",
+      model: "openai/gpt-oss-120b",
       latencyMs: 200,
       promptTokens: 300,
       completionTokens: 100,
@@ -65,7 +65,7 @@ describe("LlmUsageCollector", () => {
     const collector = new LlmUsageCollector();
     collector.record({
       provider: "groq",
-      model: "llama-3.1-8b-instant",
+      model: "openai/gpt-oss-120b",
       latencyMs: 1,
       promptTokens: 1,
       completionTokens: 1,
@@ -83,14 +83,14 @@ describe("LlmUsageCollector", () => {
 });
 
 describe("estimateLlmCostUsd", () => {
-  it("prices groq llama-3.1-8b-instant at $0.05/M in and $0.08/M out", () => {
-    // 1000 prompt tokens * 0.05/1M + 1000 completion * 0.08/1M
-    expect(estimateLlmCostUsd("groq", "llama-3.1-8b-instant", 1000, 1000)).toBeCloseTo(0.00013, 10);
+  it("prices Groq GPT OSS 120B at $0.15/M in and $0.60/M out", () => {
+    // 1000 prompt tokens * 0.15/1M + 1000 completion * 0.60/1M
+    expect(estimateLlmCostUsd("groq", "openai/gpt-oss-120b", 1000, 1000)).toBeCloseTo(0.00075, 10);
   });
 
   it("uses the default groq price for unknown models", () => {
     expect(estimateLlmCostUsd("groq", "some-future-model", 1_000_000, 1_000_000)).toBeCloseTo(
-      0.13,
+      0.75,
       10,
     );
   });
@@ -115,7 +115,7 @@ describe("aggregateAgentCosts", () => {
       {
         stage: "Stage 2 — Analyst (comparison matrix)",
         provider: "groq" as const,
-        model: "llama-3.1-8b-instant",
+        model: "openai/gpt-oss-120b",
         latencyMs: 500,
         promptTokens: 900,
         completionTokens: 220,
@@ -125,7 +125,7 @@ describe("aggregateAgentCosts", () => {
       {
         stage: "Stage 2 — Analyst (comparison matrix)",
         provider: "groq" as const,
-        model: "llama-3.1-8b-instant",
+        model: "openai/gpt-oss-120b",
         latencyMs: 100,
         promptTokens: 100,
         completionTokens: 80,
@@ -135,7 +135,7 @@ describe("aggregateAgentCosts", () => {
       {
         stage: "Stage 3 — Writer (markdown synthesis)",
         provider: "groq" as const,
-        model: "llama-3.1-8b-instant",
+        model: "openai/gpt-oss-120b",
         latencyMs: 300,
         promptTokens: 700,
         completionTokens: 480,

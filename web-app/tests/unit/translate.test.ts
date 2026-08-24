@@ -21,8 +21,9 @@ import {
 // tests (each one would burn a client call + regex-fallback). The wrapper
 // routes detection through the injected mock instead.
 vi.mock("@/server/ingest/translate", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/server/ingest/translate")>("@/server/ingest/translate");
+  const actual = await vi.importActual<typeof import("@/server/ingest/translate")>(
+    "@/server/ingest/translate",
+  );
   const detectLanguageLlmMock = vi.fn();
   return {
     ...actual,
@@ -83,19 +84,19 @@ describe("splitIntoChunks", () => {
   });
 });
 
-const SEVENTY_B = {
-  model: "llama-3.3-70b-versatile",
-  rpm: 30,
-  rpd: 1000,
-  tpm: 12000,
-  tpd: 100000,
+const PRIMARY = {
+  model: "openai/gpt-oss-120b",
+  rpm: 1000,
+  rpd: 0,
+  tpm: 250_000,
+  tpd: 0,
 };
 
-const SCOUT = {
-  model: "meta-llama/llama-4-scout-17b-16e-instruct",
-  rpm: 30,
+const FALLBACK = {
+  model: "qwen/qwen3-32b",
+  rpm: 60,
   rpd: 1000,
-  tpm: 30000,
+  tpm: 6000,
   tpd: 500000,
 };
 
@@ -104,13 +105,13 @@ describe("GroqRateLimiterPool", () => {
     const pool = new GroqRateLimiterPool(["key-1", "key-2"]);
     expect(pool.size).toBe(2);
     expect(pool.keyLimiters(0)).toHaveLength(2);
-    expect(pool.model).toBe("llama-3.3-70b-versatile");
-    expect(pool.modelsList).toHaveLength(7);
-    expect(pool.rpm).toBe(30);
-    expect(pool.tpm).toBe(12000);
-    expect(pool.rpd).toBe(1000);
-    expect(pool.tpd).toBe(100000);
-    expect(pool.totalTpd).toBeGreaterThan(1_000_000);
+    expect(pool.model).toBe("openai/gpt-oss-120b");
+    expect(pool.modelsList).toHaveLength(4);
+    expect(pool.rpm).toBe(1000);
+    expect(pool.tpm).toBe(250_000);
+    expect(pool.rpd).toBe(0);
+    expect(pool.tpd).toBe(0);
+    expect(pool.totalTpd).toBe(1_000_000);
   });
 
   it("rejects an empty key list", () => {
@@ -120,7 +121,7 @@ describe("GroqRateLimiterPool", () => {
   });
 
   it("picks the key with the most available tokens", async () => {
-    const pool = new GroqRateLimiterPool(["key-1", "key-2"], [SEVENTY_B]);
+    const pool = new GroqRateLimiterPool(["key-1", "key-2"], [PRIMARY]);
     const [k1, k2] = pool.keyLimiters(0);
     // Drain key-1's bucket so key-2 is clearly the least-loaded.
     await k1.waitForTokens(k1.tpm);
@@ -130,25 +131,26 @@ describe("GroqRateLimiterPool", () => {
   });
 
   it("returns a limiter when both keys have capacity", async () => {
-    const pool = new GroqRateLimiterPool(["key-1", "key-2"], [SEVENTY_B]);
+    const pool = new GroqRateLimiterPool(["key-1", "key-2"], [PRIMARY]);
     const chosen = await pool.waitForTokens(10);
     expect(pool.keyLimiters(0)).toContain(chosen);
   });
 
   it("falls back to the next model when the first model's daily budget is exhausted", async () => {
-    const pool = new GroqRateLimiterPool(["key-1"], [{ ...SEVENTY_B, tpd: 50 }, SCOUT]);
+    const pool = new GroqRateLimiterPool(["key-1"], [{ ...PRIMARY, tpd: 50 }, FALLBACK]);
     const first = await pool.waitForTokens(40);
-    expect(first.model).toBe("llama-3.3-70b-versatile");
-    // 40 + 40 = 80 > 50 → the 70b daily budget is spent → fall back to scout.
+    expect(first.model).toBe("openai/gpt-oss-120b");
+    // 40 + 40 = 80 > 50 → the primary daily budget is spent → fall back.
     const second = await pool.waitForTokens(40);
-    expect(second.model).toBe("meta-llama/llama-4-scout-17b-16e-instruct");
-  });  it("shares a model's daily budget across keys", async () => {
-    const pool = new GroqRateLimiterPool(["key-1", "key-2"], [{ ...SEVENTY_B, tpd: 90 }]);
+    expect(second.model).toBe("qwen/qwen3-32b");
+  });
+  it("shares a model's daily budget across keys", async () => {
+    const pool = new GroqRateLimiterPool(["key-1", "key-2"], [{ ...PRIMARY, tpd: 90 }]);
     const [k1, k2] = pool.keyLimiters(0);
     const first = await pool.waitForTokens(40);
     const second = await pool.waitForTokens(40);
-    expect(first.model).toBe("llama-3.3-70b-versatile");
-    expect(second.model).toBe("llama-3.3-70b-versatile");
+    expect(first.model).toBe("openai/gpt-oss-120b");
+    expect(second.model).toBe("openai/gpt-oss-120b");
 
     // Both requests fit the shared 90-token budget (40 + 40 ≤ 90) and the
     // second goes to the other key (least-loaded).
@@ -158,43 +160,40 @@ describe("GroqRateLimiterPool", () => {
   });
 
   it("skips a blacklisted model and returns the next one", async () => {
-    const pool = new GroqRateLimiterPool(["key-1"], [SEVENTY_B, SCOUT]);
-    pool.blacklistModel("llama-3.3-70b-versatile");
+    const pool = new GroqRateLimiterPool(["key-1"], [PRIMARY, FALLBACK]);
+    pool.blacklistModel("openai/gpt-oss-120b");
     const chosen = await pool.waitForTokens(10);
-    expect(chosen.model).toBe("meta-llama/llama-4-scout-17b-16e-instruct");
-    expect(pool.liveModels).toEqual(["meta-llama/llama-4-scout-17b-16e-instruct"]);
+    expect(chosen.model).toBe("qwen/qwen3-32b");
+    expect(pool.liveModels).toEqual(["qwen/qwen3-32b"]);
   });
 
   it("throws when every model is blacklisted", async () => {
-    const pool = new GroqRateLimiterPool(["key-1"], [SEVENTY_B, SCOUT]);
-    pool.blacklistModel("llama-3.3-70b-versatile");
-    pool.blacklistModel("meta-llama/llama-4-scout-17b-16e-instruct");
+    const pool = new GroqRateLimiterPool(["key-1"], [PRIMARY, FALLBACK]);
+    pool.blacklistModel("openai/gpt-oss-120b");
+    pool.blacklistModel("qwen/qwen3-32b");
     await expect(pool.waitForTokens(10)).rejects.toThrow(/All translation models are unavailable/);
   });
 
   it("blacklisting an unknown model is a no-op", async () => {
-    const pool = new GroqRateLimiterPool(["key-1"], [SEVENTY_B]);
+    const pool = new GroqRateLimiterPool(["key-1"], [PRIMARY]);
     pool.blacklistModel("not-a-model");
-    expect(pool.liveModels).toEqual(["llama-3.3-70b-versatile"]);
+    expect(pool.liveModels).toEqual(["openai/gpt-oss-120b"]);
   });
 
   it("exhausting a model's daily budget makes waitForTokens skip it", async () => {
-    const pool = new GroqRateLimiterPool(["key-1"], [SEVENTY_B, SCOUT]);
-    pool.exhaustModelToday("llama-3.3-70b-versatile");
+    const pool = new GroqRateLimiterPool(["key-1"], [{ ...PRIMARY, tpd: 100 }, FALLBACK]);
+    pool.exhaustModelToday("openai/gpt-oss-120b");
     const chosen = await pool.waitForTokens(10);
-    expect(chosen.model).toBe("meta-llama/llama-4-scout-17b-16e-instruct");
+    expect(chosen.model).toBe("qwen/qwen3-32b");
     // The model is NOT blacklisted — just spent for today.
-    expect(pool.liveModels).toEqual([
-      "llama-3.3-70b-versatile",
-      "meta-llama/llama-4-scout-17b-16e-instruct",
-    ]);
+    expect(pool.liveModels).toEqual(["openai/gpt-oss-120b", "qwen/qwen3-32b"]);
   });
 
   it("exhausting an unknown model is a no-op", async () => {
-    const pool = new GroqRateLimiterPool(["key-1"], [SEVENTY_B]);
+    const pool = new GroqRateLimiterPool(["key-1"], [PRIMARY]);
     pool.exhaustModelToday("not-a-model");
     const chosen = await pool.waitForTokens(10);
-    expect(chosen.model).toBe("llama-3.3-70b-versatile");
+    expect(chosen.model).toBe("openai/gpt-oss-120b");
   });
 });
 
@@ -249,36 +248,32 @@ describe("createTranslationRateLimiter", () => {
 
   it("reads GROQ_TRANSLATE_MODEL and GROQ_TPD from env", () => {
     process.env.GROQ_API_KEY = "only-key";
-    process.env.GROQ_TRANSLATE_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+    process.env.GROQ_TRANSLATE_MODEL = "qwen/qwen3-32b";
     process.env.GROQ_TPD = "500000";
     const limiter = createTranslationRateLimiter();
     expect(limiter).toBeInstanceOf(GroqRateLimiter);
-    expect(limiter.model).toBe("meta-llama/llama-4-scout-17b-16e-instruct");
-    expect(limiter.tpm).toBe(30000);
+    expect(limiter.model).toBe("qwen/qwen3-32b");
+    expect(limiter.tpm).toBe(6000);
     expect(limiter.tpd).toBe(500000);
   });
 
   it("reads GROQ_TRANSLATE_MODELS as the fallback chain", () => {
     process.env.GROQ_API_KEYS = "k1,k2";
-    process.env.GROQ_TRANSLATE_MODELS =
-      "llama-3.1-8b-instant,meta-llama/llama-4-scout-17b-16e-instruct";
+    process.env.GROQ_TRANSLATE_MODELS = "openai/gpt-oss-120b,qwen/qwen3-32b";
     const limiter = createTranslationRateLimiter();
     expect(limiter).toBeInstanceOf(GroqRateLimiterPool);
-    expect(limiter.modelsList).toEqual([
-      "llama-3.1-8b-instant",
-      "meta-llama/llama-4-scout-17b-16e-instruct",
-    ]);
-    expect(limiter.totalTpd).toBe(1_000_000);
+    expect(limiter.modelsList).toEqual(["openai/gpt-oss-120b", "qwen/qwen3-32b"]);
+    expect(limiter.totalTpd).toBe(500_000);
   });
 
   it("applies model and tpd overrides to a pool", () => {
     const limiter = createTranslationRateLimiter({
       keys: ["k1", "k2"],
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      model: "qwen/qwen3-32b",
       tpd: 500000,
     });
     expect(limiter).toBeInstanceOf(GroqRateLimiterPool);
-    expect(limiter.model).toBe("meta-llama/llama-4-scout-17b-16e-instruct");
+    expect(limiter.model).toBe("qwen/qwen3-32b");
     expect(limiter.tpd).toBe(500000);
   });
 
@@ -318,9 +313,7 @@ describe("translateToEnglish parallel dedupe", () => {
 
     expect(result.translated).toBe(false);
     expect(result.language).toBe("en");
-    expect(result.englishText).toBe(
-      "The residence permit is required for studying in Germany.",
-    );
+    expect(result.englishText).toBe("The residence permit is required for studying in Germany.");
     expect(createSpy).not.toHaveBeenCalled();
   });
 
@@ -368,19 +361,19 @@ describe("translateToEnglish parallel dedupe", () => {
   });
 
   it("retries the segment on the next model after a hard model error", async () => {
-    const pool = new GroqRateLimiterPool(["key-1"], [SEVENTY_B, SCOUT]);
-    const [seventyB] = pool.keyLimiters(0);
-    const [scout] = pool.keyLimiters(1);
+    const pool = new GroqRateLimiterPool(["key-1"], [{ ...PRIMARY, tpd: 100_000 }, FALLBACK]);
+    const [primary] = pool.keyLimiters(0);
+    const [fallback] = pool.keyLimiters(1);
 
-    // 404 model-not-found is exactly what llama-4-scout returned on the user's
-    // account — the run must move past it, not stall the whole chain.
+    // A model-not-found response must remove that model from rotation rather
+    // than stalling the whole chain.
     const hardError = Object.assign(
       new Error("The model `x` does not exist or you do not have access to it."),
       { status: 404 },
     );
-    vi.spyOn(seventyB.client.chat.completions, "create").mockRejectedValue(hardError as never);
-    vi.spyOn(scout.client.chat.completions, "create").mockResolvedValue({
-      choices: [{ message: { content: "Translated by scout." } }],
+    vi.spyOn(primary.client.chat.completions, "create").mockRejectedValue(hardError as never);
+    vi.spyOn(fallback.client.chat.completions, "create").mockResolvedValue({
+      choices: [{ message: { content: "Translated by fallback." } }],
     } as never);
 
     const germanText = "Die Aufenthaltserlaubnis ist eine Aufenthaltsgenehmigung für Studierende.";
@@ -390,23 +383,23 @@ describe("translateToEnglish parallel dedupe", () => {
     });
 
     const result = await translateToEnglish(germanText, pool);
-    expect(result.englishText).toBe("Translated by scout.");
+    expect(result.englishText).toBe("Translated by fallback.");
     // Exactly one attempt on the dead model, then one on the fallback.
-    expect(seventyB.client.chat.completions.create).toHaveBeenCalledTimes(1);
-    expect(scout.client.chat.completions.create).toHaveBeenCalledTimes(1);
+    expect(primary.client.chat.completions.create).toHaveBeenCalledTimes(1);
+    expect(fallback.client.chat.completions.create).toHaveBeenCalledTimes(1);
     // The dead model is out of rotation for the rest of the run.
-    expect(pool.liveModels).toEqual(["meta-llama/llama-4-scout-17b-16e-instruct"]);
+    expect(pool.liveModels).toEqual(["qwen/qwen3-32b"]);
   });
 
   it("does not retry on transient errors (429/5xx)", async () => {
-    const pool = new GroqRateLimiterPool(["key-1"], [SEVENTY_B, SCOUT]);
-    const [seventyB] = pool.keyLimiters(0);
-    const [scout] = pool.keyLimiters(1);
+    const pool = new GroqRateLimiterPool(["key-1"], [PRIMARY, FALLBACK]);
+    const [primary] = pool.keyLimiters(0);
+    const [fallback] = pool.keyLimiters(1);
 
     const transient = Object.assign(new Error("over capacity"), { status: 503 });
-    vi.spyOn(seventyB.client.chat.completions, "create").mockRejectedValue(transient as never);
-    vi.spyOn(scout.client.chat.completions, "create").mockResolvedValue({
-      choices: [{ message: { content: "Translated by scout." } }],
+    vi.spyOn(primary.client.chat.completions, "create").mockRejectedValue(transient as never);
+    vi.spyOn(fallback.client.chat.completions, "create").mockResolvedValue({
+      choices: [{ message: { content: "Translated by fallback." } }],
     } as never);
 
     const germanText = "Die Anmeldung muss bei der Meldebehörde erfolgen.";
@@ -418,26 +411,26 @@ describe("translateToEnglish parallel dedupe", () => {
     // A transient error is surfaced to the caller (which falls back to the
     // original text) — the chain must NOT burn the next model's budget on it.
     await expect(translateToEnglish(germanText, pool)).rejects.toThrow("over capacity");
-    expect(scout.client.chat.completions.create).not.toHaveBeenCalled();
+    expect(fallback.client.chat.completions.create).not.toHaveBeenCalled();
   });
 
   it("advances past a model whose daily budget the API reports as spent", async () => {
-    const pool = new GroqRateLimiterPool(["key-1"], [SEVENTY_B, SCOUT]);
-    const [seventyB] = pool.keyLimiters(0);
-    const [scout] = pool.keyLimiters(1);
+    const pool = new GroqRateLimiterPool(["key-1"], [{ ...PRIMARY, tpd: 100_000 }, FALLBACK]);
+    const [primary] = pool.keyLimiters(0);
+    const [fallback] = pool.keyLimiters(1);
 
     // Exactly the error from run 3: the pool's fresh in-process estimate said
-    // 70b had budget, but Groq's server-side counter was already exhausted.
+    // The primary had budget locally, but Groq's server-side counter was already exhausted.
     const tpd429 = Object.assign(
       new Error(
-        "Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_x` " +
+        "Rate limit reached for model `openai/gpt-oss-120b` in organization `org_x` " +
           "service tier `on_demand` on tokens per day (TPD): Limit 100000, Used 95738, Requested 5161.",
       ),
       { status: 429 },
     );
-    vi.spyOn(seventyB.client.chat.completions, "create").mockRejectedValue(tpd429 as never);
-    vi.spyOn(scout.client.chat.completions, "create").mockResolvedValue({
-      choices: [{ message: { content: "Translated by scout." } }],
+    vi.spyOn(primary.client.chat.completions, "create").mockRejectedValue(tpd429 as never);
+    vi.spyOn(fallback.client.chat.completions, "create").mockResolvedValue({
+      choices: [{ message: { content: "Translated by fallback." } }],
     } as never);
 
     const germanText = "Die Aufenthaltserlaubnis wird für das Studium benötigt.";
@@ -447,19 +440,19 @@ describe("translateToEnglish parallel dedupe", () => {
     });
 
     const result = await translateToEnglish(germanText, pool);
-    expect(result.englishText).toBe("Translated by scout.");
-    expect(seventyB.client.chat.completions.create).toHaveBeenCalledTimes(1);
-    expect(scout.client.chat.completions.create).toHaveBeenCalledTimes(1);
+    expect(result.englishText).toBe("Translated by fallback.");
+    expect(primary.client.chat.completions.create).toHaveBeenCalledTimes(1);
+    expect(fallback.client.chat.completions.create).toHaveBeenCalledTimes(1);
 
-    // A second call must skip 70b entirely (its budget is marked spent) and
-    // go straight to scout — this is what makes the big remaining docs finish.
+    // A second call must skip the primary entirely (its budget is marked spent)
+    // and go straight to the fallback.
     const germanText2 = "Die Anmeldung muss bei der Meldebehörde erfolgen.";
     const hash2 = createHash("sha256").update(germanText2).digest("hex");
     rmSync(join(process.cwd(), "data", "translation-cache", `${hash2}.json`), { force: true });
     const second = await translateToEnglish(germanText2, pool);
-    expect(second.englishText).toBe("Translated by scout.");
-    expect(seventyB.client.chat.completions.create).toHaveBeenCalledTimes(1);
-    expect(scout.client.chat.completions.create).toHaveBeenCalledTimes(2);
+    expect(second.englishText).toBe("Translated by fallback.");
+    expect(primary.client.chat.completions.create).toHaveBeenCalledTimes(1);
+    expect(fallback.client.chat.completions.create).toHaveBeenCalledTimes(2);
   });
 });
 

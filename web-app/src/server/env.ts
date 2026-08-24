@@ -27,7 +27,7 @@ const serverEnvSchema = z.object({
   NEXTAUTH_URL: z.preprocess(normalizeUrl, z.string().url().default("http://localhost:3000")),
   NEXTAUTH_SECRET: z.string().min(1, "NEXTAUTH_SECRET is required"),
   GROQ_API_KEY: z.string().optional(),
-  GROQ_MODEL: z.string().default("llama-3.1-8b-instant"),
+  GROQ_MODEL: z.string().default("openai/gpt-oss-120b"),
   HF_TOKEN: z.string().optional(),
   /** Bearer token for the Cloudflare embeddings/reranker worker
    * (its EMBED_TOKEN secret). Falls back to HF_TOKEN for backward compat. */

@@ -55,14 +55,14 @@ describe("LLM client", () => {
     expect(collector.calls).toHaveLength(1);
     expect(collector.calls[0]).toMatchObject({
       provider: "groq",
-      model: "llama-3.1-8b-instant",
+      model: "openai/gpt-oss-120b",
       promptTokens: 12,
       completionTokens: 4,
       totalTokens: 16,
       stage: "Stage 2 — Analyst (comparison matrix)",
     });
-    // 12/1M * 0.05 + 4/1M * 0.08
-    expect(collector.calls[0]?.costUsd).toBeCloseTo(0.00000092, 10);
+    // 12/1M * 0.15 + 4/1M * 0.60
+    expect(collector.calls[0]?.costUsd).toBeCloseTo(0.0000042, 10);
     expect(collector.calls[0]?.latencyMs).toBeGreaterThanOrEqual(0);
   });
 

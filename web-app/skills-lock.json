@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "graphy-charts": {
+      "source": "graphysdk/skills",
+      "sourceType": "github",
+      "skillPath": "skills/graphy-charts/SKILL.md",
+      "computedHash": "c143e9422cefc9f6fcb0c8a9bfbe5663562ae7b172e4d21746ec32558ba851c8"
+    },
+    "graphy-editor": {
+      "source": "graphysdk/skills",
+      "sourceType": "github",
+      "skillPath": "skills/graphy-editor/SKILL.md",
+      "computedHash": "4a328cc57484ba5020c4f16cadc4c6dab57c2cdf067a0d08ddd768d024239a57"
+    }
+  }
+}

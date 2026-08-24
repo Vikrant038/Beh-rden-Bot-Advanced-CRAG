@@ -94,7 +94,7 @@ describe("tracing", () => {
         throw new Error("boom");
       }),
     ).rejects.toThrow("boom");
-    expect(span.end).toHaveBeenCalledWith(expect.objectContaining({ level: "ERROR" }));
+    expect(span.end).toHaveBeenCalledWith(expect.objectContaining({ statusMessage: "boom" }));
   });
 
   it("runWithTrace falls through when tracing is disabled", async () => {
@@ -119,7 +119,7 @@ describe("tracing", () => {
       update: vi.fn(),
     });
     await runWithTrace({ name: "gen-trace" }, async () => {
-      const handle = observeGeneration("llm.call", { model: "llama-3.1-8b-instant" });
+      const handle = observeGeneration("llm.call", { model: "openai/gpt-oss-120b" });
       handle.end("output text");
       expect(generation.end).toHaveBeenCalled();
     });
@@ -157,7 +157,7 @@ describe("tracing", () => {
     })[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toEqual(expect.objectContaining({ done: false }));
     await expect(iterator.next()).rejects.toThrow("gen boom");
-    expect(span.end).toHaveBeenCalledWith(expect.objectContaining({ level: "ERROR" }));
+    expect(span.end).toHaveBeenCalledWith(expect.objectContaining({ statusMessage: "gen boom" }));
   });
 
   it("runWithTrace records a non-string result without truncation", async () => {
@@ -198,7 +198,7 @@ describe("tracing", () => {
     await runWithTrace({ name: "gen-error" }, async () => {
       const handle = observeGeneration("llm.call");
       handle.endError(new Error("gen failed"));
-      expect(generation.end).toHaveBeenCalledWith(expect.objectContaining({ level: "ERROR" }));
+      expect(generation.end).toHaveBeenCalledWith(expect.objectContaining({ statusMessage: "gen failed" }));
     });
   });
 

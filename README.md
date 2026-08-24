@@ -147,7 +147,7 @@ Enterprise RAG means *choosing* models with evidence, not picking the first thin
 
 | Provider | Model | Why | Role |
 |---|---|---|---|
-| **Groq** | `llama-3.1-8b-instant` | **~800 tok/s** vs. OpenAI's ~50–80, OpenAI-compatible API, generous free tier (14,400 req/day) | Primary generator — latency is a feature |
+| **Groq** | `openai/gpt-oss-120b` | **~500 tok/s**, 250K TPM, 1K RPM, OpenAI-compatible API | Primary generator — latency is a feature |
 | **Hugging Face Inference** | `meta-llama`/fallback models | Resilience — when Groq is down | Automatic fallback behind a circuit breaker |
 
 ### The migration that mattered: 768-d English-only → 1024-d multilingual
@@ -224,7 +224,7 @@ A production RAG app must be economical at scale. Every cost lever here is a *de
 | Lever | What we do | Saving |
 |---|---|---|
 | **Embeddings** | Self-hosted / serverless BGE (local `embed-server.py`, Cloudflare `@cf/baai/bge-m3`) instead of paid embedding APIs | **Zero per-embedding API cost** at any scale |
-| **LLM choice** | Groq `llama-3.1-8b-instant`: ~800 tok/s, free tier **14,400 req/day**, OpenAI-compatible | ~10× cheaper than OpenAI-class APIs, 10× faster |
+| **LLM choice** | Groq `openai/gpt-oss-120b`: ~500 tok/s, 250K TPM, 1K RPM, OpenAI-compatible | $0.15/M input, $0.60/M output |
 | **Semantic cache** | SHA-256 exact + pgvector cosine (≥0.97), 7-day TTL | Repeat/near-duplicate questions answered in ~0 ms — **no LLM call, no tokens** |
 | **Guardrail term cache** | Deterministic negative/safety term lists checked *before* any LLM call | Spam/fraud queries rejected **instantly, at zero LLM cost** (LLM classifier only as fallback) |
 | **Circuit breaker + backoff** | pybreaker (5 failures → 60 s open) + 3-retry exponential backoff + provider fallback | **No runaway spend** during provider outages; no retry storms |
@@ -278,7 +278,7 @@ The original Python implementation (FastAPI + Streamlit era): fine-tuned embeddi
 | **UI** | Tailwind CSS 4, framer-motion 12, lucide-react, recharts | Streamlit |
 | **API** | tRPC 11 (type-safe RPC) + SSE streaming | REST + SSE |
 | **Auth** | Auth.js v5 (GitHub, Google, magic link, JWT) | — |
-| **LLM** | Groq (`llama-3.1-8b-instant`) via provider abstraction + circuit breaker | Groq + HF fallback |
+| **LLM** | Groq (`openai/gpt-oss-120b`) via provider abstraction + circuit breaker | Groq + HF fallback |
 | **Embeddings** | BGE-M3 (1024-d, multilingual) — Cloudflare worker in prod, local server for dev | BGE fine-tuned (768-d) / BGE-M3 |
 | **Dense search** | pgvector cosine (HNSW), ~24k chunks | FAISS |
 | **Sparse search** | Postgres FTS + in-process BM25 fallback | rank_bm25 |

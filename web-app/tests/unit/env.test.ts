@@ -46,7 +46,7 @@ describe("loadServerEnv", () => {
     vi.stubEnv("EMBEDDING_PROVIDER", "");
     const mod = await import("@/server/env");
     expect(mod.env.NEXTAUTH_URL).toBe("http://localhost:3000");
-    expect(mod.env.GROQ_MODEL).toBe("llama-3.1-8b-instant");
+    expect(mod.env.GROQ_MODEL).toBe("openai/gpt-oss-120b");
     expect(mod.env.EMBEDDING_PROVIDER).toBe("hf");
     vi.unstubAllEnvs();
   });

@@ -7,8 +7,8 @@
  *   2. Iterates every document in the database and re-ingests it through the
  *      English-first pipeline (detect → translate → chunk → embed → store).
  *   3. The translation step is rate-limited to Groq's free tier (30 RPM /
- *      6,000 TPM / 14,400 RPD, plus the model's daily TPD cap — e.g. 100K/day
- *      for llama-3.3-70b, 500K/day for llama-4-scout) and checkpoint-cached,
+ *      250,000 TPM / 1,000 RPM for GPT OSS 120B (plus any configured fallback
+ *      caps) and checkpoint-cached,
  *      so interrupted runs resume without re-translating.
  *
  * Usage:
@@ -16,12 +16,9 @@
  *
  * ⚠️  Free-tier daily token caps dominate runtime. The ~260K tokens of German
  * text need ~800K–1.2M tokens in+out total. The rate limiter now runs a
- * quality-first MODEL CHAIN (llama-3.3-70b → llama-4-scout → qwen3-32b →
- * gpt-oss-120b → gpt-oss-20b → kimi-k2 → llama-3.1-8b): when a model's daily
- * TPD budget is spent on all keys it falls back to the next model, and when
- * every model is spent it waits for the midnight reset (checkpoint-cached, so
- * a run resumes across days). The chain's combined budget is ~2.3M tokens/day,
- * so the whole corpus typically finishes within a day or two.
+ * quality-first MODEL CHAIN (gpt-oss-120b → qwen3-32b → gpt-oss-20b →
+ * kimi-k2): when a configured daily TPD budget is spent on all keys it falls
+ * back to the next model. Checkpoint caching lets an interrupted run resume.
  *   Override: GROQ_TRANSLATE_MODELS="a,b,c" (chain order), or
  *   GROQ_TRANSLATE_MODEL="x" (single) — GROQ_TPD overrides the daily cap.
  *

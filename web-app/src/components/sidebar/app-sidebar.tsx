@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   FileStack,
   GraduationCap,
@@ -84,6 +84,14 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
 
   useEffect(() => setMounted(true), []);
 
+  // The /chat route is a lazy composer: it creates the conversation only when
+  // the first message is sent, so clicking "New chat" never leaves an empty
+  // "New conversation" row behind in history.
+  const newChat = useCallback(() => {
+    onNavigate?.();
+    router.push("/chat");
+  }, [onNavigate, router]);
+
   useEffect(() => {
     // On mobile, the drawer mounts a second instance of AppSidebar. Skip adding
     // global listeners on the mobile drawer instance (onNavigate is set only on mobile).
@@ -97,10 +105,7 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
         newChat();
       }
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onNavigate]);
+  }, [onNavigate, newChat]);
 
   const items = useMemo(
     () => conversations.data?.pages.flatMap((page) => page.items) ?? [],
@@ -108,14 +113,6 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
   );
   const groups = useMemo(() => groupConversationsByTime(items, pinnedIds), [items, pinnedIds]);
   const isLoading = conversations.isLoading || !mounted;
-
-  // The /chat route is a lazy composer: it creates the conversation only when
-  // the first message is sent, so clicking "New chat" never leaves an empty
-  // "New conversation" row behind in history.
-  const newChat = () => {
-    onNavigate?.();
-    router.push("/chat");
-  };
 
   const togglePin = (id: string) => {
     setPinnedIds((current) => {

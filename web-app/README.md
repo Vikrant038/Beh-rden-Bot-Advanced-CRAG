@@ -139,7 +139,7 @@ the per-query cost is dominated by generation.
 
 | Component       | Provider                 | Model / endpoint                                                       | Basis                                                             |
 | --------------- | ------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Generation      | Groq                     | `llama-3.1-8b-instant` (primary), `llama-3.3-70b-versatile` (fallback) | $0.05/1M in · $0.08/1M out (8b); $0.59/1M in · $0.79/1M out (70b) |
+| Generation      | Groq                     | `openai/gpt-oss-120b` (primary), Qwen/GPT OSS/Kimi fallbacks | $0.15/1M in · $0.60/1M out |
 | Query expansion | Groq                     | same model                                                             | counted per call above                                            |
 | Embeddings      | HF worker (self-hosted)  | `BAAI/bge-m3`, batched                                                 | inference credits, no per-token charge                            |
 | Rerank          | HF endpoint              | cross-encoder                                                          | inference credits, no per-token charge                            |

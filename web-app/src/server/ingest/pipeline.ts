@@ -160,7 +160,7 @@ async function persistIngestedWithNormalization(
 
 /**
  * Translates the text to English if it is not already English, using the
- * Goq rate limiter from options. Returns the (possibly translated) text.
+ * Groq rate limiter from options. Returns the (possibly translated) text.
  */
 export async function normalizeToEnglish(
   text: string,
@@ -245,7 +245,12 @@ async function persistIngested(
           where: { url: sourceKey },
           data: { status: "SYNCED", lastError: null },
         })
-        .catch(() => {});
+        .catch((error) => {
+          logger.warn(
+            { url: sourceKey, error: String(error) },
+            "[INGEST] self-heal SYNCED update failed",
+          );
+        });
     }
     logger.info({ url: sourceKey }, "[INGEST] content unchanged; skipping");
     return {
@@ -415,7 +420,9 @@ async function persistIngested(
       where: { id: documentId },
       data: { status: "SYNCED", lastError: null },
     })
-    .catch(() => {});
+    .catch((error) => {
+      logger.warn({ documentId, error: String(error) }, "[INGEST] completion SYNCED update failed");
+    });
 
   logger.info(
     { url: sourceKey, status: "updated", chunks: childCount, invalidated },

@@ -25,3 +25,8 @@ scratch/run-webapp-eval.sh
 # Web-app eval checkpoints (regenerable) — the testset in web-app/data/eval is
 # committed so the eval workflow can run in CI; only the outputs are ignored.
 web-app/data/processed/
+
+# Local educational / learning curriculum markdown files
+learning/
+web-app/learning/
+

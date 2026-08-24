@@ -212,7 +212,7 @@ User Query → Stage 0 disambiguation → Hybrid retrieval (FAISS dense + BM25 s
 - **Last verified:** 2026-08-10 (repo restructured web-app-first; MVP moved to `mvp-python/`).
 - **Web app:** Next.js 15.5 · React 19 · TS 5 · pnpm 11.20.0 · Node 22 · Prisma 6 · pgvector (BGE-M3 1024-d).
 - **MVP:** Python 3.14 venv at repo root (`.venv/`), Streamlit 1.41.0, `BAAI/bge-base-en-v1.5` fine-tuned 768-d.
-- **Key models:** Groq `llama-3.1-8b-instant` (primary) · `BAAI/bge-m3` embeddings · `BAAI/bge-reranker-v2-m3` reranker.
+- **Key models:** Groq `openai/gpt-oss-120b` (primary) · `BAAI/bge-m3` embeddings · `BAAI/bge-reranker-v2-m3` reranker. Hugging Face remains the LLM fallback.
 
 ---
 
