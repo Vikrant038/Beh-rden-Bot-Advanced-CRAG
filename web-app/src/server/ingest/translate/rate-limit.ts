@@ -104,12 +104,12 @@ export class GroqRateLimiter {
 
   /** Marks a model as blacklisted (no-op for single limiter; pool handles it). */
   blacklistModel(_model: string): void {
-    // Single limiter can't blacklist — the pool manages this.
+    void _model;
   }
 
   /** Marks a model as exhausted for today (no-op for single limiter; pool handles it). */
   exhaustModelToday(_model: string): void {
-    // Single limiter can't exhaust — the pool manages this.
+    void _model;
   }
 
   /**

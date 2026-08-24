@@ -15,7 +15,6 @@ import {
   Search,
   Settings,
   ShieldAlert,
-  UserRound,
 } from "lucide-react";
 import { api } from "@/lib/trpc/client";
 import { ConversationItem } from "@/components/sidebar/conversation-item";
@@ -105,6 +104,8 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
         newChat();
       }
     };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, [onNavigate, newChat]);
 
   const items = useMemo(

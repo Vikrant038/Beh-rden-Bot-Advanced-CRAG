@@ -5,23 +5,11 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/trpc/client";
 import { useDebouncedValue } from "@/hooks/use-debounce";
 import { useToast } from "@/lib/toast";
-import { formatRelativeTime } from "@/lib/utils";
 
-type ModeFilter = "all" | "standard" | "agentic";
-type DateRange = "all" | "7d" | "30d";
-type SortKey = "updated" | "created" | "title";
+export type ModeFilter = "all" | "standard" | "agentic";
+export type DateRange = "all" | "7d" | "30d";
+export type SortKey = "updated" | "created" | "title";
 
-const MODE_FILTERS: Array<{ value: ModeFilter; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "agentic", label: "Agentic" },
-  { value: "standard", label: "Standard" },
-];
-
-const DATE_RANGES: Array<{ value: DateRange; label: string }> = [
-  { value: "all", label: "All time" },
-  { value: "7d", label: "Last 7 days" },
-  { value: "30d", label: "Last 30 days" },
-];
 
 function withinRange(iso: string, range: DateRange): boolean {
   if (range === "all") {
@@ -381,4 +369,5 @@ export function useHistoryList(): UseHistoryListReturn {
   };
 }
 
-export type { ConversationItem, Stats, PreviewConversation, ModeFilter, DateRange, SortKey };
+export type { ConversationItem, Stats, PreviewConversation };
+
