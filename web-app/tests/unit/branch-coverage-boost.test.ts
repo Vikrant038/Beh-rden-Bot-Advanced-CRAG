@@ -269,7 +269,7 @@ describe("Branch Coverage Boost", () => {
 
     it("loads existing summary and filters out non-user/assistant roles", async () => {
       const { createMemory } = await import("@/server/rag/memory/summary-buffer");
-      (prismaMock as any).conversationMemory = {
+      (prismaMock as unknown as Record<string, unknown>).conversationMemory = {
         findUnique: vi.fn().mockResolvedValue({ summaryText: "Existing Summary" }),
         upsert: vi.fn().mockResolvedValue({}),
       };
@@ -295,7 +295,7 @@ describe("Branch Coverage Boost", () => {
       mockedLLM.mockResolvedValueOnce("Summary: APS certificate details and cost.");
 
       const memory = new SummaryBufferMemory("conv-prune", 2);
-      (prismaMock as any).conversationMemory = {
+      (prismaMock as unknown as Record<string, unknown>).conversationMemory = {
         findUnique: vi.fn().mockResolvedValue(null),
         upsert: vi.fn().mockResolvedValue({}),
       };
@@ -359,7 +359,9 @@ describe("Branch Coverage Boost", () => {
     });
 
     it("clearAll applies search, mode, and ids filters", async () => {
-      (prismaMock.conversation as any).updateMany = vi.fn().mockResolvedValueOnce({ count: 3 });
+      (prismaMock.conversation as unknown as Record<string, unknown>).updateMany = vi
+        .fn()
+        .mockResolvedValueOnce({ count: 3 });
       const caller = makeUserCaller();
       const result = await caller.conversation.clearAll({
         search: "visa",

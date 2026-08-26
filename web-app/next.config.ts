@@ -36,7 +36,8 @@ const nextConfig: NextConfig = {
     "/api/changelog": ["./CHANGELOG.md"],
   },
   env: {
-    SCROLL_ASSETS_URL: process.env.SCROLL_ASSETS_URL || process.env.NEXT_PUBLIC_SCROLL_ASSETS_URL || "",
+    SCROLL_ASSETS_URL:
+      process.env.SCROLL_ASSETS_URL || process.env.NEXT_PUBLIC_SCROLL_ASSETS_URL || "",
   },
   async headers() {
     return [

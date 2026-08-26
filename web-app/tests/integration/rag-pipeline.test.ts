@@ -532,7 +532,7 @@ describe("RAG Pipeline Orchestrators", () => {
     // mockImplementation from an earlier test).
     vi.mocked(mockCache.checkCache).mockResolvedValue(null);
     const memory = new SummaryBufferMemory("conv-eng2", 8);
-    const result = await runStandardCrag("Was ist ein Sperrkonto?", {
+    await runStandardCrag("Was ist ein Sperrkonto?", {
       hybridRetriever: mockHybridRetriever,
       cache: mockCache,
       memory,
