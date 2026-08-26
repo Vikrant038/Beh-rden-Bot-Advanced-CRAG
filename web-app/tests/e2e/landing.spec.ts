@@ -15,7 +15,7 @@ test.describe("Landing page", () => {
     await page.getByText("Explore the knowledge base").click();
     await expect(page.getByText("Built on a real legal corpus")).toBeVisible();
 
-    const signIn = page.getByRole("link", { name: "Get started" });
+    const signIn = page.getByRole("link", { name: "Get started", exact: true }).first();
     await expect(signIn).toBeVisible();
     await signIn.click();
     // First navigation to /login on a cold dev server compiles the route server-side.

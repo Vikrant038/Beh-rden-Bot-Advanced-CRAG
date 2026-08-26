@@ -150,17 +150,26 @@ function mountLetsScroll(container, config) {
   const copies = [], dots = [];
   SECTIONS.forEach((s, i) => {
     const c = el('article', 'sw-copy'); c.style.setProperty('--sw-accent', s.accent || '');
-    c.innerHTML =
-      `<span class="sw-copy__num">${pad(i + 1)} / ${pad(N)}</span>` +
-      (s.eyebrow ? `<span class="sw-copy__eyebrow">${esc(s.eyebrow)}</span>` : '') +
-      (s.title ? `<h2 class="sw-copy__title">${esc(s.title)}</h2>` : '') +
-      (s.body ? `<p class="sw-copy__body">${esc(s.body)}</p>` : '') +
-      (s.tags && s.tags.length ? `<ul class="sw-copy__tags">${s.tags.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : '') +
-      (s.cta ? `<div class="sw-copy__cta">${ctaBtns(s.cta)}</div>` : '');
+    const num = el('span', 'sw-copy__num'); num.textContent = `${pad(i + 1)} / ${pad(N)}`; c.appendChild(num);
+    if (s.eyebrow) { const eb = el('span', 'sw-copy__eyebrow'); eb.textContent = s.eyebrow; c.appendChild(eb); }
+    if (s.title) { const t = el('h2', 'sw-copy__title'); t.textContent = s.title; c.appendChild(t); }
+    if (s.body) { const b = el('p', 'sw-copy__body'); b.textContent = s.body; c.appendChild(b); }
+    if (s.tags && s.tags.length) {
+      const ul = el('ul', 'sw-copy__tags');
+      s.tags.forEach(t => { const li = el('li'); li.textContent = t; ul.appendChild(li); });
+      c.appendChild(ul);
+    }
+    if (s.cta) {
+      const ctaDiv = el('div', 'sw-copy__cta');
+      if (s.cta.primary) { const p = el('a', 'sw-btn sw-btn--primary'); p.href = s.cta.primary.href || '#'; p.textContent = s.cta.primary.label; ctaDiv.appendChild(p); }
+      if (s.cta.secondary) { const sc = el('a', 'sw-btn sw-btn--ghost'); sc.href = s.cta.secondary.href || '#'; sc.textContent = s.cta.secondary.label; ctaDiv.appendChild(sc); }
+      c.appendChild(ctaDiv);
+    }
     copylayer.appendChild(c); copies.push(c);
 
     const dot = el('button', 'sw-route__dot'); dot.style.setProperty('--sw-accent', s.accent || '');
-    dot.innerHTML = `<span class="sw-route__label">${esc(s.label || '')}</span><i></i>`;
+    const lbl = el('span', 'sw-route__label'); lbl.textContent = s.label || ''; dot.appendChild(lbl);
+    const dotI = el('i'); dot.appendChild(dotI);
     dot.addEventListener('click', () => jumpTo(i)); route.appendChild(dot); dots.push(dot);
 
     if (config.nav !== false) {

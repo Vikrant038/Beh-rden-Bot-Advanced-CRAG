@@ -195,14 +195,48 @@ function _engineFactory() {
     SECTIONS.forEach((s, i) => {
       const c = el("article", "sw-copy");
       c.style.setProperty("--sw-accent", s.accent || "");
-      c.innerHTML =
-        (s.eyebrow ? `<span class="sw-copy__eyebrow">${esc(s.eyebrow)}</span>` : "") +
-        (s.title ? `<h2 class="sw-copy__title">${esc(s.title)}</h2>` : "") +
-        (s.body ? `<p class="sw-copy__body">${esc(s.body)}</p>` : "") +
-        (s.tags && s.tags.length
-          ? `<ul class="sw-copy__tags">${s.tags.map((t: string) => `<li>${esc(t)}</li>`).join("")}</ul>`
-          : "") +
-        (s.cta ? `<div class="sw-copy__cta">${ctaBtns(s.cta)}</div>` : "");
+
+      if (s.eyebrow) {
+        const eb = el("span", "sw-copy__eyebrow");
+        eb.textContent = s.eyebrow;
+        c.appendChild(eb);
+      }
+      if (s.title) {
+        const t = el("h2", "sw-copy__title");
+        t.textContent = s.title;
+        c.appendChild(t);
+      }
+      if (s.body) {
+        const b = el("p", "sw-copy__body");
+        b.textContent = s.body;
+        c.appendChild(b);
+      }
+      if (s.tags && s.tags.length) {
+        const ul = el("ul", "sw-copy__tags");
+        s.tags.forEach((tagText: string) => {
+          const li = el("li");
+          li.textContent = tagText;
+          ul.appendChild(li);
+        });
+        c.appendChild(ul);
+      }
+      if (s.cta) {
+        const ctaDiv = el("div", "sw-copy__cta");
+        if (s.cta.primary) {
+          const p = el("a", "sw-btn sw-btn--primary");
+          p.href = s.cta.primary.href || "#";
+          p.textContent = s.cta.primary.label;
+          ctaDiv.appendChild(p);
+        }
+        if (s.cta.secondary) {
+          const sc = el("a", "sw-btn sw-btn--ghost");
+          sc.href = s.cta.secondary.href || "#";
+          sc.textContent = s.cta.secondary.label;
+          ctaDiv.appendChild(sc);
+        }
+        c.appendChild(ctaDiv);
+      }
+
       copylayer.appendChild(c);
       copies.push(c);
 
@@ -210,7 +244,8 @@ function _engineFactory() {
       const dot = el("button", "sw-route__dot");
       dot.style.setProperty("--sw-accent", s.accent || "");
       dot.setAttribute("aria-label", s.label || `Section ${i + 1}`);
-      dot.innerHTML = `<i></i>`;
+      const dotI = el("i");
+      dot.appendChild(dotI);
       dot.addEventListener("click", () => jumpTo(i));
       route.appendChild(dot);
       dots.push(dot);
@@ -495,23 +530,6 @@ function _engineFactory() {
       if (cls) n.className = cls;
       return n;
     }
-    function pad(n: number) {
-      return String(n).padStart(2, "0");
-    }
-    function esc(s: string) {
-      return String(s).replace(
-        /[&<>"]/g,
-        (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string,
-      );
-    }
-    function ctaBtns(cta: any) {
-      let h = "";
-      if (cta.primary)
-        h += `<a class="sw-btn sw-btn--primary" href="${esc(cta.primary.href || "#")}">${esc(cta.primary.label)}</a>`;
-      if (cta.secondary)
-        h += `<a class="sw-btn sw-btn--ghost" href="${esc(cta.secondary.href || "#")}">${esc(cta.secondary.label)}</a>`;
-      return h;
-    }
 
     return () => {
       running = false;
@@ -520,7 +538,7 @@ function _engineFactory() {
       window.removeEventListener("orientationchange", layout);
       window.removeEventListener("load", layout);
       container.classList.remove("sw-root");
-      container.innerHTML = "";
+      container.textContent = "";
     };
   }
 
