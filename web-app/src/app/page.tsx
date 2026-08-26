@@ -21,13 +21,12 @@ import {
   Network,
   Receipt,
   ShieldCheck,
-  Sparkles,
   X,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { CountUp } from "@/components/ui/count-up";
-import { ChatMockup } from "@/components/landing/chat-mockup";
+import { ScrollWorld } from "@/components/landing/scroll-world";
 import { ChangelogModal } from "@/components/ui/changelog-modal";
 import { api } from "@/lib/trpc/client";
 
@@ -299,74 +298,14 @@ export default function LandingPage() {
         )}
       </header>
 
+      {/* ─── Full-viewport scroll-cinematic hero ─── */}
+      {/* ScrollWorld spans 100vw — rendered outside max-w-6xl.
+          The engine builds its own sticky track, copy layer, nav, and route dots. */}
+      <ScrollWorld startHref={startHref} browseHref={browseHref} />
+
       <main className="relative z-10 mx-auto max-w-6xl px-4 pb-16 pt-12 text-center sm:px-6 sm:pb-24 sm:pt-14">
-        {/* ─── Hero ─── */}
-        <section className="relative mt-2 sm:mt-6">
-          {/* CSS-only aurora orbs layered over the gradient mesh */}
-          <div className="aurora" aria-hidden="true">
-            <div className="aurora-orb aurora-orb-a left-[-12%] top-[-24%] h-72 w-72 bg-primary/40 sm:h-96 sm:w-96" />
-            <div className="aurora-orb aurora-orb-b right-[-10%] top-[-4%] h-64 w-64 bg-accent/30 sm:h-80 sm:w-80" />
-            <div className="aurora-orb aurora-orb-c bottom-[-34%] left-[32%] h-72 w-72 bg-primary/25 sm:h-96 sm:w-96" />
-          </div>
-
-          <motion.div {...reveal} transition={{ duration: 0.5 }} className="relative">
-            <span className="inline-flex items-center gap-2 rounded-full border border-glass-border bg-glass px-3.5 py-1.5 text-xs text-muted shadow-glass backdrop-blur">
-              <Sparkles className="h-3.5 w-3.5 text-accent" />
-              German student visas · APS · blocked accounts · university admissions
-            </span>
-          </motion.div>
-
-          <motion.h1
-            {...reveal}
-            transition={{ duration: 0.55, delay: 0.05 }}
-            className="type-display mx-auto mt-6 max-w-4xl tracking-[-0.03em]"
-          >
-            Your AI guide to studying in{" "}
-            <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              Germany
-            </span>
-          </motion.h1>
-
-          <motion.p
-            {...reveal}
-            transition={{ duration: 0.55, delay: 0.12 }}
-            className="mx-auto mt-5 max-w-xl text-base text-muted sm:text-lg"
-          >
-            Visas, APS, blocked accounts, university — answered from official sources.
-          </motion.p>
-
-          <motion.div
-            {...reveal}
-            transition={{ duration: 0.55, delay: 0.18 }}
-            className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row"
-          >
-            <Link
-              href={startHref}
-              className="cta-shimmer brand-gradient inline-block w-full max-w-xs rounded-xl px-8 py-3 text-sm font-semibold text-white shadow-[0_8px_28px_-8px_var(--color-primary)] transition hover:brightness-110 active:scale-[0.98] sm:w-auto"
-            >
-              Start asking →
-            </Link>
-            <a
-              href="#demo"
-              className="inline-block w-full max-w-xs rounded-xl border border-glass-border bg-glass px-8 py-3 text-sm font-medium shadow-glass backdrop-blur transition hover:bg-surface-hover sm:w-auto"
-            >
-              See an example
-            </a>
-          </motion.div>
-
-          {/* Live-type chat mockup */}
-          <motion.div
-            {...reveal}
-            transition={{ duration: 0.6, delay: 0.34 }}
-            className="relative mx-auto mt-14 max-w-2xl"
-          >
-            <div
-              className="pointer-events-none absolute -inset-6 rounded-[2rem] bg-primary/10 blur-3xl"
-              aria-hidden="true"
-            />
-            <ChatMockup />
-          </motion.div>
-        </section>
+        {/* Below-the-fold content starts here.
+            The hero has been replaced by the scroll-cinematic world above. */}
 
         {/* ─── What you can ask (sample chips → prefill chat) ─── */}
         <motion.section
