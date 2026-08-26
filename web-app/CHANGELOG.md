@@ -6,6 +6,42 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning:
 
 ## [Unreleased]
 
+### Added
+
+- **Full-viewport scroll-cinematic hero:** interactive, continuous camera flight
+  landing experience (`ScrollWorld` & `scroll-engine.ts`) visualizing the 4 core
+  stages of studying in Germany (Start $\to$ Documents $\to$ APS $\to$ Campus).
+  Includes custom video scrubbing, live route dots, atmospheric background glow,
+  session-aware CTAs, and a static 2×2 image grid fallback under `prefers-reduced-motion`.
+
+- **Cloudinary CDN integration (`SCROLL_ASSETS_URL`):** external asset delivery
+  for high-resolution still posters and transition video clips via Cloudinary CDN.
+  Bypasses legacy `fetch() -> blob` memory buffering and leverages direct browser
+  HTTP 206 Partial Content (Range requests) for instant streaming playback (<300ms).
+
+- **Mobile touch & hardware decoder optimizations:**
+  - **Dynamic Mobile Streams:** Cloudinary automatic transformations (`f_auto,q_auto:eco,w_720,vc_h264`)
+    deliver lightweight 720p streams on touch/mobile viewports, reducing video payload and GPU decoder RAM by ~60–70%.
+  - **Lazy Active Priming:** single-active video lazy priming on user gesture and section transitions,
+    preventing mobile GPU stalls from spinning up 7 concurrent decoder pipelines.
+  - **Optimized RAF Seeking:** skips seeking on non-visible segments during scroll on mobile, with an increased
+    seek tolerance threshold (`eps = 0.035`) preventing hardware queue congestion.
+  - **Compositor Relief:** disabled continuous drifting background particles and replaced expensive
+    `backdrop-filter: blur(...)` with performant solid RGBA backgrounds on touch viewports.
+
+- **Unified color harmony (Light/Dark themes):** integrated the diorama video
+  palette across the entire application — Warm Diorama Porcelain (`#fbf9f5`) in Light mode
+  and Velvet Obsidian (`#0f0d13`) in Dark mode, with glowing section accents
+  (Start `#7c3aed`, Documents `#2563eb`, APS `#059669`, Campus `#d97706`) applied to buttons,
+  cards, route indicators, and badges.
+
+### Security
+
+- **AST raw HTML injection hardening:** refactored `scroll-engine.ts` and `scrub-engine.js`
+  to replace all string-interpolated `.innerHTML` assignments with type-safe DOM APIs
+  (`document.createElement`, `element.textContent`, `element.appendChild`), resolving all
+  Semgrep `javascript.express.security.injection.raw-html-format` alerts.
+
 ### Changed
 
 - **Pipeline trace stages are now fully tappable:** the entire StageNode header

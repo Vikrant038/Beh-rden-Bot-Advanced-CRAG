@@ -10,32 +10,33 @@
 
 Your project follows a **hybrid server-driven architecture** combining:
 
-1. **Backend: Layered Architecture** (Python)
-   - Clear separation: Data → Processing → API → Presentation
-   - RAG pipeline (Retrieval Augmented Generation) with orchestration
+1. **Backend: Layered Architecture (100% TypeScript / Node.js runtime)**
+   - Clear separation: Data Layer → Hybrid Retrieval → CRAG Gate → 3-Agent ReAct Orchestrator
+   - Standalone production pipeline: zero runtime dependencies on Python
 
-2. **Frontend: Next.js App Router (TypeScript)**
-   - Server Components + API Routes + Client State
-   - tRPC for type-safe RPC calls (replaces traditional REST)
+2. **Frontend: Next.js 15 App Router (React 19 + TypeScript 5)**
+   - Server Components + Route Handlers (SSE streaming chat) + Client State (`useChat`)
+   - Interactive full-viewport Scroll Cinematic Hero (`ScrollWorld` + `scroll-engine.ts`)
+   - tRPC 11 for type-safe RPC procedures (replacing traditional REST)
 
 3. **Database: Domain-Driven Data Model**
-   - PostgreSQL with vector extensions (pgvector)
-   - Semantic caching + conversation memory
-   - Principle of Least Privilege (DDL/DML role separation)
+   - PostgreSQL with `pgvector` HNSW indexes (`vector(1024)`, BGE-M3 space)
+   - Dual-keyed semantic cache + conversation memory
+   - Principle of Least Privilege (DDL `behoerden_migrator` vs DML `behoerden_app`)
 
 ### **NOT Traditional MVC**
 
 This is **NOT MVC (Model-View-Controller)** because:
 - MVC has a **single model** answering all queries
-- You have **two separate systems**: RAG pipeline + Web UI
-- The RAG system produces domain logic; the web layer consumes it
+- You have **two specialized subsystems**: CRAG Agentic Pipeline + Web UI Application
+- The RAG system produces domain logic; the web layer consumes and streams it
 
 ### **Actual Pattern: Domain-Driven + Pipeline Architecture**
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │         CLIENT LAYER (React 19 + TypeScript)       │
-│  - Chat UI, conversation history, admin dashboard  │
+│  - Scroll cinematic hero, chat UI, admin dashboard │
 └────────────────────┬────────────────────────────────┘
                      │ tRPC (type-safe RPC)
 ┌────────────────────▼────────────────────────────────┐
@@ -52,11 +53,11 @@ This is **NOT MVC (Model-View-Controller)** because:
 │ DATABASE     │         │ RAG PIPELINE │
 │ LAYER        │         │ (Orchestration)
 │ (Prisma ORM) │         │
-│              │         ├─ Stage 0A: Guardrail
+│              │         ├─ Stage 0A: Guardrail (fail-closed)
 │ PostgreSQL   │         ├─ Stage 0B: Disambiguation
-│ + pgvector   │         ├─ Stage 1: Query Expansion
-│              │         ├─ Stage 2: Hybrid Retrieval
-│ Users        │         ├─ Stage 3: Reranking
+│ + pgvector   │         ├─ Stage 1: Bilingual Query Expansion
+│              │         ├─ Stage 2: Hybrid Retrieval (HNSW + FTS)
+│ Users        │         ├─ Stage 3: Cross-Encoder Reranking
 │ Conversations│         ├─ Stage 4: CRAG Gate
 │ Messages     │         └─ Stage 5: 3-Agent ReAct
 │ Documents    │             ├─ Research Agent
@@ -78,7 +79,7 @@ web-app/
 ├── src/
 │   │
 │   ├── app/                          # Next.js App Router (Pages + API Routes)
-│   │   ├── page.tsx                  # Landing page (/)
+│   │   ├── page.tsx                  # Landing page (/) with ScrollWorld hero
 │   │   ├── layout.tsx                # Root layout wrapper
 │   │   ├── chat/[id]/page.tsx        # Chat page (main UI)
 │   │   ├── admin/                    # Admin dashboard (ADMIN role only)
@@ -105,8 +106,8 @@ web-app/
 │   │   │   │   ├── research.ts       # Research Agent (ReAct loop)
 │   │   │   │   └── analyst.ts        # Analyst Agent (structured matrix)
 │   │   │   ├── retrieval/            # Hybrid retrieval pipeline
-│   │   │   │   ├── dense.ts          # FAISS vector search (similarity)
-│   │   │   │   ├── sparse.ts         # BM25 full-text search
+│   │   │   │   ├── dense.ts          # pgvector HNSW dense search (BGE-M3 1024-d)
+│   │   │   │   ├── sparse.ts         # Postgres FTS (BM25 lexical search)
 │   │   │   │   ├── hybrid.ts         # Combines dense + sparse
 │   │   │   │   ├── rrf.ts            # Reciprocal Rank Fusion
 │   │   │   │   ├── reranker.ts       # Cross-encoder reranking

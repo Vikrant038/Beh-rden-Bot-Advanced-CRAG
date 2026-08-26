@@ -275,9 +275,9 @@ The original Python implementation (FastAPI + Streamlit era): fine-tuned embeddi
 | Layer | Production (`web-app/`) | Reference (`mvp-python/`) |
 |---|---|---|
 | **Framework** | Next.js 15 (App Router), React 19, TypeScript 5 | FastAPI, Streamlit |
-| **UI** | Tailwind CSS 4, framer-motion 12, lucide-react, recharts | Streamlit |
+| **UI** | Tailwind CSS 4, framer-motion 12, lucide-react, recharts, Scroll Cinematic Hero (Cloudinary) | Streamlit |
 | **API** | tRPC 11 (type-safe RPC) + SSE streaming | REST + SSE |
-| **Auth** | Auth.js v5 (GitHub, Google, magic link, JWT) | — |
+| **Auth** | Auth.js v5 (GitHub, Google, magic link, JWT, guest mode) | — |
 | **LLM** | Groq (`openai/gpt-oss-120b`) via provider abstraction + circuit breaker | Groq + HF fallback |
 | **Embeddings** | BGE-M3 (1024-d, multilingual) — Cloudflare worker in prod, local server for dev | BGE fine-tuned (768-d) / BGE-M3 |
 | **Dense search** | pgvector cosine (HNSW), ~24k chunks | FAISS |
@@ -286,8 +286,8 @@ The original Python implementation (FastAPI + Streamlit era): fine-tuned embeddi
 | **Database** | PostgreSQL 16 + pgvector, Prisma 6 | PostgreSQL + pgvector |
 | **Cache** | semantic cache (hash + cosine), 7-day TTL | same |
 | **Observability** | Langfuse, pino | Langfuse, W&B |
-| **Security** | CSP nonce, PII masking, PoLP roles, Gitleaks | PII masking |
-| **Quality** | Vitest + coverage gate, Playwright E2E, ESLint, Prettier, Husky | pytest, RAGAS-style evals |
+| **Security** | CSP nonce, PII masking, PoLP roles, Gitleaks, safe DOM construction | PII masking |
+| **Quality** | Vitest (898 tests) + 85% coverage floor, Playwright E2E, ESLint, Prettier, Husky | pytest, RAGAS-style evals |
 
 ---
 
@@ -299,7 +299,7 @@ Repo-2/
 │   ├── src/
 │   │   ├── app/                    #   Pages, API routes, layouts
 │   │   ├── config/                 #   Centralized single-source config (app.ts)
-│   │   ├── components/             #   Chat UI, landing, admin, visualizer
+│   │   ├── components/             #   Chat UI, Scroll Cinematic landing, admin, visualizer
 │   │   ├── server/
 │   │   │   ├── rag/                #   TS RAG pipeline (guardrail → CRAG)
 │   │   │   ├── routers/            #   tRPC endpoints (conversation, admin, …)
@@ -334,8 +334,8 @@ We treat quality as a **four-layer system** — not a single test command (detai
 |---|---|---|
 | **Lint + format** | Style, unused code, secrets (Husky pre-commit + Gitleaks) | ✅ green |
 | **Typecheck** | `tsc --noEmit` across the whole app | ✅ clean |
-| **Unit + integration** | **670+ tests** across 77 files (Vitest) — routers, RAG stages, components, admin pages | ✅ green |
-| **Coverage gate** | **85% branch-coverage floor** enforced in CI (`vitest run --coverage`) | ✅ passing (85.4%) |
+| **Unit + integration** | **898 tests** across 83 files (Vitest) — routers, RAG stages, components, admin pages | ✅ green |
+| **Coverage gate** | **85% coverage floor** across all 4 metrics enforced in CI (`vitest run --coverage`) | ✅ passing (Stmts: 92.9%, Branches: 85.0%, Funcs: 91.1%, Lines: 93.3%) |
 | **E2E** | **7 Playwright specs** (54 tests) — chat, history, admin, landing, documents upload, pipeline tester, read-only admin view | ✅ green |
 | **Production build** | `next build` (turbopack + CSP nonce path) | ✅ succeeds |
 | **RAG evals** | RAGAS-style multilingual evaluation, both pipelines | see below |
