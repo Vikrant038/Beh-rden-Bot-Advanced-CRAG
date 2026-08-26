@@ -2,7 +2,7 @@
 
 AI assistant for German immigration, student visas, APS certification, blocked
 accounts, and university applications. A Next.js 15 (App Router) frontend backed
-by the [Repo-2](https://github.com/anomalyco/behoerden-bot) 3-Agent ReAct RAG
+by the [Repo-2](https://github.com/Vikrant038/Beh-rden-Bot-Advanced-CRAG) 3-Agent ReAct RAG
 pipeline.
 
 ## Stack

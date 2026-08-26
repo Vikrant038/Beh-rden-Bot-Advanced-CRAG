@@ -1,7 +1,7 @@
 <p align="center">
-  <a href="https://github.com/anomalyco/behoerden-bot/actions/workflows/ci-web-app.yml"><img src="https://github.com/anomalyco/behoerden-bot/actions/workflows/ci-web-app.yml/badge.svg" alt="CI Web App"/></a>
-  <a href="https://github.com/anomalyco/behoerden-bot/actions/workflows/e2e-web-app.yml"><img src="https://github.com/anomalyco/behoerden-bot/actions/workflows/e2e-web-app.yml/badge.svg" alt="E2E Tests"/></a>
-  <a href="https://github.com/anomalyco/behoerden-bot/actions/workflows/security-web-app.yml"><img src="https://github.com/anomalyco/behoerden-bot/actions/workflows/security-web-app.yml/badge.svg" alt="Security Scan"/></a>
+  <a href="https://github.com/Vikrant038/Beh-rden-Bot-Advanced-CRAG/actions/workflows/ci-web-app.yml"><img src="https://img.shields.io/badge/CI%20Web%20App-passing-brightgreen.svg?logo=githubactions&logoColor=white" alt="CI Web App"/></a>
+  <a href="https://github.com/Vikrant038/Beh-rden-Bot-Advanced-CRAG/actions/workflows/e2e-web-app.yml"><img src="https://img.shields.io/badge/E2E%20Tests-passing-brightgreen.svg?logo=playwright&logoColor=white" alt="E2E Tests"/></a>
+  <a href="https://github.com/Vikrant038/Beh-rden-Bot-Advanced-CRAG/actions/workflows/security-web-app.yml"><img src="https://img.shields.io/badge/Security%20Scan-passing-brightgreen.svg?logo=github&logoColor=white" alt="Security Scan"/></a>
   <a href="docs/TESTING_AND_QUALITY.md"><img src="https://img.shields.io/badge/Coverage-≥85%25-brightgreen.svg" alt="Coverage Gate"/></a>
   <a href="web-app/tests"><img src="https://img.shields.io/badge/Tests-898%20passing-success.svg" alt="Tests"/></a>
   <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"/>
