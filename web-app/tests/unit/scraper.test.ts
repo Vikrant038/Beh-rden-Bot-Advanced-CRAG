@@ -251,9 +251,7 @@ describe("scrapeWebPage", () => {
     expect(result.title).toBe("DAAD — Study in Germany");
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
     // The second hop resolves the relative Location against the first URL.
-    expect(vi.mocked(globalThis.fetch).mock.calls[1]?.[0]).toBe(
-      "https://www.daad.de/de/study/",
-    );
+    expect(vi.mocked(globalThis.fetch).mock.calls[1]?.[0]).toBe("https://www.daad.de/de/study/");
     expect(cancel).toHaveBeenCalledTimes(1);
   });
 
@@ -271,9 +269,7 @@ describe("scrapeWebPage", () => {
         : Promise.resolve(),
     );
 
-    await expect(scrapeWebPage("https://example.com/redirect")).rejects.toThrow(
-      SsrfBlockedError,
-    );
+    await expect(scrapeWebPage("https://example.com/redirect")).rejects.toThrow(SsrfBlockedError);
     // SSRF rejections are deterministic — never retried.
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
@@ -287,9 +283,7 @@ describe("scrapeWebPage", () => {
       text: () => Promise.resolve(""),
     } as unknown as Response);
 
-    await expect(scrapeWebPage("https://example.com/loop")).rejects.toThrow(
-      /Too many redirects/,
-    );
+    await expect(scrapeWebPage("https://example.com/loop")).rejects.toThrow(/Too many redirects/);
   });
 
   it("clamps an absurd retry option to the hard cap", async () => {

@@ -26,6 +26,17 @@ vi.mock("@/server/rag/agents/orchestrator", () => ({
   runAgenticRag: (...args: unknown[]) => mockRunAgenticRag(...args),
 }));
 
+const mockRunStandardCrag = vi.fn();
+vi.mock("@/server/rag/pipeline", () => ({
+  runStandardCrag: (...args: unknown[]) => mockRunStandardCrag(...args),
+}));
+
+const mockIsQueryOutOfDomain = vi.fn();
+vi.mock("@/server/rag/guardrail", () => ({
+  isQueryOutOfDomain: (...args: unknown[]) => mockIsQueryOutOfDomain(...args),
+  OUT_OF_DOMAIN_MESSAGE: "Out of Domain Detected",
+}));
+
 const mockGetHybridRetriever = vi.fn();
 vi.mock("@/server/rag/instance", () => ({
   getHybridRetriever: () => mockGetHybridRetriever(),
@@ -413,5 +424,83 @@ describe("admin.testPipeline", () => {
     prismaMock.pipelineRun?.findUnique.mockResolvedValue(null as never);
     const caller = makeCaller();
     await expect(caller.admin.getTestRun({ id: "missing" })).rejects.toThrow();
+  });
+
+  it("testPipeline: executes standard CRAG pipeline path successfully", async () => {
+    mockIsQueryOutOfDomain.mockResolvedValue(false);
+    mockRunStandardCrag.mockResolvedValue({
+      answer: "Standard CRAG answer with citations.",
+      sources: [{ sourceName: "BAMF", sourceUrl: "https://bamf.de" }],
+      retrievalPath: "CORRECTIVE_RETRIEVAL",
+      latencyMs: 850,
+      isGrounded: true,
+      isCached: false,
+      core: {
+        stages: [{ name: "Hybrid", durationMs: 120 }],
+        llmCalls: [],
+        totalCostUsd: 0.001,
+        totalLatencyMs: 850,
+      },
+    });
+    prismaMock.pipelineRun?.create.mockResolvedValue({ id: "run-std-1" } as never);
+    prismaMock.pipelineRun?.update.mockResolvedValue({ id: "run-std-1" } as never);
+
+    const caller = makeCaller();
+    const result = await caller.admin.testPipeline({
+      prompt: "Requirements for APS India certificate?",
+      pipeline: "standard",
+    });
+
+    expect(result).toEqual({ runId: "run-std-1" });
+    expect(prismaMock.pipelineRun?.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "run-std-1" },
+        data: expect.objectContaining({
+          status: "SUCCESS",
+        }),
+      }),
+    );
+  });
+
+  it("testPipeline: records guardrail blocked standard query correctly", async () => {
+    mockIsQueryOutOfDomain.mockResolvedValue(true);
+    prismaMock.pipelineRun?.create.mockResolvedValue({ id: "run-std-blocked" } as never);
+    prismaMock.pipelineRun?.update.mockResolvedValue({ id: "run-std-blocked" } as never);
+
+    const caller = makeCaller();
+    const result = await caller.admin.testPipeline({
+      prompt: "Who won the cricket match?",
+      pipeline: "standard",
+    });
+
+    expect(result).toEqual({ runId: "run-std-blocked" });
+    expect(mockRunStandardCrag).toHaveBeenCalledTimes(1);
+    expect(prismaMock.pipelineRun?.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "run-std-blocked" },
+        data: expect.objectContaining({
+          status: "SUCCESS",
+          traceJson: expect.objectContaining({
+            guardrail: expect.objectContaining({
+              passed: false,
+              reason: "Out of Domain Detected",
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("testPipeline: handles update rejection gracefully when persisting success", async () => {
+    mockRunAgenticRag.mockResolvedValue(fullTrace());
+    prismaMock.pipelineRun?.create.mockResolvedValue({ id: "run-persist-err" } as never);
+    prismaMock.pipelineRun?.update.mockRejectedValue(new Error("db write failed"));
+
+    const caller = makeCaller();
+    const result = await caller.admin.testPipeline({
+      prompt: "Visa requirements query",
+    });
+
+    expect(result).toEqual({ runId: "run-persist-err" });
   });
 });

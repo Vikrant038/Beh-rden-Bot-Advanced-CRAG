@@ -112,4 +112,10 @@ describe("parseChangelog", () => {
     expect(entries[0]?.title).toBe("Changed");
     expect(entries[0]?.items).toEqual(["Real change"]);
   });
+
+  it("defaults group title when header line is empty", () => {
+    const markdown = `# Changelog\n\n## [1.0.0]\n\n### \n\n- Fix item\n`;
+    const entries = parseChangelog(markdown);
+    expect(entries[0]?.title).toBe("");
+  });
 });

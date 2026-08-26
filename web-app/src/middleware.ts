@@ -61,10 +61,11 @@ export default auth((request) => {
       // style-src: unsafe-inline is still required for Tailwind CSS v4's
       // runtime inline style injection. See docs/security/SECURITY_EXCEPTIONS.md.
       "style-src 'self' 'unsafe-inline'",
-      // Google s2 favicon service feeds the 16px source chips (4.7).
-      "img-src 'self' data: blob: https://www.google.com",
+      // Google s2 favicon service feeds source chips; Cloudinary feeds scroll assets.
+      "img-src 'self' data: blob: https://www.google.com https://res.cloudinary.com",
+      "media-src 'self' data: blob: https://res.cloudinary.com",
       "font-src 'self' data:",
-      "connect-src 'self' https://api-inference.huggingface.co https://api.groq.com",
+      "connect-src 'self' https://api-inference.huggingface.co https://api.groq.com https://res.cloudinary.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

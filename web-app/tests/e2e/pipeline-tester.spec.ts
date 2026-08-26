@@ -100,7 +100,10 @@ async function openTester(page: import("@playwright/test").Page) {
  */
 async function expandAllStages(page: import("@playwright/test").Page) {
   while ((await page.getByRole("button", { name: /^Expand / }).count()) > 0) {
-    await page.getByRole("button", { name: /^Expand / }).first().click();
+    await page
+      .getByRole("button", { name: /^Expand / })
+      .first()
+      .click();
   }
 }
 
@@ -117,11 +120,17 @@ test("renders all pipeline stages after running a trace", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: /Expand Stage 0A — Query Disambiguation/ }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: /Expand Stage 0B — Domain Guardrail/ })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /Expand Stage 1A\/B\/C\/D — Query Expansion & Hybrid Retrieval/ }),
+    page.getByRole("button", { name: /Expand Stage 0B — Domain Guardrail/ }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: /Expand Stage 1E — Research Agent/ })).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: /Expand Stage 1A\/B\/C\/D — Query Expansion & Hybrid Retrieval/,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Expand Stage 1E — Research Agent/ }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: /Expand Stage 2 — Analyst/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /Expand Stage 3 — Writer/ })).toBeVisible();
 

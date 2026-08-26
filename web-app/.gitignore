@@ -23,3 +23,6 @@ data/processed/
 
 # Translation checkpoint cache (English-normalized corpus).
 data/translation-cache/
+
+# Intermediate video frames
+public/scroll/frames/

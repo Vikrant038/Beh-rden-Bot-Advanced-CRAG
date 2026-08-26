@@ -36,7 +36,7 @@ describe("messageStats SQL composition", () => {
     // Tagged template: args are [strings, ...interpolated Sql fragments]
     const [strings, fragment] = rawSql.mock.calls[0] as [TemplateStringsArray, Prisma.Sql];
     const fullSql = `${strings[0]}${fragment.text}${strings[1]}`;
-    expect(fullSql).toContain('FROM messages');
+    expect(fullSql).toContain("FROM messages");
     expect(fragment.text).toContain('WHERE "createdAt" >= NOW() - make_interval');
     expect(fragment.text).not.toMatch(/^AND/);
     expect(fullSql).not.toMatch(/FROM messages\s+AND/);

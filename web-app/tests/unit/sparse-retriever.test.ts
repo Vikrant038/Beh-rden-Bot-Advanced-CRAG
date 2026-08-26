@@ -85,9 +85,10 @@ function chunkBm25Search(query: string): Chunk[] {
   return corpus
     .map((chunk) => ({
       chunk,
-      score: tokens.size > 0
-        ? chunk.text.split(/\s+/).filter((t) => tokens.has(t.toLowerCase())).length
-        : 0,
+      score:
+        tokens.size > 0
+          ? chunk.text.split(/\s+/).filter((t) => tokens.has(t.toLowerCase())).length
+          : 0,
     }))
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score)

@@ -25,18 +25,29 @@ const prismaMock = prisma as unknown as MockPrisma & {
   documentParentChunk: { count: ReturnType<typeof vi.fn> };
 };
 
-function makeCaller() {
+function makeCaller(ctxOverrides: Partial<Context> = {}) {
   return appRouter.createCaller({
     db: prismaMock as never,
     session: null,
     headers: new Headers(),
     resHeaders: new Headers(),
+    ...ctxOverrides,
   } as unknown as Context);
 }
 
 describe("public router", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("guestStatus: reports false when no guestId is in context", async () => {
+    const result = await makeCaller().public.guestStatus();
+    expect(result).toEqual({ hasGuest: false });
+  });
+
+  it("guestStatus: reports true when a guestId is present in context", async () => {
+    const result = await makeCaller({ guestId: "test-guest-123" }).public.guestStatus();
+    expect(result).toEqual({ hasGuest: true });
   });
 
   it("corpusStats: aggregates live counts and computes the German percentage", async () => {
@@ -94,5 +105,18 @@ describe("public router", () => {
     const result = await makeCaller().public.corpusStats();
     expect(result.germanChunkPercent).toBe(0);
     expect(result.chunks).toBe(10);
+  });
+
+  it("corpusStats: returns fallback stats safely when database is unavailable", async () => {
+    prismaMock.document.count.mockRejectedValue(
+      new Error("Connection refused at localhost:5432") as never,
+    );
+
+    const result = await makeCaller().public.corpusStats();
+    expect(result.sources).toBe(115);
+    expect(result.chunks).toBe(23_934);
+    expect(result.parentChunks).toBe(2_171);
+    expect(result.germanChunkPercent).toBe(30.5);
+    expect(result.topSources.length).toBeGreaterThan(0);
   });
 });

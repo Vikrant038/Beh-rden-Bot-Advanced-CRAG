@@ -1,19 +1,7 @@
 /**
- * TypeScript wrapper around the lets-scroll vanilla scrub engine.
- *
- * The engine itself is intentionally kept as vanilla JS in .agents/skills/lets-scroll/
- * and inlined into this module so we get zero extra HTTP requests and full
- * tree-shaking. It is SSR-safe — mountLetsScroll must only be called inside a
- * useEffect / onMounted / after DOMContentLoaded.
- *
- * API surface exposed to React:
- *   mountLetsScroll(container, config) → unmount()
- *
- * The engine builds its own DOM inside `container`, injects its own namespaced
- * CSS, and handles all scroll / resize / reduced-motion logic internally.
+ * TypeScript wrapper around the official lets-scroll scrub engine.
+ * Exact implementation from .agents/skills/lets-scroll/references/scrub-engine.js
  */
-
-// ─── Config types ────────────────────────────────────────────────────────────
 
 export interface ScrollSectionCta {
   primary?: { label: string; href: string };
@@ -21,33 +9,19 @@ export interface ScrollSectionCta {
 }
 
 export interface ScrollSection {
-  /** Unique stable id (used for nav + route dots) */
   id: string;
-  /** Short nav label shown in the top nav + route rail */
   label: string;
-  /** Still image — shown as poster + reduced-motion fallback */
   still: string;
-  /** Optional 9:16 portrait still for mobile */
   stillMobile?: string;
-  /** Dive-in video clip URL */
   clip: string;
-  /** Optional ~720p portrait clip for mobile */
   clipMobile?: string;
-  /** CSS colour used for accents in this section's copy overlay */
   accent?: string;
-  /** Optional per-section scroll weight override (default = config.diveScroll) */
   scroll?: number;
-  /** 0..1 — slows the mid-scene camera to let copy peak. Keep ≤ 0.6 */
   linger?: number;
-  /** Small eyebrow text above the headline */
   eyebrow?: string;
-  /** Main headline */
   title?: string;
-  /** Body / sub-headline */
   body?: string;
-  /** Tag pill chips */
   tags?: string[];
-  /** CTA buttons — typically only on the last section */
   cta?: ScrollSectionCta;
 }
 
@@ -58,33 +32,17 @@ export interface ScrollBrand {
 
 export interface ScrollConfig {
   sections: ScrollSection[];
-  /** Connector clips — length MUST equal sections.length - 1. Use null to skip a connector. */
   connectors: (string | null)[];
-  /** Optional 9:16 portrait connector clips (same length as connectors) */
   connectorsMobile?: (string | null)[];
-  /** Viewport-heights of scroll per dive clip (default 1.3) */
   diveScroll?: number;
-  /** Viewport-heights of scroll per connector clip (default 0.9) */
   connScroll?: number;
-  /** Scroll-hint text shown to first-time visitors */
   hint?: string;
-  /** Show the top section nav (default true) */
   nav?: boolean;
-  /** Show atmospheric gradient + drifting particles (default true) */
   atmosphere?: boolean;
   brand?: ScrollBrand;
-  /** Top-right CTA button (separate from section CTAs) */
   cta?: { label: string; href: string };
-  /** Crossfade dissolve width in vh (default 0.12) */
   crossfade?: number;
 }
-
-// ─── Engine ──────────────────────────────────────────────────────────────────
-
-// Inline the engine source so it ships in the main chunk (no dynamic import
-// latency). The engine is ~400 LOC of vanilla JS.
-// It is pasted verbatim from .agents/skills/lets-scroll/references/scrub-engine.js
-// and wrapped in a module export.
 
 /* eslint-disable */
 function _engineFactory() {
@@ -105,44 +63,29 @@ function _engineFactory() {
     injectCSS();
     container.classList.add("sw-root");
 
-    // Build interleaved segment chain: dive0, conn0, dive1, … diveN-1
-    interface Segment {
-      kind: "dive" | "conn";
-      si: number;
-      clip: string | null;
-      clipM?: string | null;
-      still: string;
-      stillM?: string;
-      accent?: string;
-      w: number;
-      linger?: number;
-      el?: HTMLElement;
-      img?: HTMLImageElement;
-      video?: HTMLVideoElement | null;
-      hasClip?: boolean;
-      loading?: boolean;
-      ready?: boolean;
-      cur?: number;
-      target?: number;
-      visible?: boolean;
-    }
-    const SEGMENTS: Segment[] = [];
-    SECTIONS.forEach((s, i) => {
-      const dive: Segment = {
-        kind: "dive", si: i,
-        clip: s.clip, clipM: s.clipMobile,
-        still: s.still, stillM: s.stillMobile,
+    const SEGMENTS: any[] = [];
+    SECTIONS.forEach((s: any, i) => {
+      const dive = {
+        kind: "dive",
+        si: i,
+        clip: s.clip,
+        clipM: s.clipMobile,
+        still: s.still,
+        stillM: s.stillMobile,
         accent: s.accent,
         w: s.scroll || DIVE_W,
         linger: s.linger || 0,
       };
       SEGMENTS.push(dive);
-      (s as any)._seg = dive;
+      s._seg = dive;
       if (i < N - 1 && CONNECTORS[i]) {
         SEGMENTS.push({
-          kind: "conn", si: i,
-          clip: CONNECTORS[i] ?? null, clipM: CONNECTORS_M[i] ?? null,
-          still: SECTIONS[i + 1].still, stillM: SECTIONS[i + 1].stillMobile,
+          kind: "conn",
+          si: i,
+          clip: CONNECTORS[i],
+          clipM: CONNECTORS_M[i],
+          still: SECTIONS[i + 1].still,
+          stillM: SECTIONS[i + 1].stillMobile,
           accent: SECTIONS[i + 1].accent,
           w: CONN_W,
         });
@@ -150,22 +93,6 @@ function _engineFactory() {
     });
     const NSEG = SEGMENTS.length;
 
-    // ── DOM helpers ──────────────────────────────────────────────────────────
-    const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string): HTMLElementTagNameMap[K] => {
-      const e = document.createElement(tag);
-      if (cls) e.className = cls;
-      return e;
-    };
-    const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const ctaBtns = (cta: ScrollSectionCta) => {
-      let html = "";
-      if (cta.primary) html += `<a class="sw-cta sw-cta--primary" href="${esc(cta.primary.href)}">${esc(cta.primary.label)}</a>`;
-      if (cta.secondary) html += `<a class="sw-cta sw-cta--secondary" href="${esc(cta.secondary.href)}">${esc(cta.secondary.label)}</a>`;
-      return html;
-    };
-
-    // ── Build DOM ─────────────────────────────────────────────────────────────
     const sky = el("div", "sw-sky");
     if (config.atmosphere !== false) {
       sky.appendChild(el("div", "sw-sky__grad"));
@@ -190,7 +117,7 @@ function _engineFactory() {
     }
     const nav = el("nav", "sw-nav");
     if (config.nav !== false) topbar.appendChild(nav);
-    if (config.cta?.label) {
+    if (config.cta && config.cta.label) {
       const c = el("a", "sw-topcta");
       c.href = config.cta.href || "#";
       c.textContent = config.cta.label;
@@ -207,10 +134,11 @@ function _engineFactory() {
     hint.appendChild(el("i"));
     const track = el("div", "sw-track");
 
-    [sky, scrollbar, topbar, stage, copylayer, route, hint, track].forEach((n) => container.appendChild(n));
+    [sky, scrollbar, topbar, stage, copylayer, route, hint, track].forEach((n) =>
+      container.appendChild(n),
+    );
 
-    // Segment scenes
-    SEGMENTS.forEach((s) => {
+    SEGMENTS.forEach((s: any) => {
       const scene = el("div", "sw-scene");
       scene.style.setProperty("--sw-accent", s.accent || "");
       const img = el("img", "sw-scene__still");
@@ -221,29 +149,38 @@ function _engineFactory() {
       if (poster) img.src = poster;
       scene.appendChild(img);
       stage.appendChild(scene);
-      s.el = scene; s.img = img; s.video = null; s.hasClip = false;
-      s.loading = false; s.ready = false; s.cur = 0; s.target = 0; s.visible = false;
+      s.el = scene;
+      s.img = img;
+      s.video = null;
+      s.hasClip = false;
+      s.loading = false;
+      s.ready = false;
+      s.cur = 0;
+      s.target = 0;
+      s.visible = false;
     });
 
-    // Per-section copy / route / nav
     const copies: HTMLElement[] = [];
     const dots: HTMLElement[] = [];
     SECTIONS.forEach((s, i) => {
       const c = el("article", "sw-copy");
       c.style.setProperty("--sw-accent", s.accent || "");
       c.innerHTML =
-        `<span class="sw-copy__num">${pad(i + 1)} / ${pad(N)}</span>` +
         (s.eyebrow ? `<span class="sw-copy__eyebrow">${esc(s.eyebrow)}</span>` : "") +
         (s.title ? `<h2 class="sw-copy__title">${esc(s.title)}</h2>` : "") +
         (s.body ? `<p class="sw-copy__body">${esc(s.body)}</p>` : "") +
-        (s.tags?.length ? `<ul class="sw-copy__tags">${s.tags.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : "") +
+        (s.tags && s.tags.length
+          ? `<ul class="sw-copy__tags">${s.tags.map((t: string) => `<li>${esc(t)}</li>`).join("")}</ul>`
+          : "") +
         (s.cta ? `<div class="sw-copy__cta">${ctaBtns(s.cta)}</div>` : "");
       copylayer.appendChild(c);
       copies.push(c);
 
+      // Minimal pip — no label text, just a clickable dot
       const dot = el("button", "sw-route__dot");
       dot.style.setProperty("--sw-accent", s.accent || "");
-      dot.innerHTML = `<span class="sw-route__label">${esc(s.label || "")}</span><i></i>`;
+      dot.setAttribute("aria-label", s.label || `Section ${i + 1}`);
+      dot.innerHTML = `<i></i>`;
       dot.addEventListener("click", () => jumpTo(i));
       route.appendChild(dot);
       dots.push(dot);
@@ -256,260 +193,418 @@ function _engineFactory() {
       }
     });
 
-    // ── Math ──────────────────────────────────────────────────────────────────
     const clamp = (x: number, a = 0, b = 1) => Math.min(b, Math.max(a, x));
-    const smooth = (x: number) => { x = clamp(x); return x * x * (3 - 2 * x); };
-    const lingerEase = (x: number, L: number) => {
+    const smooth = (x: number) => {
       x = clamp(x);
-      if (L <= 0) return x;
-      const mid = 0.5, hw = 0.5 * (1 - L);
-      if (x < mid - hw) return x / (2 * (mid - hw)) * (mid - hw);
-      if (x > mid + hw) return mid + (x - mid - hw) / (2 * (1 - mid - hw)) * (1 - mid);
-      return mid;
+      return x * x * (3 - 2 * x);
+    };
+    const lingerEase = (x: number, L: number) => {
+      L = clamp(L);
+      const c = x - 0.5;
+      return (1 - L) * x + L * (4 * c * c * c + 0.5);
     };
 
-    // ── Segment geometry ──────────────────────────────────────────────────────
-    let VH = window.innerHeight;
-    let totalScroll = 0;
-    const segStarts: number[] = [];
-    const segLens: number[] = [];
+    let vh = window.innerHeight;
+    let stageX = 0;
+    let totalW = 0;
+    let activeIndex = -1;
+    let ticking = false;
+    let laidOutW = window.innerWidth;
 
-    const calcGeom = () => {
-      VH = window.innerHeight;
-      totalScroll = 0;
-      SEGMENTS.forEach((s, i) => {
-        segStarts[i] = totalScroll;
-        const len = s.w * VH;
-        segLens[i] = len;
-        totalScroll += len;
+    function layout() {
+      vh = window.innerHeight;
+      laidOutW = window.innerWidth;
+      stageX = window.innerWidth > 860 ? 4 : 0;
+      let off = 0;
+      SEGMENTS.forEach((s) => {
+        s.start = off * vh;
+        off += s.w;
+        s.end = off * vh;
       });
-      track.style.height = `${totalScroll + VH}px`;
-    };
-    calcGeom();
+      totalW = off;
+      track.style.height = totalW * vh + vh + "px";
+      read();
+    }
 
-    // ── Lazy video loading ────────────────────────────────────────────────────
-    const loadClip = (s: Segment) => {
-      if (s.loading || s.ready || !s.clip) return;
+    function jumpTo(i: number) {
+      const seg = (SECTIONS[i] as any)._seg;
+      window.scrollTo({
+        top: seg.start + (seg.end - seg.start) * 0.5,
+        behavior: reduce ? "auto" : "smooth",
+      });
+    }
+
+    function loadClip(s: any) {
+      if (reduce || s.loading || !s.clip) return;
       s.loading = true;
       const url = isMobile() && s.clipM ? s.clipM : s.clip;
-      fetch(url)
-        .then((r) => r.blob())
-        .then((b) => {
-          const v = document.createElement("video");
-          v.src = URL.createObjectURL(b);
-          v.muted = true;
-          v.preload = "auto";
-          v.playsInline = true;
-          v.setAttribute("playsinline", "");
-          v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 0.3s";
-          // Prime on mobile (required for iOS seek)
-          if (isMobile()) {
-            v.play().then(() => v.pause()).catch(() => {});
-          }
-          s.el!.appendChild(v);
-          s.video = v;
-          s.hasClip = true;
+
+      const setupVideo = (srcUrl: string) => {
+        if (s.video) return;
+        const v = document.createElement("video");
+        v.className = "sw-scene__video";
+        v.muted = true;
+        v.playsInline = true;
+        v.preload = "auto";
+        v.crossOrigin = "anonymous";
+        v.setAttribute("muted", "");
+        v.setAttribute("playsinline", "");
+        v.src = srcUrl;
+        v.addEventListener("loadedmetadata", () => {
           s.ready = true;
-          s.loading = false;
+          read();
+        });
+        v.addEventListener(
+          "seeked",
+          () => {
+            s.el.classList.add("has-clip");
+          },
+          { once: true },
+        );
+        v.addEventListener("loadeddata", () => {
+          try {
+            v.pause();
+          } catch (e) {}
+          if (userReady) primeVideo(v);
+        });
+        s.el.appendChild(v);
+        s.video = v;
+        s.hasClip = true;
+      };
+
+      fetch(url)
+        .then((r) => (r.ok ? r.blob() : Promise.reject(new Error("Fetch failed"))))
+        .then((blob) => {
+          setupVideo(URL.createObjectURL(blob));
         })
-        .catch(() => { s.loading = false; });
-    };
+        .catch(() => {
+          // Fallback to direct video URL streaming for Cloudinary / external CDNs
+          try {
+            setupVideo(url);
+          } catch (e) {
+            s.loading = false;
+          }
+        });
+    }
 
-    // ── Scroll driver ─────────────────────────────────────────────────────────
-    let raf: number | null = null;
-    let lastScrollY = -1;
-    let activeSi = 0;
-    let pendingSeek = false;
+    function read() {
+      const y = window.scrollY || window.pageYOffset;
+      const fade = CROSSFADE * vh;
+      let ci = 0;
+      for (let i = 0; i < NSEG; i++) if (y >= SEGMENTS[i].start) ci = i;
 
-    const drive = () => {
-      raf = null;
-      const scrollY = window.scrollY;
-      if (scrollY === lastScrollY) { raf = requestAnimationFrame(drive); return; }
-      lastScrollY = scrollY;
-
-      const progress = scrollY / totalScroll;
-      scrollbarFill.style.width = `${clamp(progress) * 100}%`;
-
-      // Find active segment
-      let activeSeg = NSEG - 1;
       for (let i = 0; i < NSEG; i++) {
-        if (scrollY < segStarts[i] + segLens[i]) { activeSeg = i; break; }
+        const s = SEGMENTS[i];
+        if (y > s.start - 1.6 * vh && y < s.end + 1.6 * vh) loadClip(s);
+        const local = clamp((y - s.start) / (s.end - s.start), 0, 1);
+        s.target = s.linger ? lingerEase(local, s.linger) : local;
+        let outside = 0;
+        if (y < s.start) outside = s.start - y;
+        else if (y > s.end) outside = y - s.end;
+        const op = smooth(1 - outside / fade);
+        s.el.style.opacity = op;
+        s.visible = op > 0.001;
+        s.el.style.zIndex = i === ci ? "120" : String(100 + Math.round(op * 10));
+        if (!s.hasClip || !s.ready) {
+          const sc = reduce ? 1 : 1.03 + local * 0.14;
+          s.img.style.transform = `translateX(${stageX - 2}vw) scale(${sc.toFixed(3)})`;
+        }
       }
 
-      SEGMENTS.forEach((s, i) => {
-        const localT = clamp((scrollY - segStarts[i]) / segLens[i]);
-        const t = lingerEase(localT, s.linger || 0);
-
-        const isActive = i === activeSeg;
-        const nearBy = Math.abs(i - activeSeg) <= 1;
-
-        // Lazy-load nearby clips
-        if (nearBy && s.clip && !s.ready) loadClip(s);
-
-        // Show/hide scene
-        s.visible = isActive || (nearBy && (
-          (i < activeSeg && localT > 1 - CROSSFADE) ||
-          (i > activeSeg && localT < CROSSFADE)
-        ));
-
-        if (s.el) {
-          s.el.style.display = s.visible || i === activeSeg ? "block" : "none";
-          s.el.style.zIndex = isActive ? "2" : "1";
+      for (let i = 0; i < N; i++) {
+        const seg = (SECTIONS[i] as any)._seg;
+        const pr = clamp((y - seg.start) / (seg.end - seg.start), 0, 1);
+        const before = y < seg.start;
+        const after = y > seg.end;
+        let cop: number;
+        if (i === 0) {
+          cop = after ? 0 : smooth(1 - pr / 0.62);
+        } else if (i === N - 1) {
+          if (before) {
+            cop = 0;
+          } else if (after) {
+            // Fade out smoothly as user scrolls past the last segment into below-fold content
+            const exitPr = clamp((y - seg.end) / (0.35 * vh), 0, 1);
+            cop = smooth(1 - exitPr);
+          } else {
+            cop = smooth(pr / 0.4);
+          }
+        } else {
+          cop = before || after ? 0 : smooth(1 - Math.abs(pr - 0.5) / 0.5);
         }
 
-        // Scrub video
-        if (s.ready && s.hasClip && s.video) {
-          s.target = t;
-          if (!pendingSeek) {
-            pendingSeek = true;
-            requestAnimationFrame(() => {
-              pendingSeek = false;
-              SEGMENTS.forEach((seg) => {
-                if (!seg.video || !seg.hasClip) return;
-                const dur = seg.video.duration;
-                if (!isFinite(dur) || dur === 0) return;
-                const targetTime = clamp(seg.target ?? 0) * dur;
-                if (!seg.video.seeking && Math.abs(seg.video.currentTime - targetTime) > 0.016) {
-                  seg.video.currentTime = targetTime;
-                }
-                // Fade video over still
-                seg.video.style.opacity = seg.visible ? "1" : "0";
-              });
-            });
-          }
-        }
+        const c = copies[i];
+        c.style.opacity = String(cop);
+        c.style.transform = reduce ? "none" : `translateY(${(0.5 - pr) * 4}vh)`;
+        c.style.pointerEvents = cop > 0.5 ? "auto" : "none";
+      }
 
-        // Active section index for copy/nav/dots
-        if (s.kind === "dive" && isActive) {
-          if (activeSi !== s.si) {
-            activeSi = s.si;
-            copies.forEach((c, j) => c.classList.toggle("sw-copy--active", j === activeSi));
-            dots.forEach((d, j) => d.classList.toggle("sw-route__dot--active", j === activeSi));
-            nav.querySelectorAll(".sw-nav__item").forEach((b, j) => b.classList.toggle("sw-nav__item--active", j === activeSi));
-          }
+      const cur = SEGMENTS[ci];
+      const near = clamp(
+        cur.kind === "dive"
+          ? cur.si
+          : (y - cur.start) / (cur.end - cur.start) > 0.5
+            ? cur.si + 1
+            : cur.si,
+        0,
+        N - 1,
+      );
+      if (near !== activeIndex) {
+        activeIndex = near;
+        dots.forEach((d, k) => d.classList.toggle("is-active", k === near));
+        nav
+          .querySelectorAll(".sw-nav__item")
+          .forEach((n, k) => n.classList.toggle("is-active", k === near));
+        container.style.setProperty("--sw-accent", SECTIONS[near].accent || "");
+      }
+
+      // Exit transition: when scrolling past totalW * vh, smoothly fade out all fixed layers
+      // (stage, copylayer, sky, route dots, scrollbar, hint) so nothing remains stuck in the background
+      const trackEndY = totalW * vh;
+      let engineExitOp = 1;
+      if (y > trackEndY) {
+        const exitPr = clamp((y - trackEndY) / (0.35 * vh), 0, 1);
+        engineExitOp = smooth(1 - exitPr);
+      }
+
+      const isHidden = engineExitOp <= 0.001;
+      const fixedNodes = [sky, scrollbar, topbar, stage, copylayer, route, hint];
+      fixedNodes.forEach((node) => {
+        if (node) {
+          node.style.opacity = isHidden ? "0" : String(engineExitOp);
+          node.style.visibility = isHidden ? "hidden" : "visible";
+          node.style.pointerEvents = isHidden ? "none" : "";
         }
       });
 
-      raf = requestAnimationFrame(drive);
-    };
+      scrollbarFill.style.transform = `scaleX(${clamp(y / (totalW * vh))})`;
+      hint.style.opacity = isHidden ? "0" : String(clamp(1 - y / (0.5 * vh)) * engineExitOp);
+      if (particles) particles.style.transform = `translate3d(0, ${-y * 0.05}px, 0)`;
+      ticking = false;
+    }
 
-    // Initial active
-    copies[0]?.classList.add("sw-copy--active");
-    dots[0]?.classList.add("sw-route__dot--active");
-    nav.querySelector(".sw-nav__item")?.classList.add("sw-nav__item--active");
-    hint.classList.add("sw-hint--visible");
-    window.addEventListener("scroll", () => {
-      if (window.scrollY > VH * 0.5) hint.classList.remove("sw-hint--visible");
-    }, { passive: true });
-
-    raf = requestAnimationFrame(drive);
-
-    // Resize
-    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-    const onResize = () => {
-      // Ignore iOS URL-bar-only resizes (< 60px change)
-      if (isMobile() && Math.abs(window.innerHeight - VH) < 60) return;
-      if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(calcGeom, 120);
-    };
-    window.addEventListener("resize", onResize, { passive: true });
-
-    // Navigate to section
-    const jumpTo = (si: number) => {
-      let targetScroll = 0;
+    let running = true;
+    function raf() {
+      if (!running) return;
+      const eps = isMobile() ? 0.02 : 0.008;
       for (let i = 0; i < NSEG; i++) {
-        if (SEGMENTS[i].kind === "dive" && SEGMENTS[i].si === si) {
-          targetScroll = segStarts[i] + segLens[i] * 0.1;
-          break;
+        const s = SEGMENTS[i];
+        if (!s.hasClip || !s.ready || !s.video) continue;
+        if (s.video.seeking) continue;
+        if (!s.visible && Math.abs(s.cur - s.target) < 0.002) continue;
+        s.cur += (s.target - s.cur) * (reduce ? 1 : 0.18);
+        const dur = s.video.duration || 1;
+        const t = clamp(s.cur, 0, 0.999) * dur;
+        if (Math.abs(s.video.currentTime - t) > eps) {
+          try {
+            s.video.currentTime = t;
+          } catch (e) {}
         }
       }
-      window.scrollTo({ top: targetScroll, behavior: reduce ? "auto" : "smooth" });
-    };
+      requestAnimationFrame(raf);
+    }
 
-    // Particles (decorative, desktop only)
-    if (config.atmosphere !== false && !isMobile()) {
-      for (let p = 0; p < 18; p++) {
-        const dot = el("div", "sw-particle");
-        dot.style.cssText = `left:${Math.random() * 100}%;top:${Math.random() * 100}%;animation-delay:${(Math.random() * 8).toFixed(2)}s;animation-duration:${(6 + Math.random() * 6).toFixed(2)}s`;
-        particles.appendChild(dot);
+    let userReady = false;
+    function primeVideo(v: any) {
+      if (!isMobile() || !v) return;
+      try {
+        const p = v.play();
+        if (p && p.then)
+          p.then(() => {
+            try {
+              v.pause();
+            } catch (e) {}
+          }).catch(() => {});
+      } catch (e) {}
+    }
+    function onFirstGesture() {
+      if (userReady) return;
+      userReady = true;
+      SEGMENTS.forEach((s) => primeVideo(s.video));
+    }
+    window.addEventListener("pointerdown", onFirstGesture, { once: true, passive: true });
+    window.addEventListener("touchstart", onFirstGesture, { once: true, passive: true });
+
+    seedParticles(particles, reduce || coarse);
+
+    const onScroll = () => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(read);
       }
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+
+    function onResize() {
+      if (coarse && window.innerWidth === laidOutW) return;
+      layout();
+    }
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", layout);
+    window.addEventListener("load", layout);
+
+    layout();
+    requestAnimationFrame(raf);
+
+    function el<K extends keyof HTMLElementTagNameMap>(
+      tag: K,
+      cls?: string,
+    ): HTMLElementTagNameMap[K] {
+      const n = document.createElement(tag);
+      if (cls) n.className = cls;
+      return n;
+    }
+    function pad(n: number) {
+      return String(n).padStart(2, "0");
+    }
+    function esc(s: string) {
+      return String(s).replace(
+        /[&<>"]/g,
+        (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string,
+      );
+    }
+    function ctaBtns(cta: any) {
+      let h = "";
+      if (cta.primary)
+        h += `<a class="sw-btn sw-btn--primary" href="${esc(cta.primary.href || "#")}">${esc(cta.primary.label)}</a>`;
+      if (cta.secondary)
+        h += `<a class="sw-btn sw-btn--ghost" href="${esc(cta.secondary.href || "#")}">${esc(cta.secondary.label)}</a>`;
+      return h;
     }
 
-    // ── Reduced-motion: skip video entirely ──────────────────────────────────
-    if (reduce) {
-      if (raf) cancelAnimationFrame(raf);
-      SEGMENTS.forEach((s, i) => {
-        if (s.el) s.el.style.display = "block";
-        if (s.img) s.img.style.opacity = "1";
-      });
-      copies.forEach((c, i) => c.classList.toggle("sw-copy--active", i === 0));
-      track.style.height = "100vh";
-    }
-
-    // ── Cleanup ───────────────────────────────────────────────────────────────
     return () => {
-      if (raf) cancelAnimationFrame(raf);
+      running = false;
+      window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", layout);
+      window.removeEventListener("load", layout);
       container.classList.remove("sw-root");
       container.innerHTML = "";
     };
   }
 
-  // ── CSS injection (namespaced under .sw-root) ─────────────────────────────
+  function seedParticles(host: HTMLElement | null, reduce: boolean) {
+    if (!host || reduce) return;
+    const kinds = ["dot", "dot", "ring"];
+    const seeds = [
+      7, 23, 41, 58, 71, 88, 12, 34, 52, 66, 83, 95, 18, 29, 47, 63, 77, 91, 5, 38, 55, 69, 82, 97,
+    ];
+    for (let k = 0; k < 20; k++) {
+      const s = document.createElement("span");
+      s.className = "sw-pt sw-pt--" + kinds[k % kinds.length];
+      s.style.left = seeds[k % seeds.length] + "vw";
+      s.style.top = ((seeds[(k * 3) % seeds.length] * 1.3) % 100) + "vh";
+      s.style.setProperty(
+        "--sw-sc",
+        (0.5 + ((seeds[(k * 5) % seeds.length] % 60) / 60) * 1.1).toFixed(2),
+      );
+      const dur = 14 + (seeds[(k * 7) % seeds.length] % 22);
+      s.style.animationDuration = dur + "s";
+      s.style.animationDelay = -(seeds[(k * 2) % seeds.length] % dur) + "s";
+      host.appendChild(s);
+    }
+  }
+
   function injectCSS() {
-    if (document.getElementById("sw-style")) return;
+    if (document.getElementById("sw-css")) return;
+    const css = `
+    .sw-root{--sw-bg:var(--color-background,#0f0d13);--sw-ink:var(--color-foreground,#f8fafc);--sw-ink-soft:var(--color-muted,#94a3b8);--sw-accent:#8b5cf6;
+      --sw-font-display:ui-rounded,"SF Pro Rounded","Segoe UI",system-ui,sans-serif;
+      --sw-font-body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+      color:var(--sw-ink);font-family:var(--sw-font-body);}
+    .sw-sky{position:fixed;inset:0;height:100vh;height:100dvh;z-index:0;overflow:hidden;pointer-events:none;background:var(--sw-bg);}
+    .sw-sky__grad{position:absolute;inset:-10%;background:linear-gradient(178deg,color-mix(in srgb,var(--sw-accent) 12%,var(--sw-bg)) 0%,var(--sw-bg) 55%,color-mix(in srgb,var(--sw-accent) 6%,var(--sw-bg)) 100%);}
+    .sw-sky__glow{position:absolute;inset:0;background:radial-gradient(60% 42% at 74% 16%,color-mix(in srgb,var(--sw-accent) 22%,transparent),transparent 70%),radial-gradient(46% 34% at 50% 50%,color-mix(in srgb,#fff 20%,transparent),transparent 70%);}
+    .sw-particles{position:absolute;inset:-6% -2%;will-change:transform;}
+    .sw-pt{position:absolute;width:13px;height:13px;transform:scale(var(--sw-sc,1));opacity:0;animation:sw-drift linear infinite;}
+    .sw-pt::before{content:"";position:absolute;inset:0;border-radius:50%;}
+    .sw-pt--dot::before{background:radial-gradient(circle at 34% 30%,color-mix(in srgb,var(--sw-accent) 60%,#000),#000 82%);}
+    .sw-pt--ring::before{background:transparent;border:2px solid color-mix(in srgb,var(--sw-accent) 55%,transparent);}
+    @keyframes sw-drift{0%{opacity:0;transform:scale(var(--sw-sc)) translate(0,12vh) rotate(0)}12%{opacity:.5}88%{opacity:.45}100%{opacity:0;transform:scale(var(--sw-sc)) translate(4vw,-22vh) rotate(210deg)}}
+    .sw-scrollbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:60;background:color-mix(in srgb,var(--sw-accent) 14%,transparent);}
+    .sw-scrollbar span{display:block;height:100%;width:100%;transform-origin:0 50%;transform:scaleX(0);background:var(--sw-accent);}
+    .sw-topbar{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:clamp(14px,2.4vw,26px) clamp(18px,5vw,64px);pointer-events:none;}
+    .sw-topbar>*{pointer-events:auto;}
+    .sw-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--sw-ink);}
+    .sw-brand__mark{width:24px;height:28px;border-radius:7px 7px 10px 10px;background:linear-gradient(160deg,var(--sw-accent),color-mix(in srgb,var(--sw-accent) 60%,#000));box-shadow:0 6px 14px color-mix(in srgb,var(--sw-accent) 40%,transparent);}
+    .sw-brand__name{font-family:var(--sw-font-display);font-weight:700;font-size:1.1rem;}
+    .sw-nav{display:flex;gap:4px;padding:5px;background:color-mix(in srgb,#000 55%,transparent);backdrop-filter:blur(10px);border:1px solid color-mix(in srgb,var(--sw-accent) 16%,transparent);border-radius:999px;}
+    .sw-nav__item{font:inherit;font-size:.82rem;color:var(--sw-ink-soft);border:0;background:transparent;cursor:pointer;padding:7px 14px;border-radius:999px;transition:color .25s,background .25s;}
+    .sw-nav__item:hover{color:var(--sw-ink);} .sw-nav__item.is-active{color:#fff;background:var(--sw-accent);}
+    .sw-topcta{text-decoration:none;font-weight:600;font-size:.9rem;color:#fff;background:var(--sw-accent);padding:10px 20px;border-radius:999px;white-space:nowrap;}
+    .sw-stage{position:fixed;inset:0;height:100vh;height:100dvh;z-index:10;pointer-events:none;}
+    .sw-scene{position:absolute;inset:0;opacity:0;overflow:hidden;will-change:opacity;}
+    .sw-scene__video,.sw-scene__still{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 42%;}
+    .sw-scene__still{will-change:transform;} .sw-scene.has-clip .sw-scene__still{opacity:0;} .sw-scene__video{z-index:1;}
+    .sw-copylayer{position:fixed;inset:0;height:100vh;height:100dvh;z-index:20;pointer-events:none;}
+    .sw-copylayer::before{content:"";position:absolute;inset:0;width:min(52vw,720px);background:linear-gradient(90deg,color-mix(in srgb,var(--sw-bg) 96%,transparent) 0%,color-mix(in srgb,var(--sw-bg) 88%,transparent) 30%,color-mix(in srgb,var(--sw-bg) 50%,transparent) 58%,transparent 100%);pointer-events:none;}
+    .sw-copy{position:absolute;left:clamp(18px,5vw,64px);top:auto;bottom:clamp(80px,12vh,140px);transform:none;width:min(42vw,460px);opacity:0;will-change:opacity,transform;}
+    .sw-copy__eyebrow{display:block;margin-bottom:12px;font-family:var(--sw-font-display);font-weight:700;font-size:.8rem;letter-spacing:.16em;text-transform:uppercase;color:var(--sw-accent);}
+    .sw-copy__title{font-family:var(--sw-font-display);font-weight:700;color:var(--sw-ink);font-size:clamp(2rem,4.4vw,3.5rem);line-height:1.03;margin:0 0 0;letter-spacing:-.01em;text-shadow:0 2px 24px color-mix(in srgb,var(--sw-bg) 80%,transparent),0 0 60px color-mix(in srgb,var(--sw-bg) 50%,transparent);}
+    .sw-copy__body{margin-top:16px;font-size:clamp(1rem,1.25vw,1.14rem);line-height:1.55;color:color-mix(in srgb,var(--sw-ink) 85%,var(--sw-ink-soft));max-width:40ch;text-shadow:0 1px 16px color-mix(in srgb,var(--sw-bg) 90%,transparent);}
+    .sw-copy__tags{list-style:none;display:flex;flex-wrap:wrap;gap:8px;margin:20px 0 0;padding:0;}
+    .sw-copy__tags li{font-size:.82rem;font-weight:600;color:#fff;padding:7px 14px;border-radius:999px;background:color-mix(in srgb,var(--sw-accent) 25%,rgba(255,255,255,0.08));border:1px solid color-mix(in srgb,var(--sw-accent) 40%,transparent);backdrop-filter:blur(6px);}
+    .sw-copy__cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:24px;pointer-events:auto;}
+    .sw-btn{text-decoration:none;font-weight:600;font-size:.95rem;padding:13px 24px;border-radius:999px;transition:transform .2s;}
+    .sw-btn--primary{color:#fff;background:var(--sw-accent);} .sw-btn--primary:hover{transform:translateY(-2px);}
+    .sw-btn--ghost{color:var(--sw-ink);border:1.5px solid color-mix(in srgb,var(--sw-ink) 25%,transparent);backdrop-filter:blur(8px);} .sw-btn--ghost:hover{transform:translateY(-2px);}
+    .sw-route{position:fixed;right:clamp(14px,2.4vw,28px);top:50%;z-index:40;transform:translateY(-50%);display:flex;flex-direction:column;gap:14px;padding:12px 6px;}
+    .sw-route__dot{position:relative;border:0;background:transparent;cursor:pointer;width:14px;height:14px;display:grid;place-items:center;padding:0;}
+    .sw-route__dot i{width:6px;height:6px;border-radius:50%;background:color-mix(in srgb,var(--sw-ink) 30%,transparent);transition:transform .3s,background .3s,box-shadow .3s;}
+    .sw-route__dot:hover i{transform:scale(1.5);background:color-mix(in srgb,var(--sw-accent) 70%,transparent);}
+    .sw-route__dot.is-active i{background:var(--sw-accent);transform:scale(1.6);box-shadow:0 0 0 4px color-mix(in srgb,var(--sw-accent) 18%,transparent),0 0 12px color-mix(in srgb,var(--sw-accent) 30%,transparent);}
+    .sw-hint{position:fixed;left:50%;bottom:26px;z-index:30;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:10px;font-size:.76rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sw-ink-soft);transition:opacity .3s;}
+    .sw-hint i{width:22px;height:34px;border-radius:12px;border:2px solid color-mix(in srgb,var(--sw-ink) 28%,transparent);position:relative;}
+    .sw-hint i::after{content:"";position:absolute;left:50%;top:7px;width:4px;height:7px;border-radius:2px;background:var(--sw-accent);transform:translateX(-50%);animation:sw-wheel 1.7s ease-in-out infinite;}
+    @keyframes sw-wheel{0%{opacity:0;top:6px}40%{opacity:1}100%{opacity:0;top:17px}}
+    .sw-track{position:relative;z-index:1;width:100%;pointer-events:none;}
+    
+    /* ─── Tablet view (641px - 1024px) ─── */
+    @media (min-width:641px) and (max-width:1024px){
+      .sw-nav{display:none;}
+      .sw-copylayer::before{width:min(68vw,620px);background:linear-gradient(90deg,color-mix(in srgb,var(--sw-bg) 96%,transparent) 0%,color-mix(in srgb,var(--sw-bg) 85%,transparent) 42%,color-mix(in srgb,var(--sw-bg) 45%,transparent) 70%,transparent 100%);}
+      .sw-copy{left:clamp(20px,4.5vw,44px);bottom:clamp(70px,11vh,120px);width:min(52vw,460px);}
+      .sw-copy__title{font-size:clamp(1.9rem,4.8vw,2.9rem);}
+      .sw-copy__body{font-size:clamp(.94rem,2vw,1.06rem);max-width:38ch;}
+      .sw-scene__video,.sw-scene__still{object-position:center 42%;}
+      .sw-route{right:10px;gap:12px;}
+    }
+
+    /* ─── Mobile view (<=640px) ─── */
+    @media (max-width:640px){
+      .sw-nav{display:none;}
+      .sw-copylayer::before{width:100%;height:75%;top:auto;bottom:0;background:linear-gradient(0deg,var(--sw-bg) 18%,color-mix(in srgb,var(--sw-bg) 88%,transparent) 52%,color-mix(in srgb,var(--sw-bg) 45%,transparent) 76%,transparent 100%);}
+      .sw-copy{left:16px;right:16px;bottom:calc(clamp(48px,10dvh,88px) + env(safe-area-inset-bottom));width:auto;max-width:calc(100vw - 32px);transform:none;}
+      .sw-copy__eyebrow{font-size:.72rem;margin-bottom:8px;letter-spacing:.14em;}
+      .sw-copy__title{font-size:clamp(1.65rem,6.8vw,2.25rem);line-height:1.08;}
+      .sw-copy__body{max-width:none;font-size:clamp(.88rem,3.4vw,1rem);line-height:1.45;margin-top:10px;}
+      .sw-copy__tags{gap:6px;margin-top:12px;}
+      .sw-copy__tags li{font-size:.74rem;padding:5px 11px;font-weight:500;backdrop-filter:blur(8px);}
+      .sw-scene__video,.sw-scene__still{object-position:50% 38%;}
+      .sw-hint{bottom:calc(14px + env(safe-area-inset-bottom));font-size:.7rem;}
+      .sw-route{right:4px;gap:10px;padding:8px 4px;}
+      .sw-route__dot{width:22px;height:22px;}
+      .sw-route__dot i{width:5px;height:5px;}
+      .sw-btn{padding:11px 20px;font-size:.88rem;}
+    }
+
+    /* ─── Compact landscape / Foldables ─── */
+    @media (max-height:520px) and (orientation:landscape){
+      .sw-copy{bottom:16px;max-width:50vw;}
+      .sw-copy__title{font-size:1.35rem;}
+      .sw-copy__body{font-size:.82rem;line-height:1.3;margin-top:6px;}
+      .sw-copy__tags{display:none;}
+      .sw-hint{display:none;}
+    }
+
+    @media (hover:none) and (pointer:coarse){
+      .sw-route{padding:10px 4px;}
+    }
+    @media (prefers-reduced-motion:reduce){ .sw-hint i::after{animation:none;} .sw-pt{display:none;} }
+    `;
     const style = document.createElement("style");
-    style.id = "sw-style";
-    style.textContent = `
-.sw-root{position:relative;height:100vh;overflow:hidden;background:var(--sw-bg,#0a0a0a);color:var(--sw-ink,#f0f0f0);font-family:var(--sw-font-body,system-ui,sans-serif)}
-.sw-track{position:absolute;top:0;left:0;width:1px;pointer-events:none;z-index:0}
-.sw-sky{position:absolute;inset:0;z-index:0;overflow:hidden}
-.sw-sky__grad{position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 30%,var(--sw-accent,#7c3aed22),transparent 70%)}
-.sw-sky__glow{position:absolute;bottom:-20%;left:10%;right:10%;height:50%;background:radial-gradient(ellipse 100% 100%,var(--sw-accent,#7c3aed15),transparent 70%);filter:blur(40px)}
-.sw-particle{position:absolute;width:2px;height:2px;background:var(--sw-accent,#a78bfa);border-radius:50%;opacity:0;animation:sw-drift linear infinite}
-@keyframes sw-drift{0%{opacity:0;transform:translateY(0)}20%{opacity:.6}80%{opacity:.3}100%{opacity:0;transform:translateY(-60px)}}
-.sw-stage{position:sticky;top:0;width:100%;height:100vh;z-index:1;overflow:hidden}
-.sw-scene{position:absolute;inset:0;display:none}
-.sw-scene__still{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.sw-scrollbar{position:fixed;top:0;left:0;right:0;height:2px;background:rgba(255,255,255,.08);z-index:100}
-.sw-scrollbar>span{display:block;height:100%;background:var(--sw-accent,#7c3aed);transition:width .1s linear}
-.sw-topbar{position:fixed;top:0;left:0;right:0;z-index:90;display:flex;align-items:center;gap:1rem;padding:.75rem 1.25rem;padding-top:.625rem;background:linear-gradient(to bottom,rgba(0,0,0,.5),transparent);pointer-events:none}
-.sw-topbar>*{pointer-events:auto}
-.sw-brand{display:flex;align-items:center;gap:.5rem;text-decoration:none;color:inherit;font-weight:600;font-size:.9rem}
-.sw-brand__mark{display:inline-block;width:1.75rem;height:1.75rem;border-radius:.5rem;background:var(--sw-accent,#7c3aed)}
-.sw-nav{display:flex;gap:.25rem;margin-left:auto}
-.sw-nav__item{background:none;border:none;color:rgba(255,255,255,.6);font-size:.8rem;padding:.375rem .75rem;border-radius:.5rem;cursor:pointer;transition:background .15s,color .15s}
-.sw-nav__item:hover,.sw-nav__item--active{background:rgba(255,255,255,.1);color:#fff}
-.sw-topcta{padding:.5rem 1rem;border-radius:.75rem;background:var(--sw-accent,#7c3aed);color:#fff;font-size:.8rem;font-weight:600;text-decoration:none;transition:filter .15s}
-.sw-topcta:hover{filter:brightness(1.1)}
-.sw-copylayer{position:absolute;inset:0;z-index:20;pointer-events:none;display:flex;align-items:flex-end;padding:clamp(1.5rem,4vw,3rem)}
-.sw-copy{position:absolute;bottom:clamp(1.5rem,4vw,3rem);left:clamp(1.5rem,4vw,3rem);right:clamp(1.5rem,4vw,3rem);max-width:42rem;pointer-events:auto;opacity:0;transform:translateY(1rem);transition:opacity .4s,transform .4s;display:none}
-.sw-copy--active{opacity:1;transform:translateY(0);display:block}
-.sw-copy__num{display:block;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:.5rem;font-family:var(--sw-font-display,system-ui,monospace)}
-.sw-copy__eyebrow{display:block;font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--sw-accent,#a78bfa);margin-bottom:.4rem}
-.sw-copy__title{margin:0 0 .6rem;font-size:clamp(1.6rem,4vw,2.8rem);font-weight:700;line-height:1.1;font-family:var(--sw-font-display,system-ui,sans-serif)}
-.sw-copy__body{margin:0 0 1rem;font-size:clamp(.85rem,1.5vw,1.05rem);color:rgba(255,255,255,.7);line-height:1.6;max-width:36rem}
-.sw-copy__tags{list-style:none;padding:0;margin:0 0 1.25rem;display:flex;flex-wrap:wrap;gap:.5rem}
-.sw-copy__tags li{padding:.3rem .75rem;border-radius:999px;border:1px solid rgba(255,255,255,.18);font-size:.75rem;color:rgba(255,255,255,.7);backdrop-filter:blur(6px);background:rgba(255,255,255,.06)}
-.sw-copy__cta{display:flex;flex-wrap:wrap;gap:.75rem}
-.sw-cta{display:inline-block;padding:.65rem 1.5rem;border-radius:.875rem;font-size:.9rem;font-weight:600;text-decoration:none;transition:filter .15s,transform .1s}
-.sw-cta--primary{background:var(--sw-accent,#7c3aed);color:#fff;box-shadow:0 4px 24px -4px var(--sw-accent,#7c3aed)}
-.sw-cta--secondary{border:1px solid rgba(255,255,255,.25);color:#fff;backdrop-filter:blur(8px)}
-.sw-cta:hover{filter:brightness(1.1)}
-.sw-cta:active{transform:scale(.98)}
-.sw-route{position:fixed;right:1.25rem;top:50%;transform:translateY(-50%);z-index:80;display:flex;flex-direction:column;gap:.5rem}
-.sw-route__dot{background:none;border:none;width:2rem;height:2rem;cursor:pointer;display:flex;align-items:center;justify-content:flex-end;gap:.4rem;padding:0;color:rgba(255,255,255,.5);position:relative}
-.sw-route__dot i{width:.55rem;height:.55rem;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);transition:all .2s}
-.sw-route__dot--active i{background:var(--sw-accent,#a78bfa);border-color:var(--sw-accent,#a78bfa);box-shadow:0 0 8px var(--sw-accent,#a78bfa)}
-.sw-route__label{font-size:.7rem;opacity:0;transform:translateX(.25rem);transition:opacity .15s,transform .15s;white-space:nowrap}
-.sw-route__dot:hover .sw-route__label{opacity:1;transform:translateX(0)}
-.sw-hint{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:.35rem;font-size:.75rem;color:rgba(255,255,255,.5);opacity:0;transition:opacity .4s;pointer-events:none}
-.sw-hint--visible{opacity:1}
-.sw-hint i{width:1.25rem;height:1.25rem;border:1.5px solid rgba(255,255,255,.3);border-radius:50%;display:flex;align-items:center;justify-content:center}
-.sw-hint i::after{content:'';width:4px;height:4px;background:rgba(255,255,255,.6);border-radius:50%;animation:sw-bounce 1.2s ease-in-out infinite}
-@keyframes sw-bounce{0%,100%{transform:translateY(-3px)}50%{transform:translateY(3px)}}
-@media(max-width:640px){.sw-route{display:none}.sw-copy__title{font-size:clamp(1.3rem,5vw,2rem)}}
-@media(prefers-reduced-motion:reduce){.sw-copy{transition:none!important}.sw-particle{display:none}.sw-hint{display:none}}`;
+    style.id = "sw-css";
+    style.textContent = "@layer sw {\n" + css + "\n}";
     document.head.appendChild(style);
   }
 
@@ -520,10 +615,6 @@ export type MountFn = (container: HTMLElement, config: ScrollConfig) => () => vo
 
 let _mount: MountFn | null = null;
 
-/**
- * Returns the mountLetsScroll function. Safe to call multiple times.
- * Must only be called client-side (inside useEffect / after hydration).
- */
 export function getMount(): MountFn {
   if (!_mount) _mount = _engineFactory();
   return _mount;

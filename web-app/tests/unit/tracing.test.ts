@@ -198,7 +198,9 @@ describe("tracing", () => {
     await runWithTrace({ name: "gen-error" }, async () => {
       const handle = observeGeneration("llm.call");
       handle.endError(new Error("gen failed"));
-      expect(generation.end).toHaveBeenCalledWith(expect.objectContaining({ statusMessage: "gen failed" }));
+      expect(generation.end).toHaveBeenCalledWith(
+        expect.objectContaining({ statusMessage: "gen failed" }),
+      );
     });
   });
 

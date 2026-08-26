@@ -10,7 +10,6 @@ export type ModeFilter = "all" | "standard" | "agentic";
 export type DateRange = "all" | "7d" | "30d";
 export type SortKey = "updated" | "created" | "title";
 
-
 function withinRange(iso: string, range: DateRange): boolean {
   if (range === "all") {
     return true;
@@ -370,4 +369,3 @@ export function useHistoryList(): UseHistoryListReturn {
 }
 
 export type { ConversationItem, Stats, PreviewConversation };
-

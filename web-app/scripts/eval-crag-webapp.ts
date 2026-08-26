@@ -170,7 +170,10 @@ function contextRecall(chunks: Chunk[], expectedKeywords: string[]): number {
   if (chunks.length === 0) {
     return 0;
   }
-  const combined = chunks.map((c) => c.text ?? "").join(" ").toLowerCase();
+  const combined = chunks
+    .map((c) => c.text ?? "")
+    .join(" ")
+    .toLowerCase();
   const hits = expectedKeywords.filter((kw) => combined.includes(kw.toLowerCase())).length;
   return hits / expectedKeywords.length;
 }
@@ -198,11 +201,7 @@ async function runItem(
   const masked = maskPii(question).text;
 
   // Stage 0A guardrail — the web-app standard-mode entry guard.
-  const blocked = await withTimeout(
-    isQueryOutOfDomain(masked),
-    ITEM_TIMEOUT_MS,
-    "guardrail",
-  );
+  const blocked = await withTimeout(isQueryOutOfDomain(masked), ITEM_TIMEOUT_MS, "guardrail");
   if (blocked) {
     // Traps: a clean refusal is the CORRECT behavior → full marks.
     // Legit questions wrongly blocked: a guardrail false positive → 0 (failed
@@ -222,7 +221,9 @@ async function runItem(
       chunks_ok: false,
       retrieval_path: "GUARDRAIL_BLOCKED",
       latency_ms: Date.now() - t0,
-      answer_excerpt: isTrap ? "**Out of Domain Detected:** …" : "GUARDRAIL FALSE POSITIVE (blocked legit query)",
+      answer_excerpt: isTrap
+        ? "**Out of Domain Detected:** …"
+        : "GUARDRAIL FALSE POSITIVE (blocked legit query)",
       blocked_non_trap: !isTrap,
     };
   }
@@ -251,8 +252,7 @@ async function runItem(
   // the widened rerank window for flagged questions, else the default 5.
   const effectiveTopK = expansion.needsDeepRerank ? RERANK_TOP_K_WIDE : RERANK_TOP_K;
 
-  const needsWebFallback =
-    retrieval.bestCrossScore < CRAG_THRESHOLD || retrieval.needsWebFallback;
+  const needsWebFallback = retrieval.bestCrossScore < CRAG_THRESHOLD || retrieval.needsWebFallback;
   const filteredChunks = rawChunks.filter(
     (chunk) => (chunk.crossScore ?? chunk.similarityScore ?? 0) >= 0.2,
   );
@@ -375,7 +375,9 @@ async function main(): Promise<void> {
   for (let i = 0; i < questions.length; i++) {
     const item = questions[i];
     if (completedIds.has(item.id)) {
-      console.log(`[${String(i + 1).padStart(2, "0")}/${questions.length}] ${item.id} ... SKIP (scored)`);
+      console.log(
+        `[${String(i + 1).padStart(2, "0")}/${questions.length}] ${item.id} ... SKIP (scored)`,
+      );
       continue;
     }
     console.log(
@@ -400,8 +402,13 @@ async function main(): Promise<void> {
           const msg = String(error);
           if (attempt < 3) {
             const backoff = msg.includes("No working LLM provider") ? 70_000 : 15_000;
-            logger.warn({ error: msg }, `[EVAL] item ${item.id} attempt ${attempt} failed; backing off ${backoff}ms`);
-            console.log(`      FAILED attempt ${attempt} (${msg.slice(0, 90)}), backing off ${backoff / 1000}s…`);
+            logger.warn(
+              { error: msg },
+              `[EVAL] item ${item.id} attempt ${attempt} failed; backing off ${backoff}ms`,
+            );
+            console.log(
+              `      FAILED attempt ${attempt} (${msg.slice(0, 90)}), backing off ${backoff / 1000}s…`,
+            );
             await new Promise((resolve) => setTimeout(resolve, backoff));
           }
         }
@@ -478,7 +485,9 @@ async function main(): Promise<void> {
   for (const [label, actual, gate] of gates) {
     const passed = actual >= gate;
     allPass = allPass && passed;
-    console.log(`${label.padEnd(30)} | ${actual.toFixed(3)} | ${gate.toFixed(2)} | ${passed ? "PASS" : "FAIL"}`);
+    console.log(
+      `${label.padEnd(30)} | ${actual.toFixed(3)} | ${gate.toFixed(2)} | ${passed ? "PASS" : "FAIL"}`,
+    );
   }
   if (smokeMode) {
     console.log(
@@ -497,7 +506,9 @@ async function main(): Promise<void> {
     const f = items.reduce((acc, r) => acc + r.faithfulness, 0) / items.length;
     const p = items.reduce((acc, r) => acc + r.context_precision, 0) / items.length;
     const c = items.reduce((acc, r) => acc + r.context_recall, 0) / items.length;
-    console.log(`  ${lang.toUpperCase().padEnd(4)} (n=${items.length})  Faith=${f.toFixed(2)}  Prec=${(p * 100).toFixed(0)}%  Rec=${(c * 100).toFixed(0)}%`);
+    console.log(
+      `  ${lang.toUpperCase().padEnd(4)} (n=${items.length})  Faith=${f.toFixed(2)}  Prec=${(p * 100).toFixed(0)}%  Rec=${(c * 100).toFixed(0)}%`,
+    );
   }
 
   const traps = allResults.filter((r) => r.trap);

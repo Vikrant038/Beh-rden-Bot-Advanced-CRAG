@@ -75,4 +75,12 @@ describe("ChangelogModal", () => {
     render(<ChangelogModal open onClose={() => {}} />);
     await waitFor(() => expect(screen.getByText(/UI\/UX Enhancement Batch/)).toBeInTheDocument());
   });
+
+  it("keeps the fallback when the API returns a 500 non-OK status", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+      new Response("Server Error", { status: 500 }),
+    );
+    render(<ChangelogModal open onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByText(/UI\/UX Enhancement Batch/)).toBeInTheDocument());
+  });
 });

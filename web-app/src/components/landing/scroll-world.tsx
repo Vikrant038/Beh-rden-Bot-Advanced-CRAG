@@ -12,6 +12,24 @@ import { type ScrollConfig, getMount } from "./scroll-engine";
 // The engine degrades gracefully: if a clip file is empty / fails to fetch,
 // that segment shows only the still poster.
 
+// Optional CDN / External storage prefix for deployment (e.g. Cloudinary / Cloudflare R2 / AWS S3 / Vercel Blob)
+// Defaults to local Next.js /public directory if not set.
+const ASSET_BASE = (
+  process.env.SCROLL_ASSETS_URL ||
+  process.env.NEXT_PUBLIC_SCROLL_ASSETS_URL ||
+  ""
+).replace(/\/$/, "");
+const assetUrl = (path: string) => {
+  if (!ASSET_BASE) return path;
+  // Auto-format Cloudinary URLs if root cloud endpoint is provided (e.g. https://res.cloudinary.com/<cloud_name>)
+  if (ASSET_BASE.includes("cloudinary.com") && !ASSET_BASE.includes("/upload")) {
+    const isVideo = path.endsWith(".mp4") || path.includes("/vid/");
+    const type = isVideo ? "video" : "image";
+    return `${ASSET_BASE}/${type}/upload${path}`;
+  }
+  return `${ASSET_BASE}${path}`;
+};
+
 const BEHOERDEN_WORLD: ScrollConfig = {
   // brand and nav CTA are intentionally omitted — the page already has a
   // sticky navbar with "Behörden-Bot" branding and "Get started" button.
@@ -19,20 +37,21 @@ const BEHOERDEN_WORLD: ScrollConfig = {
   hint: "scroll to explore",
   nav: false, // hide the engine's own section nav (page uses scroll route dots only)
   atmosphere: true,
-  diveScroll: 1.4,
-  connScroll: 0.9,
+  diveScroll: 1.0,
+  connScroll: 0.5,
 
   sections: [
     {
       id: "dream",
       label: "Start",
-      still: "/scroll/dream.webp",
-      clip: "/scroll/vid/dream.mp4",
+      still: assetUrl("/scroll/dream.png"),
+      clip: assetUrl("/scroll/vid/dream.mp4"),
       accent: "#7c3aed",
-      linger: 0.3,
+      linger: 0.25,
       eyebrow: "Your German journey starts here",
       title: "Your AI guide to studying in Germany",
-      body: "Visas, APS, blocked accounts, university — answered from official sources.",
+      body: "Get instant, verified answers about visas, APS certificates, blocked accounts, and admissions — cited from official German sources.",
+      tags: ["Visa Checklist", "Blocked Account 2026", "APS India", "uni-assist"],
       cta: {
         primary: { label: "Start asking →", href: "/login" },
         secondary: { label: "See how it works", href: "#how-it-works" },
@@ -41,49 +60,55 @@ const BEHOERDEN_WORLD: ScrollConfig = {
     {
       id: "docs",
       label: "Documents",
-      still: "/scroll/docs.webp",
-      clip: "/scroll/vid/docs.mp4",
+      still: assetUrl("/scroll/docs.png"),
+      clip: assetUrl("/scroll/vid/docs.mp4"),
       accent: "#2563eb",
-      linger: 0.3,
-      eyebrow: "Documents & Visas",
+      linger: 0.25,
+      eyebrow: "How It Works · 3-Agent ReAct",
       title: "Never get lost in the paperwork",
-      body: "Official embassy pages, BAMF brochures, and consulate guidance — every answer cites its sources with confidence scores.",
-      tags: ["Student Visa", "Blocked Account", "APS Certificate", "Health Insurance"],
+      body: "Research, Analyst, and Writer agents collaborate to cross-reference BAMF regulations, consulate guidelines, and university requirements with confidence scoring.",
+      tags: [
+        "Embassy Guidelines",
+        "Blocked Account (€11,904)",
+        "Health Insurance (TK/Barmer)",
+        "Declaration of Consent",
+      ],
     },
     {
       id: "aps",
       label: "APS",
-      still: "/scroll/aps.webp",
-      clip: "/scroll/vid/aps.mp4",
+      still: assetUrl("/scroll/aps.png"),
+      clip: assetUrl("/scroll/vid/aps.mp4"),
       accent: "#059669",
-      linger: 0.3,
-      eyebrow: "APS Certificate",
+      linger: 0.25,
+      eyebrow: "Verification · APS Certificate",
       title: "Your degree, officially recognised",
-      body: "Get clear guidance on the APS process, timelines, document lists, and what happens after — in English or German.",
-      tags: ["APS Timeline", "Degree Recognition", "uni-assist", "Scholarships"],
+      body: "Clear step-by-step guidance on APS timelines, DigiLocker verification, uni-assist VPD conversions, and German GPA equivalence (Bavarian Formula).",
+      tags: ["APS Timeline", "DigiLocker Verification", "Bavarian Formula (GPA)", "uni-assist VPD"],
     },
     {
       id: "campus",
       label: "Campus",
-      still: "/scroll/campus.webp",
-      clip: "/scroll/vid/campus.mp4",
+      still: assetUrl("/scroll/campus.png"),
+      clip: assetUrl("/scroll/vid/campus.mp4"),
       accent: "#d97706",
-      linger: 0.4,
-      eyebrow: "Start your semester",
+      linger: 0.3,
+      eyebrow: "Arrival & Graduation",
       title: "From first day to graduation",
-      body: "Ask about city costs, semester contributions, language requirements — every answer grounded in real sources with confidence scores.",
-      tags: ["City Cost of Living", "Semester Contribution", "Language Requirements", "Work Permit"],
-      cta: {
-        primary: { label: "Get started for free →", href: "/login" },
-        secondary: { label: "Browse the knowledge base", href: "/sources" },
-      },
+      body: "Navigate city registration (Anmeldung), 140-day student work permits, semester contributions, and post-study 18-month job-seeker visa extensions.",
+      tags: [
+        "City Registration (Anmeldung)",
+        "Work Permit (140 Days)",
+        "Semester Ticket",
+        "18-Month Job Seeker",
+      ],
     },
   ],
 
   connectors: [
-    "/scroll/vid/conn1.mp4",
-    "/scroll/vid/conn2.mp4",
-    "/scroll/vid/conn3.mp4",
+    assetUrl("/scroll/vid/conn1.mp4"),
+    assetUrl("/scroll/vid/conn2.mp4"),
+    assetUrl("/scroll/vid/conn3.mp4"),
   ],
 };
 
@@ -93,10 +118,7 @@ const BEHOERDEN_WORLD: ScrollConfig = {
 function StaticFallback() {
   const sections = BEHOERDEN_WORLD.sections;
   return (
-    <section
-      className="relative min-h-[70vh] w-full bg-background"
-      aria-label="World overview"
-    >
+    <section className="relative min-h-[70vh] w-full bg-background" aria-label="World overview">
       <div className="mx-auto grid max-w-6xl gap-6 px-4 py-16 sm:grid-cols-2 sm:px-6 lg:grid-cols-4">
         {sections.map((s) => (
           <div key={s.id} className="flex flex-col gap-3">
@@ -134,13 +156,7 @@ function StaticFallback() {
  *
  * Renders a static image grid fallback under `prefers-reduced-motion`.
  */
-export function ScrollWorld({
-  startHref,
-  browseHref,
-}: {
-  startHref: string;
-  browseHref: string;
-}) {
+export function ScrollWorld({ startHref, browseHref }: { startHref: string; browseHref: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
 

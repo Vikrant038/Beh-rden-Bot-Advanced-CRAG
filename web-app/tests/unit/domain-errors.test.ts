@@ -12,6 +12,7 @@ import {
 } from "@/server/lib/errors";
 import { ErrorCode } from "@/server/lib/errors";
 import { LLMProviderError } from "@/server/llm/errors";
+import { toErrorMessage } from "@/server/lib/errors/to-error-message";
 
 describe("DomainError hierarchy", () => {
   it("DomainError sets name from subclass", () => {
@@ -73,5 +74,16 @@ describe("DomainError hierarchy", () => {
     expect(err).toBeInstanceOf(DomainError);
     expect(err.code).toBe(ErrorCode.LLM_ERROR);
     expect(err.name).toBe("LLMProviderError");
+  });
+});
+
+describe("toErrorMessage", () => {
+  it("extracts message from Error instance", () => {
+    expect(toErrorMessage(new Error("custom error"))).toBe("custom error");
+  });
+
+  it("converts non-Error values to string", () => {
+    expect(toErrorMessage("string error")).toBe("string error");
+    expect(toErrorMessage(404)).toBe("404");
   });
 });

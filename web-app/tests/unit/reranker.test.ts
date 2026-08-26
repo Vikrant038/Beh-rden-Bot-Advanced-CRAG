@@ -217,8 +217,7 @@ describe("HfReranker", () => {
 
   it("falls back when score objects lack a numeric score field", async () => {
     const fetchMock = vi.fn(
-      async () =>
-        ({ ok: true, status: 200, json: async () => [[{ label: "x" }]] }) as Response,
+      async () => ({ ok: true, status: 200, json: async () => [[{ label: "x" }]] }) as Response,
     );
     vi.stubGlobal("fetch", fetchMock);
     const reranker = new HfReranker("model", "https://rerank.api", "token");

@@ -22,7 +22,9 @@ async function main(): Promise<void> {
     prisma.conversation.count({ where: { ...where, user: { email: { startsWith: "guest:" } } } }),
   ]);
 
-  console.log(`Empty conversations found: ${total} (${guestOwned} guest-owned, ${total - guestOwned} signed-in)`);
+  console.log(
+    `Empty conversations found: ${total} (${guestOwned} guest-owned, ${total - guestOwned} signed-in)`,
+  );
 
   if (total === 0) {
     console.log("Nothing to clean up.");

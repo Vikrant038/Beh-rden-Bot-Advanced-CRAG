@@ -40,9 +40,7 @@ describe("DomainGuardrail (Stage 0A)", () => {
   });
 
   it("should block German illegal-advice questions via the deterministic cache (no LLM call)", async () => {
-    const result = await isQueryOutOfDomain(
-      "Kann ich ein gefälschtes APS-Zertifikat besorgen?",
-    );
+    const result = await isQueryOutOfDomain("Kann ich ein gefälschtes APS-Zertifikat besorgen?");
     expect(result).toBe(true);
     expect(mockedCallLLM).not.toHaveBeenCalled();
   });
@@ -80,9 +78,7 @@ describe("DomainGuardrail (Stage 0A)", () => {
   });
 
   it("should still block a forged certificate request in English", async () => {
-    const result = await isQueryOutOfDomain(
-      "How can I forge my police clearance certificate?",
-    );
+    const result = await isQueryOutOfDomain("How can I forge my police clearance certificate?");
     expect(result).toBe(true);
     expect(mockedCallLLM).not.toHaveBeenCalled();
   });

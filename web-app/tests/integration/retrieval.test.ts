@@ -212,9 +212,14 @@ describe("HybridRetriever (pgvector + BM25 + RRF)", () => {
       12,
     );
     // Telemetry records that wide retrieval ran.
-    const result = await retriever.retrieve("Compare TU Berlin vs LMU vs FU Berlin", ["Compare TU Berlin"], 0, {
-      wide: true,
-    });
+    const result = await retriever.retrieve(
+      "Compare TU Berlin vs LMU vs FU Berlin",
+      ["Compare TU Berlin"],
+      0,
+      {
+        wide: true,
+      },
+    );
     expect(result.telemetry.wideRetrieval).toBe(true);
   });
 
@@ -237,11 +242,7 @@ describe("HybridRetriever (pgvector + BM25 + RRF)", () => {
       expect.any(Array),
       expect.objectContaining({ topK: 15 }),
     );
-    expect(mockReranker.rerank).toHaveBeenCalledWith(
-      "blocked account visa",
-      expect.any(Array),
-      5,
-    );
+    expect(mockReranker.rerank).toHaveBeenCalledWith("blocked account visa", expect.any(Array), 5);
     expect(result.telemetry.wideRetrieval).toBeUndefined();
   });
 

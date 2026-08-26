@@ -285,7 +285,20 @@ describe("executePipelineTest (background worker contract)", () => {
     });
     expect(prismaMock.pipelineRun.deleteMany).toHaveBeenCalledWith({
       where: {
-        id: { notIn: ["run-10", "run-9", "run-8", "run-7", "run-6", "run-5", "run-4", "run-3", "run-2", "run-1"] },
+        id: {
+          notIn: [
+            "run-10",
+            "run-9",
+            "run-8",
+            "run-7",
+            "run-6",
+            "run-5",
+            "run-4",
+            "run-3",
+            "run-2",
+            "run-1",
+          ],
+        },
         status: { not: "RUNNING" },
       },
     });

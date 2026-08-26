@@ -105,10 +105,9 @@ describe("LandingPage session-aware CTAs", () => {
     for (const link of screen.getAllByRole("link", { name: /Start asking/ })) {
       expect(link).toHaveAttribute("href", "/login");
     }
-    expect(screen.getByRole("link", { name: "Browse the knowledge base" })).toHaveAttribute(
-      "href",
-      "/login",
-    );
+    for (const link of screen.getAllByRole("link", { name: "Browse the knowledge base" })) {
+      expect(link).toHaveAttribute("href", "/login");
+    }
   });
 
   it("sends signed-in users straight to /chat instead of the login page", () => {
@@ -120,10 +119,9 @@ describe("LandingPage session-aware CTAs", () => {
       expect(link).toHaveAttribute("href", "/chat");
     }
     // The knowledge-base CTA lands on the sources page for signed-in users.
-    expect(screen.getByRole("link", { name: "Browse the knowledge base" })).toHaveAttribute(
-      "href",
-      "/sources",
-    );
+    for (const link of screen.getAllByRole("link", { name: "Browse the knowledge base" })) {
+      expect(link).toHaveAttribute("href", "/sources");
+    }
   });
 
   it("defaults to /login while the session is still loading", () => {

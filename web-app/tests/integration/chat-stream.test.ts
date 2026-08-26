@@ -239,6 +239,39 @@ describe("runChatStream (SSE event generation)", () => {
     );
   });
 
+  it("agentic mode: streams live tokens from onEvent and records cache hit metadata", async () => {
+    prismaMock.conversation.findUnique.mockResolvedValue({
+      id: "conv-1",
+      userId: "user-1",
+      title: "My chat",
+      mode: "AGENTIC",
+    } as never);
+    prismaMock.message.findFirst.mockResolvedValue(null as never);
+    mockedAgentic.mockImplementation(async (_query, options) => {
+      options?.onEvent?.({ type: "token", value: "live-token-1 " } as never);
+      options?.onEvent?.({ type: "token", value: "live-token-2" } as never);
+      return {
+        ...agenticResult,
+        finalAnswer: "live-token-1 live-token-2",
+        researchSteps: [{ action: "Semantic Cache Hit" } as never],
+      };
+    });
+
+    const events = await collect({
+      conversationId: "conv-1",
+      userId: "user-1",
+      query: "cached agentic query",
+      mode: "agentic",
+    });
+
+    const done = events.find((e) => e.type === "done");
+    expect(done).toBeDefined();
+    if (done && done.type === "done") {
+      expect(done.metadata.isCached).toBe(true);
+      expect(done.metadata.isGrounded).toBe(true);
+    }
+  });
+
   it("disambiguation: emits clarifying options and stops without persisting an answer", async () => {
     prismaMock.message.findFirst.mockResolvedValue({
       id: "user-msg-1",
@@ -321,5 +354,48 @@ describe("runChatStream (SSE event generation)", () => {
       mode: "agentic",
     });
     await expect(collectPromise).rejects.toThrow("not found");
+  });
+
+  it("yields disambiguation options directly when query is ambiguous", async () => {
+    mockedDisambiguation.mockResolvedValue({
+      isAmbiguous: true,
+      options: ["Apply for APS India", "Apply for Student Visa"],
+    });
+
+    const events = await collect({
+      conversationId: "conv-1",
+      userId: "user-1",
+      query: "I need visa info",
+      mode: "standard",
+    });
+
+    const disambigEvent = events.find((e) => e.type === "disambiguation");
+    expect(disambigEvent).toBeDefined();
+    if (disambigEvent && disambigEvent.type === "disambiguation") {
+      expect(disambigEvent.options).toEqual(["Apply for APS India", "Apply for Student Visa"]);
+    }
+  });
+
+  it("stops streaming tokens when AbortSignal is already aborted", async () => {
+    mockedStandard.mockResolvedValue(standardResult as never);
+    const controller = new AbortController();
+    controller.abort();
+
+    const events = await collect({
+      conversationId: "conv-1",
+      userId: "user-1",
+      query: "student visa",
+      mode: "standard",
+      signal: controller.signal,
+    });
+
+    const tokens = events.filter((e) => e.type === "token");
+    expect(tokens.length).toBe(0);
+  });
+
+  it("chunkText splits text preserving content", () => {
+    expect(chunkText("")).toEqual([""]);
+    const text = "First sentence. Second sentence!";
+    expect(chunkText(text).join("")).toBe(text);
   });
 });
