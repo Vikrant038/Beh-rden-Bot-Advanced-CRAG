@@ -63,6 +63,31 @@ function _engineFactory() {
     injectCSS();
     container.classList.add("sw-root");
 
+    // Preload the first scene's still image and video so the browser fetches
+    // them immediately — before any scroll interaction — eliminating the
+    // blurry / blank first-paint delay.
+    if (SECTIONS[0]) {
+      const firstStill =
+        isMobile() && SECTIONS[0].stillMobile ? SECTIONS[0].stillMobile : SECTIONS[0].still;
+      if (firstStill && !document.querySelector(`link[rel="preload"][href="${firstStill}"]`)) {
+        const lImg = document.createElement("link");
+        lImg.rel = "preload";
+        lImg.as = "image";
+        lImg.href = firstStill;
+        (lImg as HTMLLinkElement & { fetchPriority: string }).fetchPriority = "high";
+        document.head.appendChild(lImg);
+      }
+      const firstClip =
+        isMobile() && SECTIONS[0].clipMobile ? SECTIONS[0].clipMobile : SECTIONS[0].clip;
+      if (firstClip && !document.querySelector(`link[rel="preload"][href="${firstClip}"]`)) {
+        const lVid = document.createElement("link");
+        lVid.rel = "preload";
+        lVid.as = "video";
+        lVid.href = firstClip;
+        document.head.appendChild(lVid);
+      }
+    }
+
     const SEGMENTS: any[] = [];
     SECTIONS.forEach((s: any, i) => {
       const dive = {
@@ -144,7 +169,12 @@ function _engineFactory() {
       const img = el("img", "sw-scene__still");
       img.alt = "";
       img.decoding = "async";
-      img.loading = "lazy";
+      // First segment still is the LCP element — load it eagerly with high
+      // fetch priority so the browser prioritises it over deferred assets.
+      // All subsequent stills remain lazy since they're off-screen on first paint.
+      const isFirst = stage.children.length === 0;
+      img.loading = isFirst ? "eager" : "lazy";
+      if (isFirst) (img as HTMLImageElement & { fetchPriority: string }).fetchPriority = "high";
       const poster = isMobile() && s.stillM ? s.stillM : s.still;
       if (poster) img.src = poster;
       scene.appendChild(img);
@@ -272,19 +302,30 @@ function _engineFactory() {
         s.hasClip = true;
       };
 
-      fetch(url)
-        .then((r) => (r.ok ? r.blob() : Promise.reject(new Error("Fetch failed"))))
-        .then((blob) => {
-          setupVideo(URL.createObjectURL(blob));
-        })
-        .catch(() => {
-          // Fallback to direct video URL streaming for Cloudinary / external CDNs
-          try {
-            setupVideo(url);
-          } catch (e) {
-            s.loading = false;
-          }
-        });
+      // External CDN URLs (Cloudinary, S3, R2 …) support HTTP Range requests
+      // natively, so the browser can start decoding immediately without waiting
+      // for the whole file to download.  The fetch→blob path was only needed for
+      // same-origin files that lacked range-request support, and it introduced a
+      // multi-second blank-screen delay on first load.
+      const isExternal =
+        url.startsWith("http://") || url.startsWith("https://") || url.startsWith("//");
+      if (isExternal) {
+        setupVideo(url);
+      } else {
+        fetch(url)
+          .then((r) => (r.ok ? r.blob() : Promise.reject(new Error("Fetch failed"))))
+          .then((blob) => {
+            setupVideo(URL.createObjectURL(blob));
+          })
+          .catch(() => {
+            // Fallback to direct URL streaming
+            try {
+              setupVideo(url);
+            } catch (e) {
+              s.loading = false;
+            }
+          });
+      }
     }
 
     function read() {

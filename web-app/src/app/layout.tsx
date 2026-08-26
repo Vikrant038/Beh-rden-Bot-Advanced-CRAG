@@ -88,6 +88,29 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
 };
 
+
+// ─── Cloudinary hero asset preloads ─────────────────────────────────────────
+// The scroll engine's first scene still and clip are the LCP elements on the
+// landing page. Emitting <link rel="preload"> from the server HTML response
+// means the browser starts fetching them during the initial TCP round-trip —
+// before React hydrates or any client JS runs.
+const SCROLL_ASSETS_BASE = (
+  process.env.SCROLL_ASSETS_URL ||
+  process.env.NEXT_PUBLIC_SCROLL_ASSETS_URL ||
+  ""
+).replace(/\/$/, "");
+
+function cloudinaryUrl(path: string, type: "image" | "video") {
+  if (!SCROLL_ASSETS_BASE) return null;
+  if (SCROLL_ASSETS_BASE.includes("cloudinary.com") && !SCROLL_ASSETS_BASE.includes("/upload")) {
+    return `${SCROLL_ASSETS_BASE}/${type}/upload${path}`;
+  }
+  return `${SCROLL_ASSETS_BASE}${path}`;
+}
+
+const HERO_STILL = cloudinaryUrl("/scroll/dream.png", "image");
+const HERO_CLIP = cloudinaryUrl("/scroll/vid/dream.mp4", "video");
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -99,6 +122,20 @@ export default async function RootLayout({
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* LCP preloads — emitted in server HTML so the browser fetches hero
+            assets in the very first network round-trip, before any JS runs. */}
+        {HERO_STILL && (
+          <link
+            rel="preload"
+            as="image"
+            href={HERO_STILL}
+            // @ts-expect-error fetchpriority is a valid HTML attribute not yet typed
+            fetchpriority="high"
+          />
+        )}
+        {HERO_CLIP && <link rel="preload" as="video" href={HERO_CLIP} />}
+      </head>
       <body className="antialiased">
         <a
           href="#main"
