@@ -8,9 +8,9 @@ test.describe("Landing page", () => {
       page.getByRole("heading", { name: "Your AI guide to studying in Germany" }),
     ).toBeVisible();
     // Feature accordion: summary titles are visible while collapsed.
-    await expect(page.getByText("3-Agent ReAct")).toBeVisible();
-    await expect(page.getByText("Bilingual Retrieval")).toBeVisible();
-    await expect(page.getByText("CRAG Gate")).toBeVisible();
+    await expect(page.getByText("3-Agent ReAct", { exact: true })).toBeVisible();
+    await expect(page.getByText("Bilingual Retrieval", { exact: true })).toBeVisible();
+    await expect(page.getByText("CRAG Gate", { exact: true })).toBeVisible();
     // Corpus + topics are collapsed behind a summary; expand it.
     await page.getByText("Explore the knowledge base").click();
     await expect(page.getByText("Built on a real legal corpus")).toBeVisible();

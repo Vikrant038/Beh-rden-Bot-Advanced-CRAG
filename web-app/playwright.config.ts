@@ -39,7 +39,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm dev --port 3000",
+    command: "npx pnpm dev --port 3000",
     url: "http://localhost:3000",
     reuseExistingServer: true,
     timeout: 120_000,
