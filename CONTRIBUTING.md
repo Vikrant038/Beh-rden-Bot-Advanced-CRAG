@@ -32,7 +32,7 @@ changes.
 - For architectural questions, read
   [`web-app/docs/ARCHITECTURE.md`](web-app/docs/ARCHITECTURE.md).
 - For the "why" behind every major decision, read
-  [`Docs/FIRST_PRINCIPLES.md`](Docs/FIRST_PRINCIPLES.md).
+  [`docs/FIRST_PRINCIPLES.md`](docs/FIRST_PRINCIPLES.md).
 
 If you are planning a large change (new retrieval stage, schema migration,
 new auth provider), open an issue first to discuss the approach before
