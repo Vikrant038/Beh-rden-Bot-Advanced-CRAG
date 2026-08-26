@@ -510,4 +510,135 @@ describe("Branch Coverage Boost", () => {
       expect(formatted).toContain("Cause: string error cause");
     });
   });
+
+  describe("HTML Entity Decoder Branches (Scraper)", () => {
+    it("handles hex, decimal, invalid entities, and unknown named entities", async () => {
+      const { extractMainContent } = await import("@/server/ingest/scraper");
+      const result = extractMainContent("<main>&#x41; &#x42; &#67; &#xGG; &#ZZ; &unknownEntity; &uuml;&auml;&szlig;</main>");
+      expect(result.text).toContain("A B C");
+      expect(result.text).toContain("&unknownEntity;");
+      expect(result.text).toContain("üäß");
+    });
+  });
+
+  describe("Reranker Response Parser Branches", () => {
+    it("handles missing score properties in nested arrays, objects, and flat scores", async () => {
+      const { HfReranker } = await import("@/server/rag/retrieval/reranker");
+      const reranker = new HfReranker("model", "https://hf.api", "token");
+
+      // Nested array with valid first score and missing second score
+      vi.stubGlobal("fetch", vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => [[{ score: 0.95 }], [{}]],
+      }) as Response));
+      const res1 = await reranker.rerank("query", [
+        { id: "c1", text: "t1", sourceName: "BAMF", sourceUrl: "https://bamf.de" },
+        { id: "c2", text: "t2", sourceName: "DAAD", sourceUrl: "https://daad.de" },
+      ], 2);
+      expect(res1[0].crossScore).toBeCloseTo(0.721, 2);
+      expect(res1[1].crossScore).toBeCloseTo(0.5, 2);
+
+      // Flat array of objects with valid first score and missing second score
+      vi.stubGlobal("fetch", vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => [{ score: 0.9 }, {}],
+      }) as Response));
+      const res2 = await reranker.rerank("query", [
+        { id: "c1", text: "t1", sourceName: "BAMF", sourceUrl: "https://bamf.de" },
+        { id: "c2", text: "t2", sourceName: "DAAD", sourceUrl: "https://daad.de" },
+      ], 2);
+      expect(res2[0].crossScore).toBeCloseTo(0.71, 2);
+      expect(res2[1].crossScore).toBeCloseTo(0.5, 2);
+
+      // Object with scores array
+      vi.stubGlobal("fetch", vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ scores: [0.8, 0.4] }),
+      }) as Response));
+      const res3 = await reranker.rerank("query", [
+        { id: "c1", text: "t1", sourceName: "BAMF", sourceUrl: "https://bamf.de" },
+        { id: "c2", text: "t2", sourceName: "DAAD", sourceUrl: "https://daad.de" },
+      ], 2);
+      expect(res3[0].crossScore).toBeCloseTo(0.69, 2);
+
+      // Fallback rerank when API fails and similarityScore is missing
+      vi.stubGlobal("fetch", vi.fn(async () => ({
+        ok: false,
+        status: 503,
+        text: async () => "Service Unavailable",
+      }) as Response));
+      const res4 = await reranker.rerank("query", [
+        { id: "c1", text: "t1", sourceName: "BAMF", sourceUrl: "https://bamf.de" },
+        { id: "c2", text: "t2", sourceName: "DAAD", sourceUrl: "https://daad.de", similarityScore: 0.85 },
+      ], 2);
+      expect(res4[0].id).toBe("c2");
+      expect(res4[1].crossScore).toBe(0.75);
+    });
+  });
+
+  describe("URL Validator SSRF Security Branches", () => {
+    it("handles invalid protocols, unparsable URLs, and blocked IPv6/IPv4 ranges", async () => {
+      const { assertSafeUrl } = await import("@/server/lib/security/url-validator");
+      await expect(assertSafeUrl("invalid-url-string")).rejects.toThrow();
+      await expect(assertSafeUrl("ftp://example.com/file")).rejects.toThrow();
+      await expect(assertSafeUrl("http://127.0.0.1")).rejects.toThrow();
+      await expect(assertSafeUrl("http://169.254.169.254/latest/meta-data")).rejects.toThrow();
+      await expect(assertSafeUrl("http://[::1]/")).rejects.toThrow();
+      await expect(assertSafeUrl("http://[fe80::1]/")).rejects.toThrow();
+      await expect(assertSafeUrl("http://[fc00::1]/")).rejects.toThrow();
+      await expect(assertSafeUrl("http://[ff02::1]/")).rejects.toThrow();
+      await expect(assertSafeUrl("http://[::ffff:127.0.0.1]/")).rejects.toThrow();
+    });
+  });
+
+  describe("Gemini Embedding Client Branches", () => {
+    it("handles embedQuery and batch embedding", async () => {
+      const { GeminiEmbeddingClient, createDefaultEmbeddingClient } = await import("@/server/embeddings/client");
+      const client = new GeminiEmbeddingClient("test-key");
+      const spy = vi.spyOn(client, "embedTexts").mockResolvedValue([[0.1, 0.2, 0.3]]);
+      const vec = await client.embedQuery("visa query");
+      expect(vec).toEqual([0.1, 0.2, 0.3]);
+      expect(spy).toHaveBeenCalled();
+
+      const defaultClient = createDefaultEmbeddingClient();
+      expect(defaultClient).toBeDefined();
+    });
+  });
+
+  describe("Translation Ingest Cache, Errors, and Detect Branches", () => {
+    it("exercises translation error classification and cache helpers", async () => {
+      const { isHardModelError, isTpdExhaustion } = await import("@/server/ingest/translate/errors");
+      expect(isHardModelError({ status: 401 })).toBe(true);
+      expect(isHardModelError({ status: 404 })).toBe(true);
+      expect(isHardModelError({ message: "model does not exist or you do not have access" })).toBe(true);
+      expect(isHardModelError({ message: "model not found" })).toBe(true);
+      expect(isHardModelError({ status: 500, message: "transient network" })).toBe(false);
+
+      expect(isTpdExhaustion({ message: "daily token limit reached (TPD)" })).toBe(true);
+      expect(isTpdExhaustion({ message: "rate limit 429 RPM" })).toBe(false);
+
+      const { cacheLookup, cacheStore, getOrCreateInflight } = await import("@/server/ingest/translate/cache");
+      // Cache store and lookup
+      cacheStore("hash-test-boost", "translated-boost", "model", "de");
+      expect(cacheLookup("hash-test-boost")).toBe("translated-boost");
+      expect(cacheLookup("non-existent-hash-boost")).toBeNull();
+
+      // Inflight deduplication
+      const p1 = getOrCreateInflight("seg-hash-boost", async () => "result-boost");
+      const p2 = getOrCreateInflight("seg-hash-boost", async () => "result-boost-2");
+      expect(p1).toBe(p2);
+      await p1;
+
+      const { detectLanguage } = await import("@/server/ingest/translate/detect");
+      expect(detectLanguage("")).toBe("en");
+      expect(detectLanguage("   ")).toBe("en");
+      expect(detectLanguage("Kürzlich")).toBe("de");
+      expect(detectLanguage("Für die Anmeldung ist der Reisepass erforderlich.")).toBe("de");
+      expect(detectLanguage("English text without special characters")).toBe("en");
+    });
+  });
 });
+

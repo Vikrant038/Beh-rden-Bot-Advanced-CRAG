@@ -19,13 +19,19 @@ const ASSET_BASE = (
   process.env.NEXT_PUBLIC_SCROLL_ASSETS_URL ||
   ""
 ).replace(/\/$/, "");
-const assetUrl = (path: string) => {
+const assetUrl = (path: string, mobile = false) => {
   if (!ASSET_BASE) return path;
   // Auto-format Cloudinary URLs if root cloud endpoint is provided (e.g. https://res.cloudinary.com/<cloud_name>)
   if (ASSET_BASE.includes("cloudinary.com") && !ASSET_BASE.includes("/upload")) {
     const isVideo = path.endsWith(".mp4") || path.includes("/vid/");
     const type = isVideo ? "video" : "image";
-    return `${ASSET_BASE}/${type}/upload${path}`;
+    // For mobile viewports, deliver lighter 720p H.264 streams to prevent mobile GPU decoder stalling
+    const transform = mobile
+      ? isVideo
+        ? "/f_auto,q_auto:eco,w_720,vc_h264"
+        : "/f_auto,q_auto:eco,w_720"
+      : "/f_auto,q_auto";
+    return `${ASSET_BASE}/${type}/upload${transform}${path}`;
   }
   return `${ASSET_BASE}${path}`;
 };
@@ -45,7 +51,9 @@ const BEHOERDEN_WORLD: ScrollConfig = {
       id: "dream",
       label: "Start",
       still: assetUrl("/scroll/dream.png"),
+      stillMobile: assetUrl("/scroll/dream.png", true),
       clip: assetUrl("/scroll/vid/dream.mp4"),
+      clipMobile: assetUrl("/scroll/vid/dream.mp4", true),
       accent: "#7c3aed",
       linger: 0.25,
       eyebrow: "Your German journey starts here",
@@ -61,7 +69,9 @@ const BEHOERDEN_WORLD: ScrollConfig = {
       id: "docs",
       label: "Documents",
       still: assetUrl("/scroll/docs.png"),
+      stillMobile: assetUrl("/scroll/docs.png", true),
       clip: assetUrl("/scroll/vid/docs.mp4"),
+      clipMobile: assetUrl("/scroll/vid/docs.mp4", true),
       accent: "#2563eb",
       linger: 0.25,
       eyebrow: "How It Works · 3-Agent ReAct",
@@ -78,7 +88,9 @@ const BEHOERDEN_WORLD: ScrollConfig = {
       id: "aps",
       label: "APS",
       still: assetUrl("/scroll/aps.png"),
+      stillMobile: assetUrl("/scroll/aps.png", true),
       clip: assetUrl("/scroll/vid/aps.mp4"),
+      clipMobile: assetUrl("/scroll/vid/aps.mp4", true),
       accent: "#059669",
       linger: 0.25,
       eyebrow: "Verification · APS Certificate",
@@ -90,7 +102,9 @@ const BEHOERDEN_WORLD: ScrollConfig = {
       id: "campus",
       label: "Campus",
       still: assetUrl("/scroll/campus.png"),
+      stillMobile: assetUrl("/scroll/campus.png", true),
       clip: assetUrl("/scroll/vid/campus.mp4"),
+      clipMobile: assetUrl("/scroll/vid/campus.mp4", true),
       accent: "#d97706",
       linger: 0.3,
       eyebrow: "Arrival & Graduation",
@@ -109,6 +123,11 @@ const BEHOERDEN_WORLD: ScrollConfig = {
     assetUrl("/scroll/vid/conn1.mp4"),
     assetUrl("/scroll/vid/conn2.mp4"),
     assetUrl("/scroll/vid/conn3.mp4"),
+  ],
+  connectorsMobile: [
+    assetUrl("/scroll/vid/conn1.mp4", true),
+    assetUrl("/scroll/vid/conn2.mp4", true),
+    assetUrl("/scroll/vid/conn3.mp4", true),
   ],
 };
 

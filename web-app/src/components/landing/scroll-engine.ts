@@ -432,6 +432,9 @@ function _engineFactory() {
           .querySelectorAll(".sw-nav__item")
           .forEach((n, k) => n.classList.toggle("is-active", k === near));
         container.style.setProperty("--sw-accent", SECTIONS[near].accent || "");
+        if (userReady && isMobile() && (SECTIONS[near] as any)?._seg?.video) {
+          primeVideo((SECTIONS[near] as any)._seg.video);
+        }
       }
 
       // Exit transition: when scrolling past totalW * vh, smoothly fade out all fixed layers
@@ -462,13 +465,19 @@ function _engineFactory() {
     let running = true;
     function raf() {
       if (!running) return;
-      const eps = isMobile() ? 0.02 : 0.008;
+      const mobile = isMobile();
+      const eps = mobile ? 0.035 : 0.008;
+      const lerpSpeed = reduce ? 1 : mobile ? 0.28 : 0.18;
+
       for (let i = 0; i < NSEG; i++) {
         const s = SEGMENTS[i];
         if (!s.hasClip || !s.ready || !s.video) continue;
         if (s.video.seeking) continue;
+        // On mobile, skip seeking for invisible segments completely to save hardware decoder bandwidth
+        if (mobile && !s.visible) continue;
         if (!s.visible && Math.abs(s.cur - s.target) < 0.002) continue;
-        s.cur += (s.target - s.cur) * (reduce ? 1 : 0.18);
+
+        s.cur += (s.target - s.cur) * lerpSpeed;
         const dur = s.video.duration || 1;
         const t = clamp(s.cur, 0, 0.999) * dur;
         if (Math.abs(s.video.currentTime - t) > eps) {
@@ -496,12 +505,14 @@ function _engineFactory() {
     function onFirstGesture() {
       if (userReady) return;
       userReady = true;
-      SEGMENTS.forEach((s) => primeVideo(s.video));
+      // On mobile, only prime the currently active segment to avoid locking up mobile GPU
+      const active = SEGMENTS.find((s) => s.visible) || SEGMENTS[0];
+      if (active && active.video) primeVideo(active.video);
     }
     window.addEventListener("pointerdown", onFirstGesture, { once: true, passive: true });
     window.addEventListener("touchstart", onFirstGesture, { once: true, passive: true });
 
-    seedParticles(particles, reduce || coarse);
+    seedParticles(particles, reduce || coarse || isMobile());
 
     const onScroll = () => {
       if (!ticking) {
@@ -592,8 +603,8 @@ function _engineFactory() {
     .sw-nav__item:hover{color:var(--sw-ink);} .sw-nav__item.is-active{color:#fff;background:var(--sw-accent);}
     .sw-topcta{text-decoration:none;font-weight:600;font-size:.9rem;color:#fff;background:var(--sw-accent);padding:10px 20px;border-radius:999px;white-space:nowrap;}
     .sw-stage{position:fixed;inset:0;height:100vh;height:100dvh;z-index:10;pointer-events:none;}
-    .sw-scene{position:absolute;inset:0;opacity:0;overflow:hidden;will-change:opacity;}
-    .sw-scene__video,.sw-scene__still{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 42%;}
+    .sw-scene{position:absolute;inset:0;opacity:0;overflow:hidden;will-change:opacity;contain:strict;}
+    .sw-scene__video,.sw-scene__still{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 42%;transform:translateZ(0);backface-visibility:hidden;}
     .sw-scene__still{will-change:transform;} .sw-scene.has-clip .sw-scene__still{opacity:0;} .sw-scene__video{z-index:1;}
     .sw-copylayer{position:fixed;inset:0;height:100vh;height:100dvh;z-index:20;pointer-events:none;}
     .sw-copylayer::before{content:"";position:absolute;inset:0;width:min(52vw,720px);background:linear-gradient(90deg,color-mix(in srgb,var(--sw-bg) 96%,transparent) 0%,color-mix(in srgb,var(--sw-bg) 88%,transparent) 30%,color-mix(in srgb,var(--sw-bg) 50%,transparent) 58%,transparent 100%);pointer-events:none;}
@@ -632,19 +643,21 @@ function _engineFactory() {
     /* ─── Mobile view (<=640px) ─── */
     @media (max-width:640px){
       .sw-nav{display:none;}
+      .sw-particles{display:none;}
       .sw-copylayer::before{width:100%;height:75%;top:auto;bottom:0;background:linear-gradient(0deg,var(--sw-bg) 18%,color-mix(in srgb,var(--sw-bg) 88%,transparent) 52%,color-mix(in srgb,var(--sw-bg) 45%,transparent) 76%,transparent 100%);}
       .sw-copy{left:16px;right:16px;bottom:calc(clamp(48px,10dvh,88px) + env(safe-area-inset-bottom));width:auto;max-width:calc(100vw - 32px);transform:none;}
       .sw-copy__eyebrow{font-size:.72rem;margin-bottom:8px;letter-spacing:.14em;}
       .sw-copy__title{font-size:clamp(1.65rem,6.8vw,2.25rem);line-height:1.08;}
       .sw-copy__body{max-width:none;font-size:clamp(.88rem,3.4vw,1rem);line-height:1.45;margin-top:10px;}
       .sw-copy__tags{gap:6px;margin-top:12px;}
-      .sw-copy__tags li{font-size:.74rem;padding:5px 11px;font-weight:500;backdrop-filter:blur(8px);}
+      .sw-copy__tags li{font-size:.74rem;padding:5px 11px;font-weight:500;backdrop-filter:none;background:rgba(255,255,255,0.08);}
       .sw-scene__video,.sw-scene__still{object-position:50% 38%;}
       .sw-hint{bottom:calc(14px + env(safe-area-inset-bottom));font-size:.7rem;}
       .sw-route{right:4px;gap:10px;padding:8px 4px;}
       .sw-route__dot{width:22px;height:22px;}
       .sw-route__dot i{width:5px;height:5px;}
       .sw-btn{padding:11px 20px;font-size:.88rem;}
+      .sw-btn--ghost{backdrop-filter:none;background:rgba(255,255,255,0.06);}
     }
 
     /* ─── Compact landscape / Foldables ─── */
@@ -658,6 +671,9 @@ function _engineFactory() {
 
     @media (hover:none) and (pointer:coarse){
       .sw-route{padding:10px 4px;}
+      .sw-particles{display:none;}
+      .sw-copy__tags li{backdrop-filter:none;}
+      .sw-btn--ghost{backdrop-filter:none;}
     }
     @media (prefers-reduced-motion:reduce){ .sw-hint i::after{animation:none;} .sw-pt{display:none;} }
     `;
