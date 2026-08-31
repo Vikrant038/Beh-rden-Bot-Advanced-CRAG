@@ -53,7 +53,7 @@ describe("parseJsonLoose", () => {
     ]);
   });
 
-  it("recovers `\"language\": language` (bare word value) — the observed Groq glitch", () => {
+  it('recovers `"language": language` (bare word value) — the observed Groq glitch', () => {
     // Real failure mode: the LLM emits the value without quotes. Before the
     // repair this whole response was discarded and query expansion silently
     // fell back to the original (German) query.
@@ -63,7 +63,7 @@ describe("parseJsonLoose", () => {
     });
   });
 
-  it("recovers a bare ISO code value (`\"language\": de`) to its intended string", () => {
+  it('recovers a bare ISO code value (`"language": de`) to its intended string', () => {
     // The repair's best case: the LLM only forgot the quotes, so the intended
     // value survives verbatim — the sanitizer sees "de" and the writer answers
     // in German as designed.
@@ -81,7 +81,7 @@ describe("parseJsonLoose", () => {
     });
   });
 
-  it("recovers unquoted keys (`{language: \"de\"}`)", () => {
+  it('recovers unquoted keys (`{language: "de"}`)', () => {
     expect(parseJsonLoose('{language: "de", queries: ["a"]}')).toEqual({
       language: "de",
       queries: ["a"],
@@ -137,7 +137,7 @@ describe("parseJsonLoose", () => {
     expect(parseJsonLoose("{'a': 'say \"hi\"'}")).toEqual({ a: 'say "hi"' });
   });
 
-  it("recovers a missing comma between object fields (`{\"a\": 1 \"b\": 2}`)", () => {
+  it('recovers a missing comma between object fields (`{"a": 1 "b": 2}`)', () => {
     expect(parseJsonLoose('{"language": "de" "queries": ["a"]}')).toEqual({
       language: "de",
       queries: ["a"],

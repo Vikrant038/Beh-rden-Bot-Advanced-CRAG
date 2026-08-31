@@ -21,16 +21,14 @@ import {
   Network,
   Receipt,
   ShieldCheck,
-  Sparkles,
   X,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { CountUp } from "@/components/ui/count-up";
-import { ChatMockup } from "@/components/landing/chat-mockup";
+import { ScrollWorld } from "@/components/landing/scroll-world";
 import { ChangelogModal } from "@/components/ui/changelog-modal";
 import { api } from "@/lib/trpc/client";
-import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
   { href: "#features", label: "Features" },
@@ -38,30 +36,6 @@ const NAV_LINKS = [
   { href: "#corpus", label: "The corpus" },
   { href: "#faq", label: "FAQ" },
 ];
-
-/** Primary gradient CTA + its glass secondary, shared by both CTA rows. */
-const CTA_PRIMARY =
-  "cta-shimmer brand-gradient inline-block w-full max-w-xs rounded-xl px-8 py-3 text-sm font-semibold text-white shadow-[0_8px_28px_-8px_var(--color-primary)] transition hover:brightness-110 active:scale-[0.98] sm:w-auto";
-const CTA_SECONDARY =
-  "inline-block w-full max-w-xs rounded-xl border border-glass-border bg-glass px-8 py-3 text-sm font-medium shadow-glass backdrop-blur transition hover:bg-surface-hover sm:w-auto";
-
-/** Standard section heading + optional subtitle pair. */
-function SectionHeading({
-  title,
-  subtitle,
-  className,
-}: {
-  title: React.ReactNode;
-  subtitle?: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <>
-      <h2 className={cn("type-title", className)}>{title}</h2>
-      {subtitle ? <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">{subtitle}</p> : null}
-    </>
-  );
-}
 
 /**
  * Real, DB-backed trust numbers (public.corpusStats) — no invented claims.
@@ -172,19 +146,6 @@ const SAMPLE_QUESTIONS = [
   },
 ];
 
-// Static hero facts — only the three steps of "How it works" (mapped inline below).
-const HOW_IT_WORKS = [
-  { title: "Ask a question", body: "Type it in plain English — no forms, no jargon." },
-  {
-    title: "AI researches official sources",
-    body: "Hybrid retrieval + a research agent pull from verified documents.",
-  },
-  {
-    title: "Get a cited, verified answer",
-    body: "Every answer links the sources it was grounded on.",
-  },
-];
-
 function StatCell({
   value,
   suffix,
@@ -265,8 +226,8 @@ export default function LandingPage() {
     <div id="main" className="relative min-h-screen overflow-hidden bg-background">
       <div className="gradient-mesh pointer-events-none absolute inset-0 opacity-60" />
 
-      {/* ─── Sticky glass navbar ─── */}
-      <header className="sticky top-0 z-30 border-b border-glass-border bg-background/70 backdrop-blur-xl">
+      {/* ─── Fixed glass navbar ─── */}
+      <header className="fixed top-0 left-0 right-0 z-[80] border-b border-glass-border bg-background/80 backdrop-blur-xl">
         <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-2 sm:px-6 md:py-3">
           <Link href="/" className="flex items-center gap-2 font-semibold">
             <span className="brand-gradient grid h-9 w-9 place-items-center rounded-xl text-white shadow-[0_4px_16px_-4px_var(--color-primary)]">
@@ -337,422 +298,408 @@ export default function LandingPage() {
         )}
       </header>
 
-      <main className="relative z-10 mx-auto max-w-6xl px-4 pb-16 pt-12 text-center sm:px-6 sm:pb-24 sm:pt-14">
-        {/* ─── Hero ─── */}
-        <section className="relative mt-2 sm:mt-6">
-          {/* CSS-only aurora orbs layered over the gradient mesh */}
-          <div className="aurora" aria-hidden="true">
-            <div className="aurora-orb aurora-orb-a left-[-12%] top-[-24%] h-72 w-72 bg-primary/40 sm:h-96 sm:w-96" />
-            <div className="aurora-orb aurora-orb-b right-[-10%] top-[-4%] h-64 w-64 bg-accent/30 sm:h-80 sm:w-80" />
-            <div className="aurora-orb aurora-orb-c bottom-[-34%] left-[32%] h-72 w-72 bg-primary/25 sm:h-96 sm:w-96" />
-          </div>
+      {/* ─── Full-viewport scroll-cinematic hero ─── */}
+      {/* ScrollWorld spans 100vw — rendered outside max-w-6xl.
+          The engine builds its own sticky track, copy layer, nav, and route dots. */}
+      <ScrollWorld startHref={startHref} browseHref={browseHref} />
 
-          <motion.div {...reveal} transition={{ duration: 0.5 }} className="relative">
-            <span className="inline-flex items-center gap-2 rounded-full border border-glass-border bg-glass px-3.5 py-1.5 text-xs text-muted shadow-glass backdrop-blur">
-              <Sparkles className="h-3.5 w-3.5 text-accent" />
-              German student visas · APS · blocked accounts · university admissions
-            </span>
-          </motion.div>
+      {/* ─── Full-width below-the-fold content wrapper ─── */}
+      <div className="relative z-30 w-full bg-background">
+        <div className="gradient-mesh pointer-events-none absolute inset-0 opacity-40" />
 
-          <motion.h1
+        {/* ─── Gradient dissolve from scroll world → static page ─── */}
+        <div
+          className="relative h-20 w-full sm:h-28"
+          style={{
+            background:
+              "linear-gradient(to bottom, transparent 0%, var(--color-background, #0f0d13) 100%)",
+          }}
+          aria-hidden="true"
+        />
+
+        <main className="relative mx-auto max-w-6xl px-4 pb-16 pt-8 text-center sm:px-6 sm:pb-24 sm:pt-12">
+          {/* Below-the-fold content starts here.
+              The hero has been replaced by the scroll-cinematic world above. */}
+
+          {/* ─── What you can ask (sample chips → prefill chat) ─── */}
+          <motion.section
             {...reveal}
-            transition={{ duration: 0.55, delay: 0.05 }}
-            className="type-display mx-auto mt-6 max-w-4xl tracking-[-0.03em]"
+            transition={{ duration: 0.5 }}
+            className="mt-20"
+            aria-label="Sample questions"
           >
-            Your AI guide to studying in{" "}
-            <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              Germany
-            </span>
-          </motion.h1>
-
-          <motion.p
-            {...reveal}
-            transition={{ duration: 0.55, delay: 0.12 }}
-            className="mx-auto mt-5 max-w-xl text-base text-muted sm:text-lg"
-          >
-            Visas, APS, blocked accounts, university — answered from official sources.
-          </motion.p>
-
-          <motion.div
-            {...reveal}
-            transition={{ duration: 0.55, delay: 0.18 }}
-            className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row"
-          >
-            <Link href={startHref} className={CTA_PRIMARY}>
-              Start asking →
-            </Link>
-            <a href="#demo" className={CTA_SECONDARY}>
-              See an example
-            </a>
-          </motion.div>
-
-          {/* Live-type chat mockup */}
-          <motion.div
-            {...reveal}
-            transition={{ duration: 0.6, delay: 0.34 }}
-            className="relative mx-auto mt-14 max-w-2xl"
-          >
-            <div
-              className="pointer-events-none absolute -inset-6 rounded-[2rem] bg-primary/10 blur-3xl"
-              aria-hidden="true"
-            />
-            <ChatMockup />
-          </motion.div>
-        </section>
-
-        {/* ─── What you can ask (sample chips → prefill chat) ─── */}
-        <motion.section
-          {...reveal}
-          transition={{ duration: 0.5 }}
-          className="mt-20"
-          aria-label="Sample questions"
-        >
-          <SectionHeading
-            title="What can I ask?"
-            subtitle="Tap a question to try it — it opens straight in the chat."
-          />
-          <div className="mx-auto mt-8 grid max-w-3xl gap-3 sm:grid-cols-3">
-            {SAMPLE_QUESTIONS.map((sample) => {
-              const Icon = sample.icon;
-              return (
-                <Link
-                  key={sample.title}
-                  href={`/chat?q=${encodeURIComponent(sample.query)}`}
-                  className="group flex min-h-11 flex-col items-start gap-2 rounded-xl border border-glass-border bg-glass px-4 py-4 text-left shadow-glass backdrop-blur transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-surface"
-                >
-                  <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary shadow-[0_0_14px_-4px_var(--color-primary)]">
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <span className="text-sm font-medium">{sample.title}</span>
-                  <span className="line-clamp-2 text-xs text-muted">{sample.query}</span>
-                  <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-accent">
-                    Ask this
-                    <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </motion.section>
-
-        {/* ─── How it works ─── */}
-        <motion.section
-          {...reveal}
-          transition={{ duration: 0.5, delay: 0.05 }}
-          id="how-it-works"
-          className="content-visibility-auto mt-24 scroll-mt-20 md:scroll-mt-24"
-        >
-          <SectionHeading
-            title="How it works"
-            subtitle="A three-agent pipeline turns your question into a cited, verified answer."
-          />
-          <div className="mt-10 grid gap-4 sm:grid-cols-3">
-            {HOW_IT_WORKS.map((step, index) => (
-              <GlassCard key={step.title} className="flex items-start gap-4 p-6 text-left sm:block">
-                <span className="brand-gradient grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold text-white shadow-[0_4px_14px_-4px_var(--color-primary)]">
-                  {index + 1}
-                </span>
-                <div className="min-w-0">
-                  <h3 className="mt-0 font-semibold sm:mt-3">{step.title}</h3>
-                  <p className="mt-2 text-sm text-muted">{step.body}</p>
-                </div>
-              </GlassCard>
-            ))}
-          </div>
-        </motion.section>
-
-        {/* ─── Trust / stats strip (real DB numbers) ─── */}
-        <motion.section
-          {...reveal}
-          transition={{ duration: 0.5, delay: 0.1 }}
-          className="mx-auto mt-20 max-w-3xl"
-          aria-label="Live corpus statistics"
-        >
-          {isLoading ? (
-            <GlassCard className="flex flex-col gap-4 p-5 sm:flex-row sm:gap-0">
-              {[0, 1, 2, 3].map((index) => (
-                <div key={index} className="flex-1 px-4 text-center">
-                  <div className="mx-auto h-7 w-16 animate-pulse rounded-md bg-surface-hover" />
-                  <div className="mx-auto mt-2 h-3 w-20 animate-pulse rounded bg-surface-hover" />
-                </div>
-              ))}
-            </GlassCard>
-          ) : isError || !stats ? (
-            <GlassCard className="p-5 text-center text-sm text-muted">
-              Live corpus stats temporarily unavailable.
-            </GlassCard>
-          ) : (
-            <GlassCard className="grid grid-cols-2 gap-y-4 p-3 sm:grid-cols-4 sm:gap-y-0 sm:p-2">
-              <StatCell value={stats?.sources ?? 0} suffix="+" label="official sources" />
-              <StatCell value={stats?.chunks ?? 0} suffix="+" label="indexed chunks" />
-              <StatCell
-                value={stats?.germanChunkPercent ?? 0}
-                suffix="%"
-                label="German-language chunks"
-                decimals={1}
-              />
-              <StatCell value={3} suffix="" label="agent pipeline" />
-            </GlassCard>
-          )}
-        </motion.section>
-
-        {/* ─── Live chat demo ─── */}
-        <motion.section
-          {...reveal}
-          transition={{ duration: 0.5 }}
-          className="content-visibility-auto mt-24 text-left"
-          id="demo"
-        >
-          <GlassCard className="overflow-hidden p-6 sm:p-10">
-            {/* Framed image above the section heading */}
-            <div className="relative mb-8 overflow-hidden rounded-2xl border border-glass-border shadow-glass">
-              <div className="relative aspect-[8/5] w-full overflow-hidden sm:aspect-[21/9]">
-                <Image
-                  src="/Images/hero-image.jpeg"
-                  alt="Historic German town square at dusk — the journey this guide helps you plan"
-                  fill
-                  sizes="(max-width: 1024px) 100vw, 60rem"
-                  className="object-cover"
-                />
-                <div
-                  className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/40 via-transparent to-transparent"
-                  aria-hidden="true"
-                />
-              </div>
-            </div>
-            <div className="grid items-center gap-8 lg:grid-cols-2">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-accent">
-                  See it in action
-                </p>
-                <h2 className="type-title mt-2">Ask a question. Get a cited answer.</h2>
-                <p className="mt-3 max-w-md text-sm text-muted">
-                  Every answer is grounded in official sources with confidence scores — and the
-                  three-agent pipeline tells you exactly what it&apos;s doing as it works.
-                </p>
-              </div>
-              <ul className="space-y-3">
-                {[
-                  `Hybrid retrieval across ${stats ? `${stats.sources}+` : "115+"} official sources`,
-                  ...DEMO_POINTS,
-                ].map((point, index) => (
-                  <li
-                    key={point}
-                    className="flex items-center gap-3 rounded-xl border border-glass-border bg-glass px-4 py-3 text-sm text-foreground backdrop-blur"
+            <h2 className="type-title">What can I ask?</h2>
+            <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
+              Tap a question to try it — it opens straight in the chat.
+            </p>
+            <div className="mx-auto mt-8 grid max-w-3xl gap-3 sm:grid-cols-3">
+              {SAMPLE_QUESTIONS.map((sample) => {
+                const Icon = sample.icon;
+                return (
+                  <Link
+                    key={sample.title}
+                    href={`/chat?q=${encodeURIComponent(sample.query)}`}
+                    className="group flex min-h-11 flex-col items-start gap-2 rounded-xl border border-glass-border bg-glass px-4 py-4 text-left shadow-glass backdrop-blur transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-surface"
                   >
-                    <span className="brand-gradient grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[11px] font-bold text-white">
-                      {index + 1}
+                    <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary shadow-[0_0_14px_-4px_var(--color-primary)]">
+                      <Icon className="h-4 w-4" />
                     </span>
-                    {point}
-                  </li>
-                ))}
-              </ul>
+                    <span className="text-sm font-medium">{sample.title}</span>
+                    <span className="line-clamp-2 text-xs text-muted">{sample.query}</span>
+                    <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-accent">
+                      Ask this
+                      <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                    </span>
+                  </Link>
+                );
+              })}
             </div>
-          </GlassCard>
-        </motion.section>
+          </motion.section>
 
-        {/* ─── Features — collapsible "Why it's trustworthy" accordion ─── */}
-        <motion.section
-          {...reveal}
-          transition={{ duration: 0.5 }}
-          id="features"
-          className="content-visibility-auto mx-auto mt-24 max-w-3xl scroll-mt-20 text-left md:scroll-mt-24"
-        >
-          <SectionHeading
-            title="Why it's trustworthy"
-            subtitle="Every feature exists to earn your trust before you make a life-changing decision."
-            className="text-center"
-          />
-          <div className="mt-10 space-y-3">
-            {FEATURES.map((feature) => {
-              const Icon = feature.icon;
-              return (
-                <details
-                  key={feature.title}
-                  className="group rounded-xl border border-glass-border bg-glass shadow-glass backdrop-blur transition open:border-primary/40"
+          {/* ─── How it works ─── */}
+          <motion.section
+            {...reveal}
+            transition={{ duration: 0.5, delay: 0.05 }}
+            id="how-it-works"
+            className="content-visibility-auto mt-24 scroll-mt-20 md:scroll-mt-24"
+          >
+            <h2 className="type-title">How it works</h2>
+            <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
+              A three-agent pipeline turns your question into a cited, verified answer.
+            </p>
+            <div className="mt-10 grid gap-4 sm:grid-cols-3">
+              {[
+                {
+                  step: "1",
+                  title: "Ask a question",
+                  body: "Type it in plain English — no forms, no jargon.",
+                },
+                {
+                  step: "2",
+                  title: "AI researches official sources",
+                  body: "Hybrid retrieval + a research agent pull from verified documents.",
+                },
+                {
+                  step: "3",
+                  title: "Get a cited, verified answer",
+                  body: "Every answer links the sources it was grounded on.",
+                },
+              ].map((step) => (
+                <GlassCard
+                  key={step.step}
+                  className="flex items-start gap-4 p-6 text-left sm:block"
                 >
-                  <summary className="flex min-h-11 cursor-pointer list-none items-center gap-4 px-5 py-3.5 transition hover:bg-surface-hover sm:py-4">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary shadow-[0_0_18px_-6px_var(--color-primary)]">
-                      <Icon className="h-5 w-5" />
-                    </span>
-                    <span className="min-w-0 flex-1 font-medium">{feature.title}</span>
-                    <ChevronDown className="h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-180" />
-                  </summary>
-                  <p className="px-5 pb-5 text-sm leading-relaxed text-muted">
-                    {feature.description}
-                  </p>
-                </details>
-              );
-            })}
-          </div>
-        </motion.section>
+                  <span className="brand-gradient grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold text-white shadow-[0_4px_14px_-4px_var(--color-primary)]">
+                    {step.step}
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="mt-0 font-semibold sm:mt-3">{step.title}</h3>
+                    <p className="mt-2 text-sm text-muted">{step.body}</p>
+                  </div>
+                </GlassCard>
+              ))}
+            </div>
+          </motion.section>
 
-        {/* ─── Corpus + topics — collapsed behind "Explore the knowledge base" ─── */}
-        <motion.section
-          {...reveal}
-          transition={{ duration: 0.5 }}
-          id="corpus"
-          className="content-visibility-auto mt-24 scroll-mt-20 md:scroll-mt-24"
-        >
-          {/* Keep the corpus content in the DOM (SEO) but visually collapsed until
-              the visitor opts in — progressive disclosure per the landing plan. */}
-          <details className="group mx-auto max-w-3xl rounded-2xl border border-glass-border bg-glass shadow-glass backdrop-blur">
-            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 px-6 py-4 text-left transition hover:bg-surface-hover">
-              <span>
-                <span className="block font-semibold">Explore the knowledge base</span>
-                <span className="mt-0.5 block text-xs text-muted">
-                  Official documents, laws, and exam handbooks behind every answer
-                </span>
-              </span>
-              <ChevronDown className="h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="border-t border-glass-border px-6 py-6">
-              <h3 className="text-left font-semibold">Built on a real legal corpus</h3>
-              <p className="mt-2 text-left text-sm text-muted">
-                Federal laws, BAMF brochures, and Goethe/telc/TestDaF exam handbooks — the largest
-                documents in the knowledge base right now:
-              </p>
-              <div className="mt-6 grid gap-4 text-left sm:grid-cols-2 lg:grid-cols-3">
-                {(stats?.topSources ?? []).map((source, index) => (
-                  <GlassCard key={source.title} className="p-5">
-                    <div className="flex items-start gap-3">
-                      <span className="brand-gradient grid h-8 w-8 shrink-0 place-items-center rounded-lg text-xs font-bold text-white">
+          {/* ─── Trust / stats strip (real DB numbers) ─── */}
+          <motion.section
+            {...reveal}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="mx-auto mt-20 max-w-3xl"
+            aria-label="Live corpus statistics"
+          >
+            {isLoading ? (
+              <GlassCard className="flex flex-col gap-4 p-5 sm:flex-row sm:gap-0">
+                {[0, 1, 2, 3].map((index) => (
+                  <div key={index} className="flex-1 px-4 text-center">
+                    <div className="mx-auto h-7 w-16 animate-pulse rounded-md bg-surface-hover" />
+                    <div className="mx-auto mt-2 h-3 w-20 animate-pulse rounded bg-surface-hover" />
+                  </div>
+                ))}
+              </GlassCard>
+            ) : isError || !stats ? (
+              <GlassCard className="p-5 text-center text-sm text-muted">
+                Live corpus stats temporarily unavailable.
+              </GlassCard>
+            ) : (
+              <GlassCard className="grid grid-cols-2 gap-y-4 p-3 sm:grid-cols-4 sm:gap-y-0 sm:p-2">
+                <StatCell value={stats?.sources ?? 0} suffix="+" label="official sources" />
+                <StatCell value={stats?.chunks ?? 0} suffix="+" label="indexed chunks" />
+                <StatCell
+                  value={stats?.germanChunkPercent ?? 0}
+                  suffix="%"
+                  label="German-language chunks"
+                  decimals={1}
+                />
+                <StatCell value={3} suffix="" label="agent pipeline" />
+              </GlassCard>
+            )}
+          </motion.section>
+
+          {/* ─── Live chat demo ─── */}
+          <motion.section
+            {...reveal}
+            transition={{ duration: 0.5 }}
+            className="content-visibility-auto mt-24 text-left"
+            id="demo"
+          >
+            <GlassCard className="overflow-hidden p-6 sm:p-10">
+              {/* Framed image above the section heading */}
+              <div className="relative mb-8 overflow-hidden rounded-2xl border border-glass-border shadow-glass">
+                <div className="relative aspect-[8/5] w-full overflow-hidden sm:aspect-[21/9]">
+                  <Image
+                    src="/Images/hero-image.jpeg"
+                    alt="Historic German town square at dusk — the journey this guide helps you plan"
+                    fill
+                    sizes="(max-width: 1024px) 100vw, 60rem"
+                    className="object-cover"
+                  />
+                  <div
+                    className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/40 via-transparent to-transparent"
+                    aria-hidden="true"
+                  />
+                </div>
+              </div>
+              <div className="grid items-center gap-8 lg:grid-cols-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-accent">
+                    See it in action
+                  </p>
+                  <h2 className="type-title mt-2">Ask a question. Get a cited answer.</h2>
+                  <p className="mt-3 max-w-md text-sm text-muted">
+                    Every answer is grounded in official sources with confidence scores — and the
+                    three-agent pipeline tells you exactly what it&apos;s doing as it works.
+                  </p>
+                </div>
+                <ul className="space-y-3">
+                  {[
+                    `Hybrid retrieval across ${stats ? `${stats.sources}+` : "115+"} official sources`,
+                    ...DEMO_POINTS,
+                  ].map((point, index) => (
+                    <li
+                      key={point}
+                      className="flex items-center gap-3 rounded-xl border border-glass-border bg-glass px-4 py-3 text-sm text-foreground backdrop-blur"
+                    >
+                      <span className="brand-gradient grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[11px] font-bold text-white">
                         {index + 1}
                       </span>
-                      <div className="min-w-0">
-                        <h4
-                          className="line-clamp-2 text-sm font-medium sm:truncate"
-                          title={source.title}
-                        >
-                          {source.title}
-                        </h4>
-                        <p className="mt-1 text-xs text-muted">
-                          {source.chunkCount.toLocaleString()} indexed chunks
-                        </p>
-                      </div>
-                    </div>
-                  </GlassCard>
-                ))}
+                      {point}
+                    </li>
+                  ))}
+                </ul>
               </div>
-              {!isLoading && (stats?.sources ?? 0) > 0 && (
-                <p className="mt-6 text-xs text-muted">
-                  {stats?.sources} sources · {stats?.parentChunks?.toLocaleString()} parent sections
-                  · {stats?.chunks?.toLocaleString()} chunks · indexed as 1024-dim bge-m3 vectors.
-                </p>
-              )}
+            </GlassCard>
+          </motion.section>
 
-              <div className="mt-8 border-t border-glass-border pt-6">
-                <h3 className="text-left font-semibold">What can I ask about?</h3>
+          {/* ─── Features — collapsible "Why it's trustworthy" accordion ─── */}
+          <motion.section
+            {...reveal}
+            transition={{ duration: 0.5 }}
+            id="features"
+            className="content-visibility-auto mx-auto mt-24 max-w-3xl scroll-mt-20 text-left md:scroll-mt-24"
+          >
+            <h2 className="type-title text-center">Why it&apos;s trustworthy</h2>
+            <p className="mx-auto mt-3 max-w-2xl text-center text-sm text-muted">
+              Every feature exists to earn your trust before you make a life-changing decision.
+            </p>
+            <div className="mt-10 space-y-3">
+              {FEATURES.map((feature) => {
+                const Icon = feature.icon;
+                return (
+                  <details
+                    key={feature.title}
+                    className="group rounded-xl border border-glass-border bg-glass shadow-glass backdrop-blur transition open:border-primary/40"
+                  >
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center gap-4 px-5 py-3.5 transition hover:bg-surface-hover sm:py-4">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary shadow-[0_0_18px_-6px_var(--color-primary)]">
+                        <Icon className="h-5 w-5" />
+                      </span>
+                      <span className="min-w-0 flex-1 font-medium">{feature.title}</span>
+                      <ChevronDown className="h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-180" />
+                    </summary>
+                    <p className="px-5 pb-5 text-sm leading-relaxed text-muted">
+                      {feature.description}
+                    </p>
+                  </details>
+                );
+              })}
+            </div>
+          </motion.section>
+
+          {/* ─── Corpus + topics — collapsed behind "Explore the knowledge base" ─── */}
+          <motion.section
+            {...reveal}
+            transition={{ duration: 0.5 }}
+            id="corpus"
+            className="content-visibility-auto mt-24 scroll-mt-20 md:scroll-mt-24"
+          >
+            {/* Keep the corpus content in the DOM (SEO) but visually collapsed until
+              the visitor opts in — progressive disclosure per the landing plan. */}
+            <details className="group mx-auto max-w-3xl rounded-2xl border border-glass-border bg-glass shadow-glass backdrop-blur">
+              <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 px-6 py-4 text-left transition hover:bg-surface-hover">
+                <span>
+                  <span className="block font-semibold">Explore the knowledge base</span>
+                  <span className="mt-0.5 block text-xs text-muted">
+                    Official documents, laws, and exam handbooks behind every answer
+                  </span>
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="border-t border-glass-border px-6 py-6">
+                <h3 className="text-left font-semibold">Built on a real legal corpus</h3>
                 <p className="mt-2 text-left text-sm text-muted">
-                  From your first APS appointment to your first semester — the knowledge base covers
-                  the whole journey.
+                  Federal laws, BAMF brochures, and Goethe/telc/TestDaF exam handbooks — the largest
+                  documents in the knowledge base right now:
                 </p>
-                <div className="mt-5 flex flex-wrap justify-center gap-2">
-                  {TOPICS.map((topic) => (
-                    <a
-                      key={topic}
-                      href={startHref}
-                      className="grid min-h-11 place-items-center rounded-full border border-glass-border bg-glass px-3.5 py-1.5 text-xs text-muted shadow-glass backdrop-blur transition hover:border-primary/60 hover:text-foreground"
-                    >
-                      {topic}
-                    </a>
+                <div className="mt-6 grid gap-4 text-left sm:grid-cols-2 lg:grid-cols-3">
+                  {(stats?.topSources ?? []).map((source, index) => (
+                    <GlassCard key={source.title} className="p-5">
+                      <div className="flex items-start gap-3">
+                        <span className="brand-gradient grid h-8 w-8 shrink-0 place-items-center rounded-lg text-xs font-bold text-white">
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <h4
+                            className="line-clamp-2 text-sm font-medium sm:truncate"
+                            title={source.title}
+                          >
+                            {source.title}
+                          </h4>
+                          <p className="mt-1 text-xs text-muted">
+                            {source.chunkCount.toLocaleString()} indexed chunks
+                          </p>
+                        </div>
+                      </div>
+                    </GlassCard>
                   ))}
                 </div>
+                {!isLoading && (stats?.sources ?? 0) > 0 && (
+                  <p className="mt-6 text-xs text-muted">
+                    {stats?.sources} sources · {stats?.parentChunks?.toLocaleString()} parent
+                    sections · {stats?.chunks?.toLocaleString()} chunks · indexed as 1024-dim bge-m3
+                    vectors.
+                  </p>
+                )}
+
+                <div className="mt-8 border-t border-glass-border pt-6">
+                  <h3 className="text-left font-semibold">What can I ask about?</h3>
+                  <p className="mt-2 text-left text-sm text-muted">
+                    From your first APS appointment to your first semester — the knowledge base
+                    covers the whole journey.
+                  </p>
+                  <div className="mt-5 flex flex-wrap justify-center gap-2">
+                    {TOPICS.map((topic) => (
+                      <a
+                        key={topic}
+                        href={startHref}
+                        className="grid min-h-11 place-items-center rounded-full border border-glass-border bg-glass px-3.5 py-1.5 text-xs text-muted shadow-glass backdrop-blur transition hover:border-primary/60 hover:text-foreground"
+                      >
+                        {topic}
+                      </a>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
-          </details>
-        </motion.section>
+            </details>
+          </motion.section>
 
-        {/* ─── FAQ ─── */}
-        <motion.section
-          {...reveal}
-          transition={{ duration: 0.5 }}
-          id="faq"
-          className="content-visibility-auto mx-auto mt-24 max-w-2xl scroll-mt-20 text-left md:scroll-mt-24"
-        >
-          <SectionHeading title="Frequently asked questions" className="text-center" />
-          <div className="mt-8 space-y-3">
-            {FAQ_ITEMS.map((item, index) => {
-              const open = openFaq === index;
-              return (
-                <GlassCard key={item.question} className="overflow-hidden p-0">
-                  <button
-                    type="button"
-                    onClick={() => setOpenFaq(open ? null : index)}
-                    aria-expanded={open}
-                    className="flex min-h-11 w-full items-center justify-between gap-4 px-5 py-3.5 text-left font-medium transition hover:bg-surface-hover sm:py-4"
-                  >
-                    {item.question}
-                    <ArrowRight
-                      className={`h-4 w-4 shrink-0 text-muted transition-transform ${open ? "rotate-90" : ""}`}
-                    />
-                  </button>
-                  {open && <p className="px-5 pb-4 text-sm text-muted">{item.answer}</p>}
-                </GlassCard>
-              );
-            })}
-          </div>
-        </motion.section>
-
-        {/* ─── Final CTA ─── */}
-        <motion.section
-          {...reveal}
-          transition={{ duration: 0.5 }}
-          className="content-visibility-auto mt-24"
-        >
-          <GlassCard className="relative overflow-hidden px-5 py-10 sm:px-8 sm:py-14">
-            <div className="aurora" aria-hidden="true">
-              <div className="aurora-orb aurora-orb-c left-[-10%] top-[-60%] h-64 w-64 bg-primary/30" />
-              <div className="aurora-orb aurora-orb-b right-[-10%] bottom-[-70%] h-64 w-64 bg-accent/25" />
+          {/* ─── FAQ ─── */}
+          <motion.section
+            {...reveal}
+            transition={{ duration: 0.5 }}
+            id="faq"
+            className="content-visibility-auto mx-auto mt-24 max-w-2xl scroll-mt-20 text-left md:scroll-mt-24"
+          >
+            <h2 className="type-title text-center">Frequently asked questions</h2>
+            <div className="mt-8 space-y-3">
+              {FAQ_ITEMS.map((item, index) => {
+                const open = openFaq === index;
+                return (
+                  <GlassCard key={item.question} className="overflow-hidden p-0">
+                    <button
+                      type="button"
+                      onClick={() => setOpenFaq(open ? null : index)}
+                      aria-expanded={open}
+                      className="flex min-h-11 w-full items-center justify-between gap-4 px-5 py-3.5 text-left font-medium transition hover:bg-surface-hover sm:py-4"
+                    >
+                      {item.question}
+                      <ArrowRight
+                        className={`h-4 w-4 shrink-0 text-muted transition-transform ${open ? "rotate-90" : ""}`}
+                      />
+                    </button>
+                    {open && <p className="px-5 pb-4 text-sm text-muted">{item.answer}</p>}
+                  </GlassCard>
+                );
+              })}
             </div>
-            <h2 className="type-title relative">Ready to start your German journey?</h2>
-            <p className="relative mx-auto mt-3 max-w-xl text-sm text-muted">
-              Get grounded, sourced answers about visas, APS, blocked accounts, and admissions — in
-              seconds, for free.
-            </p>
-            <div className="relative mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Link href={startHref} className={CTA_PRIMARY}>
-                Start asking →
+          </motion.section>
+
+          {/* ─── Final CTA ─── */}
+          <motion.section
+            {...reveal}
+            transition={{ duration: 0.5 }}
+            className="content-visibility-auto mt-24"
+          >
+            <GlassCard className="relative overflow-hidden px-5 py-10 sm:px-8 sm:py-14">
+              <div className="aurora" aria-hidden="true">
+                <div className="aurora-orb aurora-orb-c left-[-10%] top-[-60%] h-64 w-64 bg-primary/30" />
+                <div className="aurora-orb aurora-orb-b right-[-10%] bottom-[-70%] h-64 w-64 bg-accent/25" />
+              </div>
+              <h2 className="type-title relative">Ready to start your German journey?</h2>
+              <p className="relative mx-auto mt-3 max-w-xl text-sm text-muted">
+                Get grounded, sourced answers about visas, APS, blocked accounts, and admissions —
+                in seconds, for free.
+              </p>
+              <div className="relative mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                <Link
+                  href={startHref}
+                  className="cta-shimmer brand-gradient inline-block w-full rounded-xl px-8 py-3 text-sm font-semibold text-white shadow-[0_8px_28px_-8px_var(--color-primary)] transition hover:brightness-110 active:scale-[0.98] sm:w-auto"
+                >
+                  Start asking →
+                </Link>
+                <Link
+                  href={browseHref}
+                  className="inline-block w-full rounded-xl border border-glass-border bg-glass px-8 py-3 text-sm font-medium shadow-glass backdrop-blur transition hover:bg-surface-hover sm:w-auto"
+                >
+                  Browse the knowledge base
+                </Link>
+              </div>
+            </GlassCard>
+          </motion.section>
+        </main>
+
+        <footer className="relative z-10 border-t border-glass-border bg-background/60 px-6 py-8 backdrop-blur">
+          <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 text-center sm:flex-row sm:text-left">
+            <div>
+              <p className="font-semibold">Behörden-Bot</p>
+              <p className="mt-1 text-xs text-muted">
+                Built for Indian students navigating the German education system.
+              </p>
+            </div>
+            <div className="flex items-center gap-6 text-xs text-muted">
+              <Link href="/chat" className="transition hover:text-foreground">
+                Chat
               </Link>
-              <Link href={browseHref} className={CTA_SECONDARY}>
-                Browse the knowledge base
+              <Link href="/history" className="transition hover:text-foreground">
+                History
+              </Link>
+              <Link href="/sources" className="transition hover:text-foreground">
+                Knowledge base
               </Link>
             </div>
-          </GlassCard>
-        </motion.section>
-      </main>
-
-      <footer className="relative z-10 border-t border-glass-border bg-background/60 px-6 py-8 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 text-center sm:flex-row sm:text-left">
-          <div>
-            <p className="font-semibold">Behörden-Bot</p>
-            <p className="mt-1 text-xs text-muted">
-              Built for Indian students navigating the German education system.
-            </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setChangelogOpen(true)}
+                className="text-[10px] text-muted underline-offset-2 transition hover:text-foreground hover:underline"
+              >
+                What&apos;s new · v1.1.0
+              </button>
+              <p className="text-[10px] text-muted">© {new Date().getFullYear()} Behörden-Bot</p>
+            </div>
           </div>
-          <div className="flex items-center gap-6 text-xs text-muted">
-            <Link href="/chat" className="transition hover:text-foreground">
-              Chat
-            </Link>
-            <Link href="/history" className="transition hover:text-foreground">
-              History
-            </Link>
-            <Link href="/sources" className="transition hover:text-foreground">
-              Knowledge base
-            </Link>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setChangelogOpen(true)}
-              className="text-[10px] text-muted underline-offset-2 transition hover:text-foreground hover:underline"
-            >
-              What&apos;s new · v1.1.0
-            </button>
-            <p className="text-[10px] text-muted">© {new Date().getFullYear()} Behörden-Bot</p>
-          </div>
-        </div>
-      </footer>
+        </footer>
+      </div>
 
       {showBackToTop && (
         <button

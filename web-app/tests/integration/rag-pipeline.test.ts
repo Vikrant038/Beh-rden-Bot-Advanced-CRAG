@@ -664,4 +664,35 @@ describe("RAG Pipeline Orchestrators", () => {
     expect(result.finalAnswer).toContain("Out of Domain Detected");
     expect(mockCache.addToCache).not.toHaveBeenCalled();
   });
+
+  it("standard CRAG: falls back gracefully when callLLM fails during generation", async () => {
+    mockedRunCragGate.mockResolvedValue({
+      chunks: [
+        {
+          id: "c1",
+          sourceName: "BAMF",
+          sourceUrl: "https://bamf.de",
+          text: "Visa info",
+          similarityScore: 0.9,
+          crossScore: 0.95,
+        },
+      ],
+      contextText: "Visa info",
+      needsWebFallback: false,
+      pathUsed: "CORRECTIVE_RETRIEVAL",
+      webResults: [],
+    });
+    mockedCallLLM.mockRejectedValue(new Error("Groq 500 error"));
+    const memory = new SummaryBufferMemory("conv-gen-fail", 8);
+
+    const result = await runStandardCrag("visa requirements", {
+      hybridRetriever: mockHybridRetriever,
+      cache: mockCache,
+      memory,
+    });
+
+    expect(result.isGrounded).toBe(false);
+    expect(result.retrievalPath).toBe("LLM_GENERATION_FAILED");
+    expect(result.answer).toContain("I do not have sufficient official information");
+  });
 });

@@ -1,5 +1,5 @@
 vi.mock("@/server/tracing", () => ({
-  observeGeneration: vi.fn((_name, _args) => ({
+  observeGeneration: vi.fn(() => ({
     end: vi.fn(),
     endError: vi.fn(),
   })),
@@ -200,8 +200,8 @@ describe("HfEmbeddingClient", () => {
   });
 
   it("makes an API call and returns embeddings on success", async () => {
-    const fetchMock = vi.fn(
-      async (_input: unknown, _init?: RequestInit) =>
+    const fetchMock = vi.fn<typeof fetch>(
+      async () =>
         ({
           ok: true,
           status: 200,
@@ -289,8 +289,8 @@ describe("HfEmbeddingClient", () => {
   });
 
   it("embedQuery prefixes the text and calls embedTexts", async () => {
-    const fetchMock = vi.fn(
-      async (_input: unknown, _init?: RequestInit) =>
+    const fetchMock = vi.fn<typeof fetch>(
+      async () =>
         ({
           ok: true,
           status: 200,
@@ -308,7 +308,7 @@ describe("HfEmbeddingClient", () => {
 
   it("serves repeat batches from the in-memory cache without re-calling the API", async () => {
     const fetchMock = vi.fn(
-      async (_input: unknown, _init?: RequestInit) =>
+      async () =>
         ({
           ok: true,
           status: 200,
@@ -336,7 +336,7 @@ describe("HfEmbeddingClient", () => {
 
   it("does not cache the same text across distinct batches (exact-batch key)", async () => {
     const fetchMock = vi.fn(
-      async (_input: unknown, _init?: RequestInit) =>
+      async () =>
         ({
           ok: true,
           status: 200,
@@ -355,7 +355,7 @@ describe("HfEmbeddingClient", () => {
 
   it("never serves an expired cache entry (TTL honored on read)", async () => {
     const fetchMock = vi.fn(
-      async (_input: unknown, _init?: RequestInit) =>
+      async () =>
         ({
           ok: true,
           status: 200,

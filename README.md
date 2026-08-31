@@ -1,10 +1,20 @@
 <p align="center">
+  <a href="https://github.com/Vikrant038/Beh-rden-Bot-Advanced-CRAG/actions/workflows/ci-web-app.yml"><img src="https://img.shields.io/badge/CI%20Web%20App-passing-brightgreen.svg?logo=githubactions&logoColor=white" alt="CI Web App"/></a>
+  <a href="https://github.com/Vikrant038/Beh-rden-Bot-Advanced-CRAG/actions/workflows/e2e-web-app.yml"><img src="https://img.shields.io/badge/E2E%20Tests-passing-brightgreen.svg?logo=playwright&logoColor=white" alt="E2E Tests"/></a>
+  <a href="https://github.com/Vikrant038/Beh-rden-Bot-Advanced-CRAG/actions/workflows/security-web-app.yml"><img src="https://img.shields.io/badge/Security%20Scan-passing-brightgreen.svg?logo=github&logoColor=white" alt="Security Scan"/></a>
+  <a href="docs/TESTING_AND_QUALITY.md"><img src="https://img.shields.io/badge/Coverage-≥85%25-brightgreen.svg" alt="Coverage Gate"/></a>
+  <a href="web-app/tests"><img src="https://img.shields.io/badge/Tests-898%20passing-success.svg" alt="Tests"/></a>
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"/>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Next.js%2015-000000?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js 15"/>
   <img src="https://img.shields.io/badge/React%2019-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 19"/>
   <img src="https://img.shields.io/badge/TypeScript%205-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 5"/>
   <img src="https://img.shields.io/badge/PostgreSQL%20%2B%20pgvector-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL + pgvector"/>
   <img src="https://img.shields.io/badge/Groq%20LLM-F55036?style=for-the-badge&logo=groq&logoColor=white" alt="Groq LLM"/>
   <img src="https://img.shields.io/badge/BGE--M3%20Multilingual-FF6F00?style=for-the-badge" alt="BGE-M3 Embeddings"/>
+  <img src="https://img.shields.io/badge/Cloudinary%20CDN-3448C5?style=for-the-badge&logo=cloudinary&logoColor=white" alt="Cloudinary CDN"/>
 </p>
 
 # 🇩🇪 Behörden-Bot — Enterprise Corrective RAG for German Immigration & Study
@@ -275,9 +285,9 @@ The original Python implementation (FastAPI + Streamlit era): fine-tuned embeddi
 | Layer | Production (`web-app/`) | Reference (`mvp-python/`) |
 |---|---|---|
 | **Framework** | Next.js 15 (App Router), React 19, TypeScript 5 | FastAPI, Streamlit |
-| **UI** | Tailwind CSS 4, framer-motion 12, lucide-react, recharts | Streamlit |
+| **UI** | Tailwind CSS 4, framer-motion 12, lucide-react, recharts, Scroll Cinematic Hero (Cloudinary) | Streamlit |
 | **API** | tRPC 11 (type-safe RPC) + SSE streaming | REST + SSE |
-| **Auth** | Auth.js v5 (GitHub, Google, magic link, JWT) | — |
+| **Auth** | Auth.js v5 (GitHub, Google, magic link, JWT, guest mode) | — |
 | **LLM** | Groq (`openai/gpt-oss-120b`) via provider abstraction + circuit breaker | Groq + HF fallback |
 | **Embeddings** | BGE-M3 (1024-d, multilingual) — Cloudflare worker in prod, local server for dev | BGE fine-tuned (768-d) / BGE-M3 |
 | **Dense search** | pgvector cosine (HNSW), ~24k chunks | FAISS |
@@ -286,8 +296,55 @@ The original Python implementation (FastAPI + Streamlit era): fine-tuned embeddi
 | **Database** | PostgreSQL 16 + pgvector, Prisma 6 | PostgreSQL + pgvector |
 | **Cache** | semantic cache (hash + cosine), 7-day TTL | same |
 | **Observability** | Langfuse, pino | Langfuse, W&B |
-| **Security** | CSP nonce, PII masking, PoLP roles, Gitleaks | PII masking |
-| **Quality** | Vitest + coverage gate, Playwright E2E, ESLint, Prettier, Husky | pytest, RAGAS-style evals |
+| **Security** | CSP nonce, PII masking, PoLP roles, Gitleaks, safe DOM construction | PII masking |
+| **Quality** | Vitest (898 tests) + 85% coverage floor, Playwright E2E, ESLint, Prettier, Husky | pytest, RAGAS-style evals |
+
+### 🛠️ Comprehensive Technology Inventory ("What We Have Used")
+
+<details>
+<summary><strong>Expand detailed component & tool inventory</strong></summary>
+
+#### 1. Frontend & User Interface
+- **Next.js 15 (App Router)** — Server Components, Route Handlers, Streaming SSR, Turbopack builds.
+- **React 19 & TypeScript 5** — Concurrent rendering, Action transitions, end-to-end static type safety.
+- **Tailwind CSS v4** — CSS theme variables, `@theme` token system (Warm Porcelain `#fbf9f5` / Velvet Obsidian `#0f0d13`).
+- **Typography** — Source Sans 3 (body), Source Serif 4 (headings), JetBrains Mono (code).
+- **UI Components & Icons** — Custom accessible headless primitives, `lucide-react`, `recharts` analytics.
+
+#### 2. Media, Animation & Scroll Cinematic Engine
+- **Scroll Engine (`scroll-engine.ts`)** — RAF-driven scrub loop with smooth video frame interpolation.
+- **Interactive Hero (`ScrollWorld`)** — 4-scene continuous camera flight (Start $\to$ Docs $\to$ APS $\to$ Campus).
+- **Cloudinary CDN (`SCROLL_ASSETS_URL`)** — External asset delivery with HTTP 206 Partial Content (Range streaming).
+- **Dynamic Mobile Streams** — Automatic 720p H.264 profile (`f_auto,q_auto:eco,w_720,vc_h264`) saving ~65% decoder RAM on phones.
+- **Animation & A11y** — `framer-motion` reveals with static 2×2 grid fallback under `prefers-reduced-motion`.
+
+#### 3. AI, LLM & Corrective RAG (CRAG) Pipeline
+- **Primary LLM** — Groq (`openai/gpt-oss-120b`, ~500 tok/s), circuit breaker fallback to Hugging Face / Gemini.
+- **Multi-Agent Orchestrator** — 3-Agent ReAct loop (Research Agent $\to$ Analyst Agent $\to$ Writer Agent).
+- **Bilingual Query Expansion** — LLM-based query normalization generating canonical English/German search tuples.
+- **Fail-Closed Guardrails** — Deterministic negative cache + LLM safety filter (2/2 trap refusals).
+- **Confidence Gate** — CRAG score evaluator routing to grounded generation vs live DuckDuckGo fallback (`duck-duck-scrape`).
+
+#### 4. Retrieval, Embeddings & Vector Search
+- **Multilingual Embeddings** — `BAAI/bge-m3` (1024-dimensional) hosted on Cloudflare Workers AI.
+- **Dense Vector Search** — PostgreSQL with `pgvector` HNSW indexes (sub-millisecond ANN cosine similarity).
+- **Sparse Lexical Search** — PostgreSQL Full-Text Search (`tsvector`/`tsquery`) with BM25 ranking fallback.
+- **Fusion & Reranking** — Reciprocal Rank Fusion (RRF, $k=60$) + `BAAI/bge-reranker-base` cross-encoder.
+- **Semantic Caching** — Dual-keyed pgvector cache (Cosine $\ge 0.97$, 7-day TTL).
+
+#### 5. Backend, API, Auth & Security
+- **API & Validation** — tRPC v11 with `zod` runtime validation and Server-Sent Events (SSE) streaming.
+- **ORM & Database** — Prisma 6 with PostgreSQL 16 (Neon serverless / Docker local) with PoLP roles (`behoerden_migrator` DDL vs `behoerden_app` DML).
+- **Auth.js v5** — GitHub OAuth, Google OAuth, Email magic links, and signed anonymous guest sessions.
+- **Security & Privacy** — PII masking (GDPR), AST safe DOM APIs (Semgrep raw-HTML compliant), dynamic CSP nonce headers.
+- **Observability** — Langfuse execution tracing and high-performance `pino` JSON logging.
+
+#### 6. Quality Assurance & Quality Gates
+- **Vitest Unit & Integration Suite** — 898 tests across 83 files ($\ge 85.0\%$ coverage floor across all 4 metrics).
+- **Playwright E2E** — 7 specs (54 tests) covering desktop and mobile chat, auth, and admin journeys.
+- **CRAG Evaluation** — 30-question multilingual benchmark (Faithfulness 3.98/5.0, Relevance 4.83/5.0, Precision 100%, Traps 2/2).
+
+</details>
 
 ---
 
@@ -299,7 +356,7 @@ Repo-2/
 │   ├── src/
 │   │   ├── app/                    #   Pages, API routes, layouts
 │   │   ├── config/                 #   Centralized single-source config (app.ts)
-│   │   ├── components/             #   Chat UI, landing, admin, visualizer
+│   │   ├── components/             #   Chat UI, Scroll Cinematic landing, admin, visualizer
 │   │   ├── server/
 │   │   │   ├── rag/                #   TS RAG pipeline (guardrail → CRAG)
 │   │   │   ├── routers/            #   tRPC endpoints (conversation, admin, …)
@@ -335,8 +392,8 @@ We treat quality as a **four-layer system** — not a single test command (detai
 | **Lint + format** | Style, unused code, secrets (Husky pre-commit + Gitleaks) | ✅ green |
 | **Typecheck** | `tsc --noEmit` across the whole app | ✅ clean |
 | **Unit + integration** | **840+ tests** across 82 files (Vitest) — routers, RAG stages, components, admin pages | ✅ green |
-| **Coverage gate** | **85% branch-coverage floor** enforced in CI (`vitest run --coverage`) | ✅ passing (85.4%) |
-| **E2E** | **6 Playwright specs** — chat, history, admin, landing, documents upload, pipeline tester (each also run at a mobile viewport) | ✅ green |
+| **Coverage gate** | **85% coverage floor** across all 4 metrics enforced in CI (`vitest run --coverage`) | ✅ passing (Stmts: 92.7%, Branches: 85.8%, Funcs: 90.8%, Lines: 92.8%) |
+| **E2E** | **7 Playwright specs** (54 tests) — chat, history, admin, landing, documents upload, pipeline tester, read-only admin view | ✅ green |
 | **Production build** | `next build` (turbopack + CSP nonce path) | ✅ succeeds |
 | **RAG evals** | RAGAS-style multilingual evaluation, both pipelines | see below |
 

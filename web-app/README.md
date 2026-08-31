@@ -2,18 +2,19 @@
 
 AI assistant for German immigration, student visas, APS certification, blocked
 accounts, and university applications. A Next.js 15 (App Router) frontend backed
-by the [Repo-2](https://github.com/anomalyco/behoerden-bot) 3-Agent ReAct RAG
+by the [Repo-2](https://github.com/Vikrant038/Beh-rden-Bot-Advanced-CRAG) 3-Agent ReAct RAG
 pipeline.
 
 ## Stack
 
 - **Framework:** Next.js 15 (App Router), React 19, TypeScript 5
-- **UI:** Tailwind CSS 4, framer-motion, lucide-react, recharts, next-themes
+- **UI:** Tailwind CSS 4, framer-motion, lucide-react, recharts, next-themes, Scroll Cinematic Hero
+- **Media & CDN:** Cloudinary CDN asset streaming (`SCROLL_ASSETS_URL`), HTTP 206 Range video streaming
 - **Data:** Prisma 6 + PostgreSQL (pgvector), tRPC 11 + TanStack Query
 - **Auth:** Auth.js v5 (GitHub, Google, Resend magic link; JWT sessions)
-- **AI/LLM:** SSE streaming chat, 3-agent ReAct pipeline, hybrid retrieval
+- **AI/LLM:** SSE streaming chat, 3-agent ReAct pipeline, hybrid retrieval (pgvector + FTS)
 - **Observability:** Langfuse tracing, pino logging
-- **Quality:** Vitest (unit + integration, ≥85% coverage gate),
+- **Quality:** Vitest (unit + integration, ≥85% coverage floor across all 4 metrics, 898 tests),
   Playwright E2E, ESLint, Prettier, Husky pre-commit hooks, GitHub Actions CI
 
 ## Getting started
@@ -65,26 +66,27 @@ first: `docker compose down -v && docker compose up -d postgres`.
 
 ## Scripts
 
-| Script                               | Description                      |
-| ------------------------------------ | -------------------------------- |
-| `pnpm dev`                           | Start the dev server (port 3000) |
-| `pnpm build`                         | Production build                 |
-| `pnpm start`                         | Serve the production build       |
-| `pnpm lint`                          | ESLint (Next config)             |
-| `pnpm typecheck`                     | `tsc --noEmit`                   |
-| `pnpm test`                          | Vitest unit + integration suite  |
-| `pnpm test:watch`                    | Vitest watch mode                |
-| `pnpm test:e2e`                      | Playwright E2E suite             |
-| `pnpm format` / `pnpm format:check`  | Prettier write / check           |
-| `pnpm db:migrate` / `pnpm db:deploy` | Prisma migrate dev / deploy      |
-| `pnpm db:seed`                       | Seed the database                |
-| `pnpm ingest`                        | Run the document ingest CLI      |
+| Script                               | Description                                         |
+| ------------------------------------ | --------------------------------------------------- |
+| `pnpm dev`                           | Start the dev server (port 3000)                    |
+| `pnpm build`                         | Production build                                    |
+| `pnpm start`                         | Serve the production build                          |
+| `pnpm lint`                          | ESLint (Next config)                                |
+| `pnpm typecheck`                     | `tsc --noEmit`                                      |
+| `pnpm test`                          | Vitest unit + integration suite                     |
+| `pnpm test:watch`                    | Vitest watch mode                                   |
+| `pnpm vitest run --coverage`         | Vitest coverage gate (≥85% across all 4 metrics)     |
+| `pnpm test:e2e`                      | Playwright E2E suite                                |
+| `pnpm format` / `pnpm format:check`  | Prettier write / check                              |
+| `pnpm db:migrate` / `pnpm db:deploy` | Prisma migrate dev / deploy                         |
+| `pnpm db:seed`                       | Seed the database                                   |
+| `pnpm ingest`                        | Run the document ingest CLI                         |
 
 ### Quality gate (must pass before merge)
 
 ```bash
 pnpm format:check && pnpm lint && pnpm typecheck && pnpm test
-pnpm exec vitest run --coverage   # ≥80% lines/functions/statements
+pnpm exec vitest run --coverage   # ≥85% statements/branches/functions/lines (898 tests)
 pnpm build
 pnpm test:e2e                     # requires Playwright browsers
 ```

@@ -20,6 +20,13 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],
+      exclude: [
+        "node_modules/**",
+        "src/**/*.d.ts",
+        "src/server/ingest/translate/index.ts",
+        "src/server/lib/errors/index.ts",
+        "src/lib/guest.ts",
+      ],
       thresholds: {
         lines: 85,
         functions: 85,

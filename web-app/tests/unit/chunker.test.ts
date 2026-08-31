@@ -100,7 +100,7 @@ describe("RecursiveChunker", () => {
       minChunkChars: 10,
       separators: ["\n"],
     });
-    const chunks = chunker.splitText(`${'x'.repeat(500)}\nshort tail`);
+    const chunks = chunker.splitText(`${"x".repeat(500)}\nshort tail`);
     expect(chunks.length).toBeGreaterThan(1);
     for (const chunk of chunks) {
       expect(chunk.length).toBeLessThanOrEqual(100 + 20);

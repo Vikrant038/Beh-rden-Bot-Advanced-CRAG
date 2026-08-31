@@ -73,17 +73,19 @@ Persist to PostgreSQL Semantic Cache + Conversational Memory
 
 ---
 
-### **Component 2: Next.js Web App (web-app folder)**
+### **Component 2: Next.js Web App (web-app folder — Shipped Product)**
 
-**Purpose:** Production-grade chat UI, auth, admin dashboard
+**Purpose:** Production-grade chat UI, 3-Agent ReAct pipeline, Scroll Cinematic hero, auth, admin dashboard
 
 **Stack:**
 - Next.js 15 (App Router), React 19, TypeScript 5
-- UI: Tailwind CSS 4, shadcn/ui
+- UI: Tailwind CSS 4, framer-motion, lucide-react, next-themes, Scroll Cinematic Hero
+- Media & CDN: Cloudinary dynamic streaming (`SCROLL_ASSETS_URL`), HTTP 206 Range video streaming
 - API: tRPC 11 (type-safe RPC), Prisma 6
-- Auth: NextAuth v5 (OAuth + magic links)
-- Database: PostgreSQL + pgvector
-- Deployment: Vercel
+- Auth: NextAuth v5 (OAuth + magic links, anonymous guest mode)
+- Database: PostgreSQL 16 + pgvector (1024-dim BGE-M3 space)
+- Quality: Vitest (898 tests, ≥85% coverage floor across all 4 metrics), Playwright E2E
+- Deployment: Vercel Hobby ($0/mo)
 
 **Architecture:**
 ```

@@ -3,33 +3,48 @@
 This document serves as the reference for the design tokens used across the application to maintain a consistent visual rhythm and hierarchy.
 
 ## Colors
-The application supports Light and Dark modes.
+The application supports Light and Dark modes matching the diorama video aesthetic.
 
-### Light Mode (Paper & Ink)
-- **Background:** `#faf7f2`
-- **Foreground:** `#1f2430`
-- **Surface:** `#ffffff` (Hover: `#f3efe7`)
-- **Border:** `#e5ded2`
-- **Primary:** `#3f5bd6` (Hover: `#3249b8`, Foreground: `#ffffff`)
-- **Accent:** `#0e7490`
-- **Success:** `#15803d`
-- **Warning:** `#b45309`
-- **Destructive:** `#b91c1c`
-- **Muted:** `#525866`
-- **Glass:** `rgba(255, 255, 255, 0.62)` (Border: `rgba(31, 36, 48, 0.1)`)
-- **Shadow Glass:** `0 8px 32px rgba(90, 90, 140, 0.16)`
+### Light Mode (Warm Diorama Porcelain & Clay)
+- **Background:** `#fbf9f5` (warm, editorial porcelain)
+- **Foreground:** `#1c1917` (deep charcoal ink)
+- **Surface:** `#ffffff` (Hover: `#f5f0e8`)
+- **Border:** `#e7e0d5`
+- **Primary:** `#7c3aed` (Luminous Violet, Hover: `#6d28d9`, Foreground: `#ffffff`)
+- **Accent:** `#0284c7` (Sky Blue)
+- **Success:** `#15803d` (Emerald)
+- **Warning:** `#b45309` (Amber)
+- **Destructive:** `#b91c1c` (Crimson)
+- **Muted:** `#57534e`
+- **Glass:** `rgba(255, 255, 255, 0.72)` (Border: `rgba(28, 25, 23, 0.08)`)
+- **Shadow Glass:** `0 8px 32px rgba(124, 58, 237, 0.08)`
 
-### Dark Mode (Midnight)
-- **Background:** `#0b1020`
-- **Foreground:** `#e8ecf8`
-- **Surface:** `#111832` (Hover: `#1a2340`)
-- **Border:** `#232e4f`
-- **Primary:** `#7c9cff` (Hover: `#93aeff`, Foreground: `#0b1020`)
+### Dark Mode (Velvet Obsidian)
+- **Background:** `#0f0d13` (velvet dark obsidian matching video backgrounds)
+- **Foreground:** `#f8fafc` (crisp luminous text)
+- **Surface:** `#181520` (Hover: `#221e2d`)
+- **Border:** `#2a2538`
+- **Primary:** `#a78bfa` (Luminous Violet, Hover: `#c4b5fd`, Foreground: `#0f0d13`)
+- **Accent:** `#38bdf8`
+- **Success:** `#4ade80`
+- **Warning:** `#fbbf24`
+- **Destructive:** `#f87171`
+- **Muted:** `#94a3b8`
+- **Glass:** `rgba(24, 21, 32, 0.75)` (Border: `rgba(255, 255, 255, 0.09)`)
+- **Shadow Glass:** `0 8px 32px rgba(0, 0, 0, 0.45)`
+
+### Hero & Stage Cinematic Accents
+Harmonized across the scroll hero segments, badges, and status pills:
+- **Start (Arrival & Overview):** `#7c3aed` (Royal Violet)
+- **Documents (Paperwork & BAMF):** `#2563eb` (Cobalt Blue)
+- **APS (Verification & Recognition):** `#059669` (Forest Emerald)
+- **Campus (Enrollment & Graduation):** `#d97706` (Sunburst Amber)
 
 ## Typography Scale
-*Configured in `globals.css` and applied via Tailwind CSS default classes.*
-- **Font Sans:** `"Source Sans 3 Variable", ui-sans-serif, system-ui, sans-serif`
-- **Font Mono:** `"JetBrains Mono Variable", ui-monospace, monospace`
+*Configured in `globals.css` with professional variable fonts.*
+- **Font Sans (UI & Body):** `"Source Sans 3 Variable", ui-sans-serif, system-ui, sans-serif`
+- **Font Display (Headings):** `"Source Serif 4 Variable", ui-serif, Georgia, serif`
+- **Font Mono (Code & Traces):** `"JetBrains Mono Variable", ui-monospace, monospace`
 - **Text 2xs:** `0.6875rem` (11px)
 
 ## Radius Scale

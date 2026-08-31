@@ -29,20 +29,20 @@ Why format is a gate, not a suggestion: the "CI broke on the latest push" incide
 
 ### Layer 2 — Unit + integration (Vitest)
 
-- **840+ tests across 82 files**, run with `pnpm test` (branch coverage floor 85%).
+- **840+ tests across 82 files**, run with `pnpm test` (Statements: **92.7%**, Branches: **85.8%**, Functions: **90.8%**, Lines: **92.8%** — floors 85%).
 - **Unit:** pure logic — RAG stages (guardrail, sub-queries, RRF, rerank scoring), cache payload parsing, conversation policy, PII masking, sparse retriever dispatch, telemetry aggregation.
 - **Integration:** tRPC routers (conversation, admin, public) against **mocked Prisma** — fast, deterministic, no DB needed in CI (CI exports placeholder env for zod validation only).
-- **Component:** chat components with behavioral contracts — message bubbles, pipeline status, chat input (mode toggle, paste, char counter, MAX_QUERY_LENGTH), empty state (prompt cards + submit contract), source citations (pdf:// handling, favicons), theme toggle, UI primitives.
+- **Component:** chat components with behavioral contracts — message bubbles, pipeline status, chat input (mode toggle, paste, char counter, MAX_QUERY_LENGTH), empty state (prompt cards + submit contract), source citations (pdf:// handling, favicons), theme toggle, UI primitives, Scroll Cinematic landing hero (`ScrollWorld`).
 
 The DB-layer refactor (row→domain mapping, analytics, conversation policy, sparse retriever) added dedicated tests — e.g. `sparse-retriever.test.ts` covers the FTS path, the BM25 fallback, and index memoization.
 
 ### Layer 3 — Coverage gate (85%)
 
-`pnpm vitest run --coverage` in CI enforces an **85% floor** across the app. The floor is deliberately aggressive because:
+`pnpm vitest run --coverage` in CI enforces an **85% floor** across statements, branches, functions, and lines. The floor is deliberately aggressive because:
 
 - The RAG pipeline is the product — untested stages are unverified claims.
 - It caught real gaps: the pipeline visualizer's pre/post-processing branches, telemetry branches, and the admin router's error paths all needed tests to pass the gate.
-- New features must ship with tests (the pipeline-tester retention feature, session-aware CTAs, and the responsive work all landed with their tests in the same commit).
+- New features must ship with tests (the pipeline-tester retention feature, session-aware CTAs, scroll hero fallback & touch optimizations, and the responsive work all landed with their tests in the same commit).
 
 ### Layer 4 — E2E (Playwright)
 

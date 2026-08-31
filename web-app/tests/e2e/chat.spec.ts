@@ -220,11 +220,11 @@ test("admin sees another user's conversation read-only (no composer, no write ac
   // No composer, no send button, no regenerate/follow-up write surfaces.
   await expect(page.getByPlaceholder(/Ask about visas/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Send message" })).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Regenerate answer" }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Regenerate answer" })).toHaveCount(0);
   // The follow-up chips are hidden too (they would send a message).
-  await expect(page.getByText("How long does a German student visa take to process?")).toHaveCount(0);
+  await expect(page.getByText("How long does a German student visa take to process?")).toHaveCount(
+    0,
+  );
 
   // Write actions are unreachable on every breakpoint. Desktop shows them in
   // the header (clear is disabled in read-only); mobile hides the header and

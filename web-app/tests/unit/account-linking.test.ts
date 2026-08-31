@@ -62,10 +62,7 @@ describe("autoLinkOAuthAccount", () => {
   it("does nothing for a brand-new user (no existing account)", async () => {
     mockedUserFindUnique.mockResolvedValue(null as never);
 
-    const linked = await autoLinkOAuthAccount(
-      { email: "new@example.com" },
-      githubAccount,
-    );
+    const linked = await autoLinkOAuthAccount({ email: "new@example.com" }, githubAccount);
 
     expect(linked).toBe(false);
     expect(mockedAccountUpsert).not.toHaveBeenCalled();
@@ -96,10 +93,7 @@ describe("autoLinkOAuthAccount", () => {
     mockedUserFindUnique.mockResolvedValue({ id: "user-42" } as never);
     mockedAccountUpsert.mockResolvedValue({ id: "existing-acct" } as never);
 
-    const linked = await autoLinkOAuthAccount(
-      { email: "person@example.com" },
-      githubAccount,
-    );
+    const linked = await autoLinkOAuthAccount({ email: "person@example.com" }, githubAccount);
 
     expect(linked).toBe(true);
     // Same unique key → Prisma updates the row in place; no duplicate.

@@ -48,7 +48,7 @@
 | 1.11 | Add a Brand Logo & Favicon Set | `public/`, `src/app/layout.tsx` | ⚠️ Partial | Logo mark (GraduationCap) in navbar/login/404 **done**, but `public/` still ships only default Next.js SVGs — no custom favicon, apple-touch-icon, or OG image asset (only `Images/hero-banner.jpg`). |
 | 1.12 | Add Open Graph / Social Share Metadata | `src/app/layout.tsx` | ✅ Implemented | `openGraph` (1200×630 image), `twitter`, `robots`, `alternates`, `metadataBase`. |
 | 1.13 | Add a Command Palette (⌘K) | `src/components/ui/command-palette.tsx`, `src/lib/trpc/provider.tsx` | ✅ Implemented | Fuzzy search, arrow-key nav, Esc close, theme toggle + sign-out actions, mounted app-wide. |
-| 1.14 | Add a "What's New" / Changelog Modal | `src/components/ui/changelog-modal.tsx` | ✅ Implemented | Radix Dialog, triggered from landing footer. (Reads hardcoded entries, not `CHANGELOG.md`.) |
+| 1.14 | Add a "What's New" / Changelog Modal | `src/components/ui/changelog-modal.tsx`, `src/app/api/changelog/route.ts` | ✅ Implemented | Radix Dialog, triggered from landing footer; fetches real markdown releases dynamically from `/api/changelog`. |
 
 ## 2. Landing Page
 
@@ -67,6 +67,7 @@
 | 2.11 | Add a "Supported Topics" Tag Cloud | `src/app/page.tsx` | ✅ Implemented | 12-topic pill cloud. (Links to `/login`, not a pre-filled chat query.) |
 | 2.12 | Add a Footer with Real Links | `src/app/page.tsx` | ✅ Implemented | Multi-column footer with Chat/History/Knowledge base links + changelog trigger. |
 | 2.13 | Add a "Back to Top" Floating Button | `src/app/page.tsx` | ✅ Implemented | Appears after 600px scroll; smooth scroll respecting reduced motion. |
+| 2.14 | 3D Full-Viewport Scroll-Cinematic Hero | `src/components/landing/scroll-world.tsx`, `scroll-engine.ts` | ✅ Implemented | Interactive 4-scene video scrub engine (Start $\to$ Docs $\to$ APS $\to$ Campus), Cloudinary streaming, touch/decoder optimizations, safe DOM construction. |
 
 ## 3. Auth & Login Experience
 

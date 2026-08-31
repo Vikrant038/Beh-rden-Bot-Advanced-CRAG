@@ -11,9 +11,9 @@ describe("detectLanguageLlm (LLM-based detection)", () => {
     const spy = vi
       .spyOn(limiter.client.chat.completions, "create")
       .mockResolvedValue({ choices: [{ message: { content: '{"language": "de"}' } }] } as never);
-    await expect(detectLanguageLlm("Die Aufenthaltserlaubnis ist erforderlich.", limiter)).resolves.toBe(
-      "de",
-    );
+    await expect(
+      detectLanguageLlm("Die Aufenthaltserlaubnis ist erforderlich.", limiter),
+    ).resolves.toBe("de");
     expect(spy).toHaveBeenCalledTimes(1);
   });
 

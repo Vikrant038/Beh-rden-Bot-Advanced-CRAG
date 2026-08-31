@@ -49,9 +49,11 @@ export default auth((request) => {
       "default-src 'self'",
       `script-src 'self' 'nonce-${nonce}'`,
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://www.google.com",
+      // Google s2 favicon service feeds source chips; Cloudinary feeds scroll assets.
+      "img-src 'self' data: blob: https://www.google.com https://res.cloudinary.com",
+      "media-src 'self' data: blob: https://res.cloudinary.com",
       "font-src 'self' data:",
-      "connect-src 'self' https://api-inference.huggingface.co https://api.groq.com",
+      "connect-src 'self' https://api-inference.huggingface.co https://api.groq.com https://res.cloudinary.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

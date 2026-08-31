@@ -483,6 +483,37 @@ describe("GroqRateLimiter TPD guard", () => {
     const state = limiter as unknown as { tokensToday: number };
     expect(state.tokensToday).toBe(0);
   });
+
+  it("resets tokensToday when the day rolls over in GroqRateLimiterPool", async () => {
+    const pool = new GroqRateLimiterPool(
+      ["test-key"],
+      [{ model: "test-model-1", rpm: 100, tpm: 1000, tpd: 500, rpd: 100 }],
+    );
+    // simulate consumption on day X
+    const state = pool as unknown as {
+      tokensToday: number[];
+      tpdResetDays: number[];
+      hasModelBudget: (idx: number, tokens: number) => boolean;
+    };
+    state.tokensToday[0] = 450;
+    state.tpdResetDays[0] = (new Date().getDate() + 1) % 30; // different day
+
+    const hasBudget = state.hasModelBudget(0, 100);
+    expect(hasBudget).toBe(true);
+    expect(state.tokensToday[0]).toBe(0);
+  });
+
+  it("throws when all models are unavailable on the account", async () => {
+    const pool = new GroqRateLimiterPool(
+      ["test-key"],
+      [{ model: "test-model-1", rpm: 100, tpm: 1000, tpd: 500, rpd: 100 }],
+    );
+    pool.blacklistModel("test-model-1");
+
+    await expect(pool.waitForTokens(10)).rejects.toThrow(
+      /All translation models are unavailable on this account/,
+    );
+  });
 });
 
 describe("GroqRateLimiter", () => {

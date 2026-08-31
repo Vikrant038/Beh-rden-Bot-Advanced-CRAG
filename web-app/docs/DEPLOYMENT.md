@@ -294,9 +294,11 @@ time**.
 
 `GROQ_API_KEY` (+ `GROQ_MODEL`), `HF_TOKEN`, `RERANKER_URL` / `RERANKER_TOKEN` /
 `RERANKER_MODEL` (default to the embedding worker + token + `@cf/baai/bge-reranker-base`;
-set only to point the reranker at a different provider), `GITHUB_CLIENT_ID`,
-`GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`,
-`EMAIL_FROM`, `UPSTASH_REDIS_URL`, `UPSTASH_REDIS_TOKEN` (rate limiting),
+set only to point the reranker at a different provider), `SCROLL_ASSETS_URL`
+(Cloudinary CDN base endpoint, e.g. `https://res.cloudinary.com/<cloud_name>` — powers
+dynamic 720p/1080p HTTP 206 video range streaming and still posters for the landing page hero),
+`GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+`RESEND_API_KEY`, `EMAIL_FROM`, `UPSTASH_REDIS_URL`, `UPSTASH_REDIS_TOKEN` (rate limiting),
 `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`.
 
 > ⚠️ `src/app/layout.tsx` hardcodes `APP_URL = "https://behoerden-bot.vercel.app"` for

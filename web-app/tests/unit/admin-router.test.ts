@@ -83,6 +83,23 @@ describe("admin router", () => {
     expect(result.avgLatencyMs).toBe(0);
   });
 
+  it("metrics: handles individual count rejections without failing", async () => {
+    prismaMock.user.count.mockRejectedValue(new Error("user count fail"));
+    prismaMock.conversation.count.mockRejectedValue(new Error("conv count fail"));
+    prismaMock.message.count.mockRejectedValue(new Error("msg count fail"));
+    prismaMock.document.count.mockRejectedValue(new Error("doc count fail"));
+    prismaMock.$queryRaw.mockRejectedValue(new Error("stats fail"));
+
+    const caller = makeCaller();
+    const result = await caller.admin.metrics();
+    expect(result.totalUsers).toBe(0);
+    expect(result.totalConversations).toBe(0);
+    expect(result.totalMessages).toBe(0);
+    expect(result.queriesToday).toBe(0);
+    expect(result.documentCount).toBe(0);
+    expect(result.cacheHitRate).toBe(0);
+  });
+
   it("clearCache: wipes the semantic cache", async () => {
     prismaMock.semanticCacheEntry.deleteMany.mockResolvedValue({ count: 3 } as never);
     const caller = makeCaller();

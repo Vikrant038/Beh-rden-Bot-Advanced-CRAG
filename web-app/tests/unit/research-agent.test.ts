@@ -4,7 +4,7 @@ import type { HybridRetriever } from "@/server/rag/retrieval/hybrid";
 import type { PipelineEvent } from "@/server/rag/types";
 
 vi.mock("@/server/rag/query-expansion", () => ({
-  generateSubQueries: vi.fn(async (_query: string) => ({
+  generateSubQueries: vi.fn(async () => ({
     language: "en",
     queries: ["subquery-0", "subquery-1", "subquery-2"],
   })),

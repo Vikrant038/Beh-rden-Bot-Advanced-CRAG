@@ -121,6 +121,22 @@ describe("assertSafeUrl (SSRF guard)", () => {
     lookupMock.mockResolvedValue([{ address: "fe80:0:0:0:0:0:0:1", family: 6 }]);
     await expect(assertSafeUrl("https://example.com")).rejects.toBeInstanceOf(SsrfBlockedError);
   });
+
+  it("fails closed on unparsable, corrupt, or oversized IPv6 addresses", async () => {
+    for (const address of [
+      "1:2:3:4:5:6:7:8:9", // too many groups
+      "1:2:3:4:5:6:7:zzzz", // invalid hex
+      "invalid-ip-format",
+    ]) {
+      lookupMock.mockResolvedValue([{ address, family: 6 }]);
+      await expect(assertSafeUrl("https://example.com")).rejects.toBeInstanceOf(SsrfBlockedError);
+    }
+  });
+
+  it("fails closed on malformed IPv4 address strings with non-numeric parts", async () => {
+    lookupMock.mockResolvedValue([{ address: "192.168.1.abc", family: 4 }]);
+    await expect(assertSafeUrl("https://example.com")).rejects.toBeInstanceOf(SsrfBlockedError);
+  });
 });
 
 describe("PrismaCorpusProvider", () => {
