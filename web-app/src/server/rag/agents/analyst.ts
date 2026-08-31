@@ -10,6 +10,7 @@ import {
   ANALYST_RESEARCH_CONTEXT_CHARS,
   LLM_MAX_TOKENS_ANALYSIS,
   LLM_TEMPERATURE_HIGH,
+  LLM_TEMPERATURE_LOW,
 } from "@/config/app";
 import { createLogger } from "@/server/lib/logger";
 
@@ -17,10 +18,28 @@ const logger = createLogger("analyst-agent");
 
 export const AnalystMatrixSchema = z.object({
   thinking_process: z.string().optional(),
-  summary: z.string(),
-  structured_table: z.string(),
-  key_insights: z.array(z.string()),
-  verified_facts: z.array(z.string()),
+  summary: z.string().min(1, "Summary is required"),
+  structured_table: z.string().min(1, "Structured table is required"),
+  key_insights: z.preprocess((val) => {
+    if (Array.isArray(val)) return val.map(String).filter(Boolean);
+    if (typeof val === "string") {
+      return val
+        .split("\n")
+        .map((s) => s.replace(/^[-*•0-9.]+\s*/, "").trim())
+        .filter(Boolean);
+    }
+    return [];
+  }, z.array(z.string())),
+  verified_facts: z.preprocess((val) => {
+    if (Array.isArray(val)) return val.map(String).filter(Boolean);
+    if (typeof val === "string") {
+      return val
+        .split("\n")
+        .map((s) => s.replace(/^[-*•0-9.]+\s*/, "").trim())
+        .filter(Boolean);
+    }
+    return [];
+  }, z.array(z.string())),
 });
 
 export type AnalystMatrix = z.infer<typeof AnalystMatrixSchema>;
@@ -57,14 +76,14 @@ export async function agentAnalystEvaluation(
     `5. Return ONLY a valid JSON object without markdown code fences.\n\n` +
     `JSON Format:\n` +
     `{\n` +
-    `  "thinking_process": "Use this scratchpad to vent your reasoning before committing to the arrays",\n` +
-    `  "summary": "Executive summary text",\n` +
-    `  "structured_table": "Markdown table string",\n` +
+    `  "thinking_process": "Brief 1-2 sentence analytical summary",\n` +
+    `  "summary": "Executive summary text answering the query",\n` +
+    `  "structured_table": "| Dimension | Details |\\n|---|---|\\n| Requirements | ... |\\n| Timeline | ... |",\n` +
     `  "key_insights": ["Insight 1", "Insight 2"],\n` +
     `  "verified_facts": ["Fact 1", "Fact 2"]\n` +
     `}`;
 
-  const parsed = await callLLMJson<unknown>(prompt, 600, 0.1);
+  const parsed = await callLLMJson<unknown>(prompt, LLM_MAX_TOKENS_ANALYSIS, LLM_TEMPERATURE_LOW);
   const result = AnalystMatrixSchema.safeParse(parsed);
 
   if (result.success) {

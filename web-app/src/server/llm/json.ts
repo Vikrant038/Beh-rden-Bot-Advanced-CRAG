@@ -42,8 +42,7 @@ export function parseJsonLoose(raw: string): unknown {
     // query-expansion/analyst/guardrail contracts (each caller fell back to its
     // degraded path on every such response). Recover by extracting the first
     // complete JSON value (string-aware brace/bracket matching) and parsing it.
-    // The object is preferred over the array: every contract requests an object,
-    // and prose like "see [1]" must not be mistaken for the JSON value.
+    // The object is preferred over the array when both exist at index 0.
     const brace = candidate.indexOf("{");
     const start = brace !== -1 ? brace : candidate.indexOf("[");
     if (start === -1) {
@@ -53,27 +52,221 @@ export function parseJsonLoose(raw: string): unknown {
     try {
       return JSON.parse(value);
     } catch {
-      // Other LLM glitches inside the value also break JSON.parse: bare
-      // identifiers ("\"language\": language" — a real Groq glitch), single-
-      // quoted strings ('de'), and missing commas between fields. Without
-      // recovery the whole response was discarded and the expansion silently
-      // fell back to the original query. Repair and retry — a real ISO code
-      // ("de") then recovers perfectly, and even a stray word degrades to the
-      // sanitizer's "en" fallback while keeping the English queries.
-      return JSON.parse(repairJson(value));
+      // Stage 2: Standard repair (control chars, quotes, commas, bare identifiers)
+      try {
+        return JSON.parse(repairJson(value));
+      } catch {
+        // Stage 3: Auto-close truncated JSON and repair
+        const closed = autoCloseTruncatedJson(candidate.slice(start));
+        try {
+          return JSON.parse(closed);
+        } catch {
+          return JSON.parse(repairJson(closed));
+        }
+      }
     }
   }
 }
 
 /**
  * Best-effort recovery for common LLM JSON glitches, applied ONLY to the
- * extracted JSON value (never raw prose). Three string-aware passes, in order:
- * single-quoted strings → double-quoted, missing commas between fields/
- * elements inserted, then bare identifiers quoted. Each pass skips text inside
- * string literals, so prose like "visa questions, see: FAQ" survives untouched.
+ * extracted JSON value (never raw prose).
+ * 1. Escapes raw unescaped newlines/tabs inside string literals (e.g. Markdown tables).
+ * 2. Converts single-quoted strings to double-quoted ones.
+ * 3. Inserts missing commas between fields/elements.
+ * 4. Quotes bare identifiers.
  */
 function repairJson(text: string): string {
-  return quoteBareIdentifiers(insertMissingCommas(convertSingleQuotes(text)));
+  const cleaned = text.replace(/,\s*([}\]])/g, "$1");
+  return quoteBareIdentifiers(
+    insertMissingCommas(convertSingleQuotes(escapeControlCharsInStrings(cleaned))),
+  ).replace(/,\s*([}\]])/g, "$1");
+}
+
+/**
+ * Escapes unescaped ASCII control characters (newline, carriage return, tab)
+ * that occur INSIDE string literals. Standard JSON forbids literal newlines
+ * inside string literals (RFC 8259), which causes LLMs outputting multiline
+ * tables or paragraphs to fail JSON.parse with "Unterminated string in JSON".
+ */
+export function escapeControlCharsInStrings(text: string): string {
+  let out = "";
+  let inDouble = false;
+  let inSingle = false;
+  let escaped = false;
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i]!;
+    if (inDouble) {
+      if (escaped) {
+        escaped = false;
+        out += ch;
+        i += 1;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        out += ch;
+        i += 1;
+        continue;
+      }
+      if (ch === '"') {
+        inDouble = false;
+        out += ch;
+        i += 1;
+        continue;
+      }
+      if (ch === "\n") {
+        out += "\\n";
+        i += 1;
+        continue;
+      }
+      if (ch === "\r") {
+        out += "\\r";
+        i += 1;
+        continue;
+      }
+      if (ch === "\t") {
+        out += "\\t";
+        i += 1;
+        continue;
+      }
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (inSingle) {
+      if (escaped) {
+        escaped = false;
+        out += ch;
+        i += 1;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        out += ch;
+        i += 1;
+        continue;
+      }
+      if (ch === "'") {
+        inSingle = false;
+        out += ch;
+        i += 1;
+        continue;
+      }
+      if (ch === "\n") {
+        out += "\\n";
+        i += 1;
+        continue;
+      }
+      if (ch === "\r") {
+        out += "\\r";
+        i += 1;
+        continue;
+      }
+      if (ch === "\t") {
+        out += "\\t";
+        i += 1;
+        continue;
+      }
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = true;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === "'") {
+      inSingle = true;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
+/**
+ * Automatically closes unclosed string literals and unclosed arrays/objects
+ * when an LLM response has been truncated at a token boundary.
+ */
+export function autoCloseTruncatedJson(text: string): string {
+  let inDouble = false;
+  let inSingle = false;
+  let escaped = false;
+  const stack: ("{" | "[")[] = [];
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!;
+    if (inDouble) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === '"') {
+        inDouble = false;
+      }
+      continue;
+    }
+    if (inSingle) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === "'") {
+        inSingle = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = true;
+      continue;
+    }
+    if (ch === "'") {
+      inSingle = true;
+      continue;
+    }
+    if (ch === "{" || ch === "[") {
+      stack.push(ch);
+    } else if (ch === "}") {
+      if (stack.length && stack[stack.length - 1] === "{") {
+        stack.pop();
+      }
+    } else if (ch === "]") {
+      if (stack.length && stack[stack.length - 1] === "[") {
+        stack.pop();
+      }
+    }
+  }
+
+  let result = text;
+  if (inDouble) {
+    result += '"';
+  } else if (inSingle) {
+    result += "'";
+  }
+
+  // Remove trailing dangling colons or commas before closing
+  result = result.replace(/:\s*$/, ': ""');
+  result = result.replace(/,\s*$/, "");
+
+  // Pop remaining open brackets from stack and close them
+  while (stack.length > 0) {
+    const open = stack.pop();
+    result = result.replace(/,\s*$/, "");
+    if (open === "{") {
+      result += "}";
+    } else if (open === "[") {
+      result += "]";
+    }
+  }
+
+  return result.replace(/,\s*([}\]])/g, "$1");
 }
 
 /** Reads the identifier run starting at `i` (`[A-Za-z0-9_]+`); returns [word, nextIndex]. */

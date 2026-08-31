@@ -640,5 +640,29 @@ describe("Branch Coverage Boost", () => {
       expect(detectLanguage("English text without special characters")).toBe("en");
     });
   });
+
+  describe("LLM JSON & Analyst Parsing Branches", () => {
+    it("exercises autoCloseTruncatedJson and escapeControlCharsInStrings branches", async () => {
+      const { autoCloseTruncatedJson, escapeControlCharsInStrings, parseJsonLoose } = await import("@/server/llm/json");
+      
+      // Control chars outside and inside strings
+      expect(escapeControlCharsInStrings("plain text\nwith newlines")).toBe("plain text\nwith newlines");
+      expect(escapeControlCharsInStrings('{"a": "hello\\nworld"}')).toBe('{"a": "hello\\nworld"}');
+      expect(escapeControlCharsInStrings("{'a': 'hello\\nworld'}")).toBe("{'a': 'hello\\nworld'}");
+
+      // Auto close truncated structures
+      expect(autoCloseTruncatedJson("")).toBe("");
+      expect(autoCloseTruncatedJson("{")).toBe("{}");
+      expect(autoCloseTruncatedJson("[")).toBe("[]");
+      expect(autoCloseTruncatedJson('{"a": {"b": [1, 2')).toBe('{"a": {"b": [1, 2]}}');
+      expect(autoCloseTruncatedJson("['single quoted")).toBe("['single quoted']");
+      expect(autoCloseTruncatedJson('{"a": 1, }')).toBe('{"a": 1}');
+
+      // Direct parseJsonLoose calls
+      expect(parseJsonLoose('{"a": [1, 2, 3]}')).toEqual({ a: [1, 2, 3] });
+      expect(parseJsonLoose('```\n{"a": 1}\n```')).toEqual({ a: 1 });
+      expect(parseJsonLoose('```json\n{"a": 1}\n```')).toEqual({ a: 1 });
+    });
+  });
 });
 

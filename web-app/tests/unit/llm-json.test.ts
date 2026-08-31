@@ -178,6 +178,71 @@ describe("parseJsonLoose", () => {
     expect(parseJsonLoose("{'a': 'x}y' 'b': [1]}")).toEqual({ a: "x}y", b: [1] });
   });
 
+  it("recovers multiline strings with raw unescaped newlines, carriage returns, and tabs in double quotes", () => {
+    const raw = `{\n  "structured_table": "| Dimension | Details |\r\n|\t---\t|\t---\t|\r\n| Visa | APS required |\r\n| Cost | €992/month |",\n  "summary": "Line 1\nLine 2"\n}`;
+    expect(parseJsonLoose(raw)).toEqual({
+      structured_table: "| Dimension | Details |\r\n|\t---\t|\t---\t|\r\n| Visa | APS required |\r\n| Cost | €992/month |",
+      summary: "Line 1\nLine 2",
+    });
+  });
+
+  it("recovers multiline strings with raw unescaped newlines, carriage returns, and tabs in single quotes", () => {
+    const raw = `{\n  'table': '| Dim | Val |\r\n|\t---\t|\t---\t|\r\n| A | B |',\n  'summary': 'Line 1\nLine 2'\n}`;
+    expect(parseJsonLoose(raw)).toEqual({
+      table: "| Dim | Val |\r\n|\t---\t|\t---\t|\r\n| A | B |",
+      summary: "Line 1\nLine 2",
+    });
+  });
+
+  it("handles escaped characters inside strings without corrupting them", () => {
+    const raw = '{"a": "escaped\\\\test", "b": \'escaped\\\\single\'}';
+    expect(parseJsonLoose(raw)).toEqual({
+      a: "escaped\\test",
+      b: "escaped\\single",
+    });
+  });
+
+  it("recovers truncated JSON with unclosed strings, arrays, and objects", () => {
+    const raw = '{"summary": "Visa processing takes 4-6 weeks", "key_insights": ["APS mandatory", "Blocked account';
+    expect(parseJsonLoose(raw)).toEqual({
+      summary: "Visa processing takes 4-6 weeks",
+      key_insights: ["APS mandatory", "Blocked account"],
+    });
+  });
+
+  it("recovers truncated single-quoted JSON strings", () => {
+    const raw = "{'summary': 'Single quoted truncated";
+    expect(parseJsonLoose(raw)).toEqual({
+      summary: "Single quoted truncated",
+    });
+  });
+
+  it("recovers truncated nested structures", () => {
+    const raw = '{"data": {"facts": ["one", "two';
+    expect(parseJsonLoose(raw)).toEqual({
+      data: {
+        facts: ["one", "two"],
+      },
+    });
+  });
+
+  it("recovers truncated JSON ending with trailing colon or comma", () => {
+    expect(parseJsonLoose('{"a": 1, "b": ')).toEqual({ a: 1, b: "" });
+    expect(parseJsonLoose('{"a": 1, ')).toEqual({ a: 1 });
+  });
+
+  it("recovers single-quoted strings containing escaped double quotes and escaped control characters", () => {
+    expect(parseJsonLoose("{'a': 'test \\\" quote', 'b': 'line \\n next'}")).toEqual({
+      a: 'test " quote',
+      b: "line \n next",
+    });
+  });
+
+  it("recovers missing commas before objects and arrays", () => {
+    expect(parseJsonLoose('{"a": {"b": 1} "c": 2}')).toEqual({ a: { b: 1 }, c: 2 });
+    expect(parseJsonLoose('{"a": [1, 2] "b": [3, 4]}')).toEqual({ a: [1, 2], b: [3, 4] });
+  });
+
   it("throws on malformed JSON", () => {
     expect(() => parseJsonLoose("{not json")).toThrow();
   });

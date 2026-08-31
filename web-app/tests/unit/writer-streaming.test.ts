@@ -157,6 +157,55 @@ describe("writer agent streaming", () => {
     expect(result.key_insights).toEqual(["insight-1"]);
     expect(result.verified_facts).toEqual(["fact-1"]);
   });
+
+  it("recovers and parses multiline markdown tables with unescaped literal newlines", async () => {
+    const rawWithLiteralNewlines = `{\n  "summary": "APS overview",\n  "structured_table": "| Dimension | Details |\n|---|---|\n| Mandatory | Yes |\n| Cost | INR 18,000 |",\n  "key_insights": ["Mandatory document"],\n  "verified_facts": ["Issued by German Embassy New Delhi"]\n}`;
+    mockCreate.mockResolvedValue({ choices: [{ message: { content: rawWithLiteralNewlines } }] });
+
+    const { agentAnalystEvaluation } = await import("@/server/rag/agents/analyst");
+    const result = await agentAnalystEvaluation("Is APS mandatory?", RESEARCH);
+
+    expect(result.summary).toBe("APS overview");
+    expect(result.structured_table).toContain("| Mandatory | Yes |");
+    expect(result.key_insights).toEqual(["Mandatory document"]);
+  });
+
+  it("recovers truncated output from token exhaustion without falling back to generic default", async () => {
+    const truncatedPayload =
+      '{"thinking_process": "Analysis in progress", "summary": "APS verification is required for all Indian academic degrees.", "structured_table": "| Req | Val |\n|---|---|\n| Status | Required |", "key_insights": ["Mandatory since 2022", "Paperless verification available"], "verified_facts": ["Official requirement from DAAD"';
+    mockCreate.mockResolvedValue({ choices: [{ message: { content: truncatedPayload } }] });
+
+    const { agentAnalystEvaluation } = await import("@/server/rag/agents/analyst");
+    const result = await agentAnalystEvaluation("Is APS mandatory?", RESEARCH);
+
+    expect(result.summary).toBe("APS verification is required for all Indian academic degrees.");
+    expect(result.structured_table).toContain("Required");
+    expect(result.key_insights).toEqual(["Mandatory since 2022", "Paperless verification available"]);
+    expect(result.verified_facts).toEqual(["Official requirement from DAAD"]);
+  });
+
+  it("coerces newline-separated strings in key_insights and verified_facts to string arrays", async () => {
+    mockCreate.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              summary: "APS summary",
+              structured_table: "| Col | Val |",
+              key_insights: "- Insight A\n- Insight B\n- Insight C",
+              verified_facts: "1. Fact 1\n2. Fact 2",
+            }),
+          },
+        },
+      ],
+    });
+
+    const { agentAnalystEvaluation } = await import("@/server/rag/agents/analyst");
+    const result = await agentAnalystEvaluation("Is APS mandatory?", RESEARCH);
+
+    expect(result.key_insights).toEqual(["Insight A", "Insight B", "Insight C"]);
+    expect(result.verified_facts).toEqual(["Fact 1", "Fact 2"]);
+  });
 });
 
 describe("callLLMStream fallback safety", () => {
