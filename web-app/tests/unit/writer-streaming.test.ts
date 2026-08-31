@@ -17,25 +17,15 @@ vi.mock("openai", () => {
 
 const env = process.env;
 
-/** Groq streaming responses are async-iterable chunks of choice deltas. */
-function groqStream(deltas: string[]) {
+/** Groq streaming responses are async-iterable chunks of choice deltas.
+ * `throwsAfter` (when given) makes the stream fail after emitting the deltas. */
+function groqStream(deltas: string[], throwsAfter?: Error) {
   return {
     async *[Symbol.asyncIterator]() {
       for (const content of deltas) {
         yield { choices: [{ delta: { content } }] };
       }
-    },
-  };
-}
-
-/** Emits `deltas`, then throws — the mid-stream failure case. */
-function groqStreamThatFails(deltas: string[], error: Error) {
-  return {
-    async *[Symbol.asyncIterator]() {
-      for (const content of deltas) {
-        yield { choices: [{ delta: { content } }] };
-      }
-      throw error;
+      if (throwsAfter) throw throwsAfter;
     },
   };
 }
@@ -97,7 +87,7 @@ describe("writer agent streaming", () => {
 
   it("keeps the partial answer when the stream dies mid-flight", async () => {
     mockCreate.mockResolvedValue(
-      groqStreamThatFails(["## Partial\n", "text so far"], new Error("connection reset")),
+      groqStream(["## Partial\n", "text so far"], new Error("connection reset")),
     );
 
     const { agentWriterSynthesis } = await import("@/server/rag/agents/analyst");
@@ -179,7 +169,7 @@ describe("callLLMStream fallback safety", () => {
   });
 
   it("does not replay the whole answer after a mid-stream failure", async () => {
-    mockCreate.mockResolvedValue(groqStreamThatFails(["partial "], new Error("stream broke")));
+    mockCreate.mockResolvedValue(groqStream(["partial "], new Error("stream broke")));
 
     const { callLLMStream } = await import("@/server/llm/client");
     const chunks: string[] = [];

@@ -23,21 +23,12 @@ import type { Prisma } from "@prisma/client";
 import { config as loadEnv } from "dotenv";
 import fs from "node:fs/promises";
 
+import { median, p95 } from "./lib/stats";
+
 // Load .env BEFORE importing any server module (env.ts validates process.env
 // at import time and does not read .env itself).
 loadEnv();
 
-function median(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-function p95(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)];
-}
 function fmt(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${ms.toFixed(1)} ms`;
 }
@@ -105,7 +96,7 @@ async function main() {
     embedTexts: async (texts: string[]): Promise<number[][]> =>
       texts.map(() => {
         const v = Array.from({ length: 1024 }, () => Math.random() * 2 - 1);
-        const mag = Math.sqrt(v.reduce((s, x) => s + x * x, 0));
+        const mag = Math.hypot(...v);
         return v.map((x) => x / mag);
       }),
   };
@@ -214,12 +205,14 @@ async function main() {
           data: { documentId: docId!, text: block.parent.text },
           select: { id: true },
         });
+        // The pipeline's exact insert shape: parent row + one raw SQL VALUES
+        // row per child, then the chunkCount update — all in one tx.
         const rows = block.children
-          .map((child, idx) => {
-            const v = vectors[idx];
-            if (!v) return null;
-            return Prisma.sql`(${docId}, ${parent.id}, ${"MEASURE"}, ${measureKey}, ${child.text}, ${`[${v.join(",")}]`}::vector, NOW())`;
-          })
+          .map((child, idx) =>
+            vectors[idx]
+              ? Prisma.sql`(${docId}, ${parent.id}, ${"MEASURE"}, ${measureKey}, ${child.text}, ${`[${vectors[idx].join(",")}]`}::vector, NOW())`
+              : null,
+          )
           .filter((row): row is Prisma.Sql => row !== null);
         if (rows.length > 0) {
           await tx.$executeRaw(Prisma.sql`

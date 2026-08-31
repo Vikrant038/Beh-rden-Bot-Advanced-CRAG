@@ -1,16 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { HfReranker } from "@/server/rag/retrieval/reranker";
-import type { Chunk } from "@/server/rag/types";
-
-function makeChunk(overrides: Partial<Chunk> = {}): Chunk {
-  return {
-    id: "chunk-1",
-    sourceName: "src",
-    sourceUrl: "https://example.com",
-    text: "Some German visa text about the Aufenthaltsgesetz.",
-    ...overrides,
-  };
-}
+import { makeChunk } from "../helpers/chunk";
 
 describe("HfReranker", () => {
   beforeEach(() => {
@@ -217,8 +207,7 @@ describe("HfReranker", () => {
 
   it("falls back when score objects lack a numeric score field", async () => {
     const fetchMock = vi.fn(
-      async () =>
-        ({ ok: true, status: 200, json: async () => [[{ label: "x" }]] }) as Response,
+      async () => ({ ok: true, status: 200, json: async () => [[{ label: "x" }]] }) as Response,
     );
     vi.stubGlobal("fetch", fetchMock);
     const reranker = new HfReranker("model", "https://rerank.api", "token");

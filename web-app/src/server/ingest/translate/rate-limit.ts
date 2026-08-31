@@ -102,16 +102,6 @@ export class GroqRateLimiter {
     return this.tpd;
   }
 
-  /** Marks a model as blacklisted (no-op for single limiter; pool handles it). */
-  blacklistModel(_model: string): void {
-    void _model;
-  }
-
-  /** Marks a model as exhausted for today (no-op for single limiter; pool handles it). */
-  exhaustModelToday(_model: string): void {
-    void _model;
-  }
-
   /**
    * Current token-bucket capacity (refilled to TPM). Lets the pool pick the
    * least-loaded key without mutating the bucket.
@@ -129,8 +119,8 @@ export class GroqRateLimiter {
    * (key, model) combination. Used by GroqRateLimiterPool to pick a ready
    * combo without blocking.
    */
-  tryReserve(tokens: number): boolean {
-    const now = Date.now();
+  /** Rolls both per-day counters over at midnight. */
+  private rollDailyCounters(): void {
     const today = new Date().getDate();
     if (today !== this.rpdResetDay) {
       this.requestsToday = 0;
@@ -140,6 +130,11 @@ export class GroqRateLimiter {
       this.tokensToday = 0;
       this.tpdResetDay = today;
     }
+  }
+
+  tryReserve(tokens: number): boolean {
+    const now = Date.now();
+    this.rollDailyCounters();
     this.refillBucket();
     const minInterval = (60 / this.rpm) * 1000;
     if (this.lastRequestTime > 0 && now - this.lastRequestTime < minInterval) {
@@ -164,49 +159,26 @@ export class GroqRateLimiter {
    * callers share one interface.
    */
   async waitForTokens(tokens: number): Promise<GroqRateLimiter> {
-    // RPD guard
-    const today = new Date().getDate();
-    if (today !== this.rpdResetDay) {
-      this.requestsToday = 0;
-      this.rpdResetDay = today;
-    }
-    // rpd === 0 means "unlimited" (the default for the primary model).
+    this.rollDailyCounters();
+    // RPD guard: rpd === 0 means "unlimited" (the default for the primary model).
     if (this.rpd > 0 && this.requestsToday >= this.rpd) {
-      const resetTime = new Date();
-      resetTime.setDate(resetTime.getDate() + 1);
-      resetTime.setHours(0, 0, 0, 0);
-      const wait = resetTime.getTime() - Date.now();
-      if (wait > 0) {
-        logger.warn(
-          { waitMs: Math.ceil(wait), rpd: this.rpd },
-          "[TRANSLATE] RPD limit reached — waiting for daily reset",
-        );
-        await sleep(wait);
-      }
+      logger.warn(
+        { waitMs: Math.ceil(msUntilMidnight()), rpd: this.rpd },
+        "[TRANSLATE] RPD limit reached — waiting for daily reset",
+      );
+      await waitUntilMidnight();
       this.requestsToday = 0;
     }
 
     // TPD guard: wait for the midnight reset when the daily token budget is
     // exhausted (avoids 429-looping against models with a hard daily cap).
-    if (this.tpd > 0) {
-      if (today !== this.tpdResetDay) {
-        this.tokensToday = 0;
-        this.tpdResetDay = today;
-      }
-      if (this.tokensToday + tokens > this.tpd) {
-        const resetTime = new Date();
-        resetTime.setDate(resetTime.getDate() + 1);
-        resetTime.setHours(0, 0, 0, 0);
-        const wait = resetTime.getTime() - Date.now();
-        if (wait > 0) {
-          logger.warn(
-            { waitMs: Math.ceil(wait), tpd: this.tpd, used: this.tokensToday },
-            "[TRANSLATE] TPD limit reached — waiting for daily reset",
-          );
-          await sleep(wait);
-        }
-        this.tokensToday = 0;
-      }
+    if (this.tpd > 0 && this.tokensToday + tokens > this.tpd) {
+      logger.warn(
+        { waitMs: Math.ceil(msUntilMidnight()), tpd: this.tpd, used: this.tokensToday },
+        "[TRANSLATE] TPD limit reached — waiting for daily reset",
+      );
+      await waitUntilMidnight();
+      this.tokensToday = 0;
     }
 
     // RPM pacing: at least 60/rpm seconds between requests.
@@ -249,6 +221,22 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Milliseconds until the next midnight (local time) — the daily-reset point. */
+function msUntilMidnight(): number {
+  const now = new Date();
+  const midnight = new Date(now);
+  midnight.setHours(24, 0, 0, 0);
+  return midnight.getTime() - now.getTime();
+}
+
+/** Waits out the rest of the day (used when a daily budget is exhausted). */
+async function waitUntilMidnight(): Promise<void> {
+  const wait = msUntilMidnight();
+  if (wait > 0) {
+    await sleep(wait);
+  }
+}
+
 /** Per-model free-tier limits (RPM / RPD / TPM / TPD) as shown in the Groq console. */
 export interface GroqModelConfig {
   model: string;
@@ -276,13 +264,6 @@ const MODEL_LIMITS: Record<string, Omit<GroqModelConfig, "model">> = {
   "openai/gpt-oss-20b": { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200_000 },
   "moonshotai/kimi-k2-instruct": { rpm: 60, rpd: 1000, tpm: 10_000, tpd: 300_000 },
 };
-
-function msUntilMidnight(): number {
-  const now = new Date();
-  const midnight = new Date(now);
-  midnight.setHours(24, 0, 0, 0);
-  return midnight.getTime() - now.getTime();
-}
 
 /**
  * Resolves model ids to full configs; unknown ids get conservative defaults.
@@ -549,17 +530,14 @@ export function createTranslationRateLimiter(
     models = models.map((m) => ({ ...m, tpd: tpdOverride }));
   }
 
-  if (keys.length === 0) {
-    const fallback = process.env.GROQ_API_KEY?.trim();
-    if (!fallback) {
+  if (keys.length <= 1) {
+    const apiKey = keys[0] ?? process.env.GROQ_API_KEY?.trim();
+    if (!apiKey) {
       throw new Error(
         "No Groq API key configured — set GROQ_API_KEYS (comma-separated) or GROQ_API_KEY",
       );
     }
-    return new GroqRateLimiter({ apiKey: fallback, ...models[0]! });
-  }
-  if (keys.length === 1) {
-    return new GroqRateLimiter({ apiKey: keys[0]!, ...models[0]! });
+    return new GroqRateLimiter({ apiKey, ...models[0]! });
   }
   return new GroqRateLimiterPool(keys, models);
 }

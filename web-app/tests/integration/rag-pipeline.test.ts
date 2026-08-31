@@ -55,11 +55,48 @@ import { runCragGate } from "@/server/rag/crag-gate";
 import { callLLM } from "@/server/llm/client";
 import { isQueryOutOfDomain } from "@/server/rag/guardrail";
 import { generateSubQueries } from "@/server/rag/query-expansion";
+import type { CachedResponse } from "@/server/rag/cache/semantic-cache";
 
 const mockedRunCragGate = vi.mocked(runCragGate);
 const mockedCallLLM = vi.mocked(callLLM);
 const mockedGuardrail = vi.mocked(isQueryOutOfDomain);
 const mockedGenerateSubQueries = vi.mocked(generateSubQueries);
+
+/**
+ * The canonical German→English expansion the shared mocks and cache-hit tests
+ * reuse: a German ask whose sub-queries[0] is the English canonical key.
+ */
+const GERMAN_EXPANSION = {
+  language: "de",
+  queries: [
+    "What is a blocked account?",
+    "How much money do I need in a blocked account?",
+    "Blocked account requirements for a German student visa",
+  ],
+};
+/** Fresh mutable copy — QueryExpansion.queries must be a mutable array. */
+const germanExpansion = (): typeof GERMAN_EXPANSION & { queries: string[] } => ({
+  ...GERMAN_EXPANSION,
+  queries: [...GERMAN_EXPANSION.queries],
+});
+
+/** A TIER_1 cache hit served under the canonical English key. */
+const germanCacheHit = (answer: string, language?: string): CachedResponse => ({
+  answer,
+  sources: [],
+  retrievalPath: "TIER_1_EXACT_CACHE_HIT",
+  latencyMs: 1.2,
+  isCached: true,
+  ...(language ? { language } : {}),
+});
+
+/** Serves `hit` only for the canonical English key; null for everything else. */
+const hitCanonicalKey = (hit: CachedResponse) =>
+  vi
+    .fn()
+    .mockImplementation(async (query: string) =>
+      query === GERMAN_EXPANSION.queries[0] ? hit : null,
+    );
 
 const mockHybridRetriever = {
   embedQuery: vi.fn(async () => Array.from({ length: 3 }, (_, i) => i * 0.1)),
@@ -192,27 +229,10 @@ describe("RAG Pipeline Orchestrators", () => {
   it("agentic: serves a cache hit keyed on the canonical English sub-query", async () => {
     // German ask → expansion returns the English canonical first → it hits a
     // previously cached English ask, so no research/analyst/writer runs.
-    mockedGenerateSubQueries.mockResolvedValueOnce({
-      language: "de",
-      queries: [
-        "What is a blocked account?",
-        "How much money do I need in a blocked account?",
-        "Blocked account requirements for a German student visa",
-      ],
-    });
-    vi.mocked(mockCache.checkCache).mockImplementation(async (query: string) => {
-      if (query === "What is a blocked account?") {
-        return {
-          answer: "Cached English answer.",
-          sources: [{ name: "doc", url: "https://example.com", score: 1 }],
-          retrievalPath: "TIER_1_EXACT_CACHE_HIT",
-          latencyMs: 1.2,
-          isCached: true,
-          language: "en", // the cached answer was written in English
-        };
-      }
-      return null;
-    });
+    mockedGenerateSubQueries.mockResolvedValueOnce(germanExpansion());
+    vi.mocked(mockCache.checkCache).mockImplementation(
+      hitCanonicalKey(germanCacheHit("Cached English answer.", "en")),
+    );
 
     const memory = new SummaryBufferMemory("conv-eng5", 8);
     const result = await runAgenticRag("Was ist ein Sperrkonto?", {
@@ -236,14 +256,7 @@ describe("RAG Pipeline Orchestrators", () => {
     // Exact re-ask hits the cache under the raw query before expansion runs,
     // so the user's language is unknown — the answer language is surfaced but
     // nothing is flagged.
-    vi.mocked(mockCache.checkCache).mockResolvedValueOnce({
-      answer: "Cached answer.",
-      sources: [],
-      retrievalPath: "TIER_1_EXACT_CACHE_HIT",
-      latencyMs: 1.2,
-      isCached: true,
-      language: "en",
-    });
+    vi.mocked(mockCache.checkCache).mockResolvedValueOnce(germanCacheHit("Cached answer.", "en"));
 
     const memory = new SummaryBufferMemory("conv-eng-orig", 8);
     const result = await runAgenticRag("visa requirements", {
@@ -257,27 +270,10 @@ describe("RAG Pipeline Orchestrators", () => {
   });
 
   it("agentic: serves a canonical-English cache hit regardless of the stored language tag", async () => {
-    mockedGenerateSubQueries.mockResolvedValueOnce({
-      language: "de",
-      queries: [
-        "What is a blocked account?",
-        "How much money do I need in a blocked account?",
-        "Blocked account requirements for a German student visa",
-      ],
-    });
-    vi.mocked(mockCache.checkCache).mockImplementation(async (query: string) => {
-      if (query === "What is a blocked account?") {
-        return {
-          answer: "Cached German answer.",
-          sources: [],
-          retrievalPath: "TIER_1_EXACT_CACHE_HIT",
-          latencyMs: 1.2,
-          isCached: true,
-          language: "de",
-        };
-      }
-      return null;
-    });
+    mockedGenerateSubQueries.mockResolvedValueOnce(germanExpansion());
+    vi.mocked(mockCache.checkCache).mockImplementation(
+      hitCanonicalKey(germanCacheHit("Cached German answer.", "de")),
+    );
 
     const memory = new SummaryBufferMemory("conv-eng-match2", 8);
     const result = await runAgenticRag("Was ist ein Sperrkonto?", {
@@ -290,14 +286,7 @@ describe("RAG Pipeline Orchestrators", () => {
   });
 
   it("agentic: writes the answer under both the original and canonical English key", async () => {
-    mockedGenerateSubQueries.mockResolvedValueOnce({
-      language: "de",
-      queries: [
-        "What is a blocked account?",
-        "How much money do I need in a blocked account?",
-        "Blocked account requirements for a German student visa",
-      ],
-    });
+    mockedGenerateSubQueries.mockResolvedValueOnce(germanExpansion());
     vi.mocked(mockCache.checkCache).mockResolvedValue(null);
 
     const memory = new SummaryBufferMemory("conv-eng6", 8);
@@ -410,27 +399,13 @@ describe("RAG Pipeline Orchestrators", () => {
   it("standard CRAG: serves a cache hit keyed on the canonical English sub-query", async () => {
     // German ask → expansion returns the English canonical first → it hits
     // a previously cached English ask, so no retrieval/generation runs.
-    mockedGenerateSubQueries.mockResolvedValueOnce({
-      language: "de",
-      queries: [
-        "What is a blocked account?",
-        "How much money do I need in a blocked account?",
-        "Blocked account requirements for a German student visa",
-      ],
-    });
-    vi.mocked(mockCache.checkCache).mockImplementation(async (query: string) => {
-      if (query === "What is a blocked account?") {
-        return {
-          answer: "Cached English answer.",
-          sources: [{ name: "doc", url: "https://example.com", score: 1 }],
-          retrievalPath: "TIER_1_EXACT_CACHE_HIT",
-          latencyMs: 1.2,
-          isCached: true,
-          language: "en", // the cached answer was written in English
-        };
-      }
-      return null;
-    });
+    mockedGenerateSubQueries.mockResolvedValueOnce(germanExpansion());
+    vi.mocked(mockCache.checkCache).mockImplementation(
+      hitCanonicalKey({
+        ...germanCacheHit("Cached English answer.", "en"),
+        sources: [{ name: "doc", url: "https://example.com", score: 1 }],
+      }),
+    );
 
     const memory = new SummaryBufferMemory("conv-eng", 8);
     const result = await runStandardCrag("Was ist ein Sperrkonto?", {
@@ -451,27 +426,10 @@ describe("RAG Pipeline Orchestrators", () => {
   });
 
   it("standard CRAG: serves a canonical-English cache hit regardless of the stored language tag", async () => {
-    mockedGenerateSubQueries.mockResolvedValueOnce({
-      language: "de",
-      queries: [
-        "What is a blocked account?",
-        "How much money do I need in a blocked account?",
-        "Blocked account requirements for a German student visa",
-      ],
-    });
-    vi.mocked(mockCache.checkCache).mockImplementation(async (query: string) => {
-      if (query === "What is a blocked account?") {
-        return {
-          answer: "Cached German answer.",
-          sources: [],
-          retrievalPath: "TIER_1_EXACT_CACHE_HIT",
-          latencyMs: 1.2,
-          isCached: true,
-          language: "de",
-        };
-      }
-      return null;
-    });
+    mockedGenerateSubQueries.mockResolvedValueOnce(germanExpansion());
+    vi.mocked(mockCache.checkCache).mockImplementation(
+      hitCanonicalKey(germanCacheHit("Cached German answer.", "de")),
+    );
 
     const memory = new SummaryBufferMemory("conv-eng-match", 8);
     const result = await runStandardCrag("Was ist ein Sperrkonto?", {
@@ -487,26 +445,10 @@ describe("RAG Pipeline Orchestrators", () => {
   it("standard CRAG: serves a canonical hit from a pre-migration entry (no stored language)", async () => {
     // A German ask hits an entry written before the language column existed:
     // the answer is served with no stored language tag to worry about.
-    mockedGenerateSubQueries.mockResolvedValueOnce({
-      language: "de",
-      queries: [
-        "What is a blocked account?",
-        "How much money do I need in a blocked account?",
-        "Blocked account requirements for a German student visa",
-      ],
-    });
-    vi.mocked(mockCache.checkCache).mockImplementation(async (query: string) => {
-      if (query === "What is a blocked account?") {
-        return {
-          answer: "Cached pre-migration answer.",
-          sources: [],
-          retrievalPath: "TIER_1_EXACT_CACHE_HIT",
-          latencyMs: 1.2,
-          isCached: true,
-        };
-      }
-      return null;
-    });
+    mockedGenerateSubQueries.mockResolvedValueOnce(germanExpansion());
+    vi.mocked(mockCache.checkCache).mockImplementation(
+      hitCanonicalKey(germanCacheHit("Cached pre-migration answer.")),
+    );
 
     const memory = new SummaryBufferMemory("conv-eng-legacy", 8);
     const result = await runStandardCrag("Was ist ein Sperrkonto?", {
@@ -520,19 +462,12 @@ describe("RAG Pipeline Orchestrators", () => {
   });
 
   it("standard CRAG: writes the answer under both the original and canonical English key", async () => {
-    mockedGenerateSubQueries.mockResolvedValueOnce({
-      language: "de",
-      queries: [
-        "What is a blocked account?",
-        "How much money do I need in a blocked account?",
-        "Blocked account requirements for a German student visa",
-      ],
-    });
+    mockedGenerateSubQueries.mockResolvedValueOnce(germanExpansion());
     // Pin the cache to a miss so the write path runs (overrides any leaked
     // mockImplementation from an earlier test).
     vi.mocked(mockCache.checkCache).mockResolvedValue(null);
     const memory = new SummaryBufferMemory("conv-eng2", 8);
-    const result = await runStandardCrag("Was ist ein Sperrkonto?", {
+    await runStandardCrag("Was ist ein Sperrkonto?", {
       hybridRetriever: mockHybridRetriever,
       cache: mockCache,
       memory,
@@ -636,14 +571,7 @@ describe("RAG Pipeline Orchestrators", () => {
   });
 
   it("agentic: answers are always English even for a German query", async () => {
-    mockedGenerateSubQueries.mockResolvedValueOnce({
-      language: "de",
-      queries: [
-        "What is a blocked account?",
-        "How much money do I need in a blocked account?",
-        "Blocked account requirements for a German student visa",
-      ],
-    });
+    mockedGenerateSubQueries.mockResolvedValueOnce(germanExpansion());
     vi.mocked(mockCache.checkCache).mockResolvedValue(null);
 
     const memory = new SummaryBufferMemory("conv-lang", 8);

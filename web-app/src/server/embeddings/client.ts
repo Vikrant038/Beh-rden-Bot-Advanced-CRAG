@@ -12,6 +12,12 @@ export interface EmbeddingClient {
   embedQuery(query: string): Promise<number[]>;
 }
 
+/** Applies the BGE query prefix and embeds a single query text. Shared by both clients. */
+async function embedQueryWithPrefix(client: EmbeddingClient, query: string): Promise<number[]> {
+  const vectors = await client.embedTexts([`${QUERY_EMBEDDING_PREFIX}${query.trim()}`]);
+  return vectors[0];
+}
+
 /**
  * Max inputs cached per embed batch. Query-side batches are tiny (1-8 texts),
  * but ingest-side batches can be thousands — we never want to cache those
@@ -182,9 +188,7 @@ export class HfEmbeddingClient implements EmbeddingClient {
   }
 
   async embedQuery(query: string): Promise<number[]> {
-    const prefixed = `${QUERY_EMBEDDING_PREFIX}${query.trim()}`;
-    const vectors = await this.embedTexts([prefixed]);
-    return vectors[0];
+    return embedQueryWithPrefix(this, query);
   }
 }
 
@@ -276,9 +280,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
   }
 
   async embedQuery(query: string): Promise<number[]> {
-    const prefixed = `${QUERY_EMBEDDING_PREFIX}${query.trim()}`;
-    const vectors = await this.embedTexts([prefixed]);
-    return vectors[0];
+    return embedQueryWithPrefix(this, query);
   }
 
   /**
@@ -288,18 +290,15 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
    * large corpus runs (a single serial sync can sit at the 100 req/min edge).
    */
   private async retryOnRateLimit<T>(fn: () => Promise<T>): Promise<T> {
-    const maxAttempts = 3;
-    let lastError: unknown;
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
         return await fn();
       } catch (error) {
-        lastError = error;
-        const detail = String(error);
         const retryable =
-          /(429|RESOURCE_EXHAUSTED|rate.?limit)/i.test(detail) ||
-          /(5\d\d|503|UNAVAILABLE|DEADLINE_EXCEEDED)/i.test(detail);
-        if (!retryable || attempt === maxAttempts) {
+          /(429|RESOURCE_EXHAUSTED|rate.?limit|5\d\d|UNAVAILABLE|DEADLINE_EXCEEDED)/i.test(
+            String(error),
+          );
+        if (!retryable || attempt === 3) {
           throw error;
         }
         const backoffMs = 500 * 2 ** (attempt - 1);
@@ -307,7 +306,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
         await new Promise((resolve) => setTimeout(resolve, backoffMs));
       }
     }
-    throw lastError;
+    throw new Error("unreachable");
   }
 }
 

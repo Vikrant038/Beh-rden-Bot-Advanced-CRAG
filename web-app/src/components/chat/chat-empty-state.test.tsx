@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { installDomPolyfills } from "../../../tests/helpers/dom-polyfills";
 import { ChatEmptyState } from "@/components/chat/chat-empty-state";
 
 // Control useReducedMotion so both branches (animation on / off) are exercised.
@@ -17,21 +18,7 @@ import { useReducedMotion } from "framer-motion";
 const mockedUseReducedMotion = vi.mocked(useReducedMotion);
 
 // framer-motion's useReducedMotion calls window.matchMedia, which jsdom lacks.
-beforeAll(() => {
-  Object.defineProperty(window, "matchMedia", {
-    writable: true,
-    value: vi.fn().mockImplementation((query: string) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })),
-  });
-});
+installDomPolyfills();
 
 afterEach(() => {
   mockedUseReducedMotion.mockReturnValue(false);

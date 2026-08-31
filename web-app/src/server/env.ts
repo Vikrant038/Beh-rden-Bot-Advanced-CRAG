@@ -22,9 +22,12 @@ export function normalizeUrl(raw: unknown): string | undefined {
   }
 }
 
+/** URL env var with normalization + default. */
+const url = (def: string) => z.preprocess(normalizeUrl, z.string().url().default(def));
+
 const serverEnvSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-  NEXTAUTH_URL: z.preprocess(normalizeUrl, z.string().url().default("http://localhost:3000")),
+  NEXTAUTH_URL: url("http://localhost:3000"),
   NEXTAUTH_SECRET: z.string().min(1, "NEXTAUTH_SECRET is required"),
   GROQ_API_KEY: z.string().optional(),
   GROQ_MODEL: z.string().default("openai/gpt-oss-120b"),
@@ -35,10 +38,7 @@ const serverEnvSchema = z.object({
   HF_LLM_MODEL: z.string().default("meta-llama/Llama-3.1-8B-Instruct"),
   /** HF Inference API base for the LLM fallback — separate from
    * HF_INFERENCE_URL, which now points at the Cloudflare embeddings worker. */
-  HF_LLM_URL: z.preprocess(
-    normalizeUrl,
-    z.string().url().default("https://api-inference.huggingface.co"),
-  ),
+  HF_LLM_URL: url("https://api-inference.huggingface.co"),
   RERANKER_MODEL: z.string().default("@cf/baai/bge-reranker-base"),
   /**
    * Cross-encoder endpoint. The Cloudflare worker (behoerden-embeddings)
@@ -67,15 +67,12 @@ const serverEnvSchema = z.object({
    * "hf" is the safe default — queries must use the same model as the corpus.
    * "gemini" is ONLY correct if the corpus was embedded with a Gemini model. */
   EMBEDDING_PROVIDER: z.enum(["gemini", "hf"]).default("hf"),
-  HF_INFERENCE_URL: z.preprocess(
-    normalizeUrl,
-    z.string().url().default("https://api-inference.huggingface.co"),
-  ),
+  HF_INFERENCE_URL: url("https://api-inference.huggingface.co"),
   UPSTASH_REDIS_URL: z.string().optional(),
   UPSTASH_REDIS_TOKEN: z.string().optional(),
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
-  LANGFUSE_HOST: z.preprocess(normalizeUrl, z.string().url().default("https://cloud.langfuse.com")),
+  LANGFUSE_HOST: url("https://cloud.langfuse.com"),
   GITHUB_CLIENT_ID: z.string().optional(),
   GITHUB_CLIENT_SECRET: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),

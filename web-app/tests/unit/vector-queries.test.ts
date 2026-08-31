@@ -8,6 +8,9 @@ function makePrisma() {
   return prisma;
 }
 
+/** A valid 1024-dim query vector — the dimension the SQL contract pins. */
+const queryVector = (): number[] => Array.from({ length: 1024 }, () => 0.5);
+
 describe("toVectorLiteral", () => {
   it("formats a valid vector as a pgvector literal", () => {
     const vector = Array.from({ length: 1024 }, (_v, i) => (i === 0 ? 0.1 : 0.2));
@@ -48,11 +51,10 @@ describe("vectorQueries.findSimilarChunks", () => {
         sim: 0.91,
       },
     ]);
-    const result = await vectorQueries.findSimilarChunks(
-      prisma as never,
-      Array.from({ length: 1024 }, () => 0.5),
-      { topK: 5, minSimilarity: 0.4 },
-    );
+    const result = await vectorQueries.findSimilarChunks(prisma as never, queryVector(), {
+      topK: 5,
+      minSimilarity: 0.4,
+    });
     expect(result[0]).toMatchObject({
       id: "7",
       parentId: "3",
@@ -74,10 +76,7 @@ describe("vectorQueries.findSimilarChunks", () => {
         sim: 0.5,
       },
     ]);
-    const result = await vectorQueries.findSimilarChunks(
-      prisma as never,
-      Array.from({ length: 1024 }, () => 0.5),
-    );
+    const result = await vectorQueries.findSimilarChunks(prisma as never, queryVector());
     expect(result[0]).toMatchObject({ parentId: undefined, documentId: undefined });
   });
 });
@@ -141,7 +140,7 @@ describe("vectorQueries.upsertCacheEntry (storage-shape regression)", () => {
     await vectorQueries.upsertCacheEntry(prisma as never, {
       queryHash: "b".repeat(64),
       queryText: "visa requirements",
-      queryVector: Array.from({ length: 1024 }, () => 0.5),
+      queryVector: queryVector(),
       responseJson: JSON.stringify({ answer: "x", sources: [] }),
       parentDocIds: [],
       language: null,

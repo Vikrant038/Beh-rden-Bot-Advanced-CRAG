@@ -1,6 +1,0 @@
-export {
-  GUEST_COOKIE,
-  GUEST_LIMIT_REACHED_CODE,
-  GUEST_MAX_AGE_SECONDS,
-  GUEST_PROMPT_LIMIT,
-} from "@/config/app";

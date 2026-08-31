@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { env } from "@/server/env";
 import { prisma } from "@/server/db";
-import { GUEST_COOKIE } from "@/lib/guest";
+import { GUEST_COOKIE } from "@/config/app";
 
 /**
  * Guest-mode identity (3.10).
@@ -44,13 +44,12 @@ export function verifyGuestCookieValue(value: string | null | undefined): string
   if (!id || id.length > 128) {
     return null;
   }
-  const expected = sign(id);
-  const expectedBuf = Buffer.from(expected);
+  const expectedBuf = Buffer.from(sign(id));
   const providedBuf = Buffer.from(signature);
-  if (providedBuf.length !== expectedBuf.length) {
-    return null;
-  }
-  return timingSafeEqual(providedBuf, expectedBuf) ? id : null;
+  // timingSafeEqual throws on length mismatch, so check length first.
+  return providedBuf.length === expectedBuf.length && timingSafeEqual(providedBuf, expectedBuf)
+    ? id
+    : null;
 }
 
 /** Stable synthetic email for a guest User row (unique per device). */

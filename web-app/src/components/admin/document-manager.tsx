@@ -20,6 +20,7 @@ import { api } from "@/lib/trpc/client";
 import { formatRelativeTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { RadioGroup } from "@/components/ui/radio-group";
 import { useToast } from "@/lib/toast";
 type DocumentStatus = "PENDING" | "INGESTING" | "SYNCED" | "FAILED";
 
@@ -78,6 +80,47 @@ function useChunkNavigator(count: number) {
   };
 }
 
+/** Immutable add/remove toggle on a string set. */
+function toggleSetItem(set: Set<string>, id: string): Set<string> {
+  const next = new Set(set);
+  if (next.has(id)) {
+    next.delete(id);
+  } else {
+    next.add(id);
+  }
+  return next;
+}
+
+/**
+ * Status chip metadata: icon + display label + colors for the four statuses.
+ * PENDING and INGESTING both present as "ingesting" (spinner).
+ */
+const STATUS_META: Record<
+  DocumentStatus,
+  { icon: React.ReactNode; label: string; className: string }
+> = {
+  SYNCED: {
+    icon: <CheckCircle2 className="h-2.5 w-2.5" />,
+    label: "synced",
+    className: "bg-success/10 text-success",
+  },
+  FAILED: {
+    icon: <TriangleAlert className="h-2.5 w-2.5" />,
+    label: "failed",
+    className: "bg-destructive/10 text-destructive",
+  },
+  INGESTING: {
+    icon: <RefreshCw className="h-2.5 w-2.5 animate-spin" />,
+    label: "ingesting",
+    className: "bg-warning/10 text-warning",
+  },
+  PENDING: {
+    icon: <RefreshCw className="h-2.5 w-2.5 animate-spin" />,
+    label: "ingesting",
+    className: "bg-warning/10 text-warning",
+  },
+};
+
 /**
  * 10.3 — Detail modal for a document: title/url/status plus its first chunks.
  */
@@ -101,6 +144,20 @@ function DocumentPreviewModal({
       chunkNavigator.select(Math.max(0, items.length - 1));
     }
   }, [items.length, chunkNavigator]);
+
+  /** Peek at the chunk adjacent to `nextIndex` (clamped) and scroll it into view. */
+  const scrollToAdjacentChunk = (nextIndex: number) => {
+    if (chunkViewMode !== "list") {
+      return;
+    }
+    const neighbour = items[Math.min(items.length - 1, Math.max(0, nextIndex))];
+    if (neighbour) {
+      window.document
+        .getElementById(`modal-chunk-${neighbour.id}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  };
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-2xl">
@@ -125,47 +182,21 @@ function DocumentPreviewModal({
         </DialogHeader>
 
         <div className="flex items-center justify-end gap-2">
-          <div
-            role="radiogroup"
-            aria-label="Chunk view mode"
-            className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-border bg-surface p-1"
-          >
-            <button
-              type="button"
-              role="radio"
-              aria-checked={chunkViewMode === "list"}
-              onClick={() => setChunkViewMode("list")}
-              className={`rounded-lg px-2.5 py-1.5 text-xs transition ${
-                chunkViewMode === "list"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted hover:bg-surface-hover hover:text-foreground"
-              }`}
-            >
-              List
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={chunkViewMode === "paginated"}
-              onClick={() => setChunkViewMode("paginated")}
-              className={`rounded-lg px-2.5 py-1.5 text-xs transition ${
-                chunkViewMode === "paginated"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted hover:bg-surface-hover hover:text-foreground"
-              }`}
-            >
-              Paginated
-            </button>
-          </div>
+          <RadioGroup
+            label="Chunk view mode"
+            value={chunkViewMode}
+            onValueChange={setChunkViewMode}
+            buttonClassName="px-2.5 py-1.5"
+            options={[
+              { value: "list", label: "List" },
+              { value: "paginated", label: "Paginated" },
+            ]}
+          />
         </div>
 
         <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
           {chunks.isLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-16 w-full" />
-              <Skeleton className="h-16 w-full" />
-              <Skeleton className="h-16 w-full" />
-            </div>
+            <Skeleton className="h-16 w-full" lines={3} />
           ) : items.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted">
               This document has no indexed chunks yet.
@@ -194,42 +225,32 @@ function DocumentPreviewModal({
               Chunk {chunkNavigator.index + 1} of {items.length}
             </p>
             <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  const nextIndex = chunkNavigator.index - 1;
-                  chunkNavigator.clamp(nextIndex);
-                  if (chunkViewMode === "list" && items[Math.max(0, nextIndex)]) {
-                    const el = window.document.getElementById(
-                      `modal-chunk-${items[Math.max(0, nextIndex)].id}`,
-                    );
-                    el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-                  }
-                }}
-                disabled={chunkNavigator.index <= 0}
-                aria-label="Previous chunk"
-                className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const nextIndex = chunkNavigator.index + 1;
-                  chunkNavigator.clamp(nextIndex);
-                  if (chunkViewMode === "list" && items[Math.min(items.length - 1, nextIndex)]) {
-                    const el = window.document.getElementById(
-                      `modal-chunk-${items[Math.min(items.length - 1, nextIndex)].id}`,
-                    );
-                    el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-                  }
-                }}
-                disabled={chunkNavigator.index >= items.length - 1}
-                aria-label="Next chunk"
-                className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
+              {(
+                [
+                  { label: "Previous chunk", delta: -1, icon: ChevronLeft, disabledAt: 0 },
+                  {
+                    label: "Next chunk",
+                    delta: 1,
+                    icon: ChevronRight,
+                    disabledAt: items.length - 1,
+                  },
+                ] as const
+              ).map(({ label, delta, icon: Icon, disabledAt }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => {
+                    const nextIndex = chunkNavigator.index + delta;
+                    chunkNavigator.clamp(nextIndex);
+                    scrollToAdjacentChunk(nextIndex);
+                  }}
+                  disabled={chunkNavigator.index === disabledAt}
+                  aria-label={label}
+                  className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
+                >
+                  <Icon className="h-4 w-4" />
+                </button>
+              ))}
             </div>
           </div>
         ) : null}
@@ -371,15 +392,7 @@ export function DocumentManager() {
   const isAllSelected = filtered.length > 0 && filtered.every((doc) => selected.has(doc.id));
 
   const toggleSelect = (id: string) => {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
+    setSelected((current) => toggleSetItem(current, id));
   };
 
   const toggleSelectAll = () => {
@@ -792,18 +805,13 @@ export function DocumentManager() {
       {documents.isLoading ? (
         <p className="animate-pulse text-sm text-muted">Loading documents…</p>
       ) : documents.data?.length === 0 ? (
-        <div className="glass-card flex flex-col items-center rounded-2xl border border-dashed py-12 text-center">
-          <FileText className="h-8 w-8 text-muted" />
-          <p className="mt-2 text-sm font-medium">No documents ingested yet</p>
-          <p className="mt-1 text-xs text-muted">
-            Add a URL or upload a PDF above to seed the knowledge base.
-          </p>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="No documents ingested yet"
+          description="Add a URL or upload a PDF above to seed the knowledge base."
+        />
       ) : filtered.length === 0 ? (
-        <div className="glass-card flex flex-col items-center rounded-2xl border border-dashed py-12 text-center">
-          <Search className="h-8 w-8 text-muted" />
-          <p className="mt-2 text-sm font-medium">No documents match your filter</p>
-        </div>
+        <EmptyState icon={Search} title="No documents match your filter" />
       ) : (
         <ul className="space-y-2">
           {filtered.map((document) => {
@@ -835,28 +843,20 @@ export function DocumentManager() {
                 <div className="min-w-0 flex-1 basis-56">
                   <div className="flex items-center gap-2">
                     <p className="line-clamp-2 font-medium">{document.title}</p>
-                    <span
-                      className={cn(
-                        "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
-                        document.status === "SYNCED" && "bg-success/10 text-success",
-                        document.status === "FAILED" && "bg-destructive/10 text-destructive",
-                        (document.status === "INGESTING" || document.status === "PENDING") &&
-                          "bg-warning/10 text-warning",
-                      )}
-                    >
-                      {document.status === "SYNCED" ? (
-                        <CheckCircle2 className="h-2.5 w-2.5" />
-                      ) : document.status === "FAILED" ? (
-                        <TriangleAlert className="h-2.5 w-2.5" />
-                      ) : (
-                        <RefreshCw className="h-2.5 w-2.5 animate-spin" />
-                      )}
-                      {document.status === "SYNCED"
-                        ? "synced"
-                        : document.status === "FAILED"
-                          ? "failed"
-                          : "ingesting"}
-                    </span>
+                    {(() => {
+                      const meta = STATUS_META[document.status];
+                      return (
+                        <span
+                          className={cn(
+                            "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                            meta.className,
+                          )}
+                        >
+                          {meta.icon}
+                          {meta.label}
+                        </span>
+                      );
+                    })()}
                   </div>
                   <p className="truncate text-xs text-muted">
                     {isLinkableUrl(document.url) ? (

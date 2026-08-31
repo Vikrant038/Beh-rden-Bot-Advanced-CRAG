@@ -115,6 +115,6 @@ export async function detectLanguageLlm(
 }
 
 /** Estimate token count from character count (rough but conservative). */
-function estimateTokens(text: string): number {
+export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 3);
 }

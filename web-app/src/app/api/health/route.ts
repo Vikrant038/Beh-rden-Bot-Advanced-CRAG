@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/server/db";
+import { toErrorMessage } from "@/server/lib/errors";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("health");
@@ -19,32 +20,28 @@ export const runtime = "nodejs";
  */
 export async function GET() {
   const startedAt = Date.now();
+  const timestamp = new Date().toISOString();
   try {
     const rows = await prisma.$queryRaw<Array<{ ok: number }>>`SELECT 1 AS ok`;
-    const ok = rows[0]?.ok === 1;
-    if (!ok) {
+    if (rows[0]?.ok !== 1) {
       throw new Error("DB ping returned an unexpected result");
     }
     return NextResponse.json({
       success: true,
       db: "ok",
       latencyMs: Date.now() - startedAt,
-      timestamp: new Date().toISOString(),
+      timestamp,
     });
   } catch (error: unknown) {
     // Only a generic message goes to the public response. The full error
     // (message, cause, stack) is logged server-side — exposing it here leaks
     // internal paths/connection details to anyone who can reach /api/health.
-    const message = error instanceof Error ? error.message : String(error);
-    const stack = error instanceof Error ? error.stack : undefined;
-    logger.error({ error: message, stack }, "[HEALTH] DB ping failed");
+    logger.error(
+      { error: toErrorMessage(error), stack: error instanceof Error ? error.stack : undefined },
+      "[HEALTH] DB ping failed",
+    );
     return NextResponse.json(
-      {
-        success: false,
-        db: "error",
-        error: message,
-        timestamp: new Date().toISOString(),
-      },
+      { success: false, db: "error", error: toErrorMessage(error), timestamp },
       { status: 503 },
     );
   }

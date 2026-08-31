@@ -10,14 +10,14 @@ import type { PipelineStage } from "@/server/rag/agents/orchestrator";
 import type { HybridRetriever } from "@/server/rag/retrieval/hybrid";
 import { runCragGate } from "@/server/rag/crag-gate";
 import { generateSubQueries } from "@/server/rag/query-expansion";
-import { callLLM } from "@/server/llm/client";
-import type { LlmMessage } from "@/server/llm/client";
+import { callLLM, type LlmMessage } from "@/server/llm/client";
 import { maskPii } from "@/server/pii/masker";
 import { formatChunksForPrompt } from "@/server/rag/tools/web-search";
 import type { SemanticCache, CachedResponse } from "@/server/rag/cache/semantic-cache";
 import { buildStandardSystemPrompt } from "@/server/rag/prompt";
 import { LLM_MAX_TOKENS_ANSWER, LLM_TEMPERATURE_MEDIUM } from "@/config/app";
 import { LlmUsageCollector, withLlmUsageCollector, type LlmCallRecord } from "@/server/llm/usage";
+import { writeCacheEntry } from "@/server/rag/agents/orchestrator";
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("standard-crag");
@@ -40,7 +40,6 @@ export interface StandardRagOptions {
   cache: SemanticCache;
   memory: StandardMemoryLike;
   bypassCache?: boolean;
-  topK?: number;
   /**
    * Pre-masked query. The chat stream already masks in Stage 0; passing the
    * masked text here avoids a second maskPii pass on the same query.
@@ -99,6 +98,9 @@ const CRAG_STAGE_NAMES = [
   "Grounded generation (LLM)",
   "Cache write & memory persist",
 ];
+
+const FALLBACK_ANSWER =
+  "I do not have sufficient official information in my knowledge base to answer this question reliably.";
 
 function buildCragStages(
   durations: number[],
@@ -254,8 +256,7 @@ export async function runStandardCrag(
 
     const t_gen = Date.now();
     if (filteredChunks.length === 0 || gate.needsWebFallback) {
-      answerText =
-        "I do not have sufficient official information in my knowledge base to answer this question reliably.";
+      answerText = FALLBACK_ANSWER;
       isGrounded = false;
       pathUsed = "CRAG_FALLBACK_UNGROUNDED";
     } else {
@@ -281,8 +282,7 @@ export async function runStandardCrag(
         pathUsed = gate.pathUsed;
       } catch (error) {
         logger.warn({ error: String(error) }, "[CRAG] generation failed");
-        answerText =
-          "I do not have sufficient official information in my knowledge base to answer this question reliably.";
+        answerText = FALLBACK_ANSWER;
         isGrounded = false;
         pathUsed = "LLM_GENERATION_FAILED";
       }
@@ -296,41 +296,18 @@ export async function runStandardCrag(
       documentId: chunk.documentId,
     }));
 
-    const parentDocIds = Array.from(
-      new Set(sources.map((source) => source.documentId).filter((id): id is string => Boolean(id))),
-    );
-
     // M1: never cache ungrounded fallback/error answers — a transient failure
     // (e.g. web-search timeout) must not be persisted as a 7-day cached reply.
     const t_cacheWrite = Date.now();
     let cacheWritten = false;
     if (!bypassCache && isGrounded) {
-      // Answers are always written in English (shared writer contract), so the
-      // cache records "en" as the answer language regardless of the query
-      // language. The canonical-English dual-write still lets German and
-      // English re-asks of the same question converge on one answer.
-      const ANSWER_LANGUAGE = "en";
-      await cache.addToCache(
-        maskedQuestion,
-        queryVector,
-        { answer: answerText, sources },
-        parentDocIds,
-        ANSWER_LANGUAGE,
-      );
+      await writeCacheEntry(cache, maskedQuestion, queryVector, answerText, sources);
       // Also cache under the canonical English form so future German and
       // English re-asks of the same question converge on this answer. Skipped
-      // for English-only asks: the canonical English form IS the query itself
-      // (guaranteed by `expansion.language !== "en"`), so writing a second
-      // key would duplicate the row for a reworded/truncated canonical with
-      // zero convergence benefit.
+      // for English-only asks: the canonical English form IS the query itself,
+      // so writing a second key would duplicate the row with zero benefit.
       if (englishQueryVector && expansion.language !== "en") {
-        await cache.addToCache(
-          englishCanonical,
-          englishQueryVector,
-          { answer: answerText, sources },
-          parentDocIds,
-          ANSWER_LANGUAGE,
-        );
+        await writeCacheEntry(cache, englishCanonical, englishQueryVector, answerText, sources);
       }
       cacheWritten = true;
     }

@@ -81,6 +81,17 @@ const corpus: Chunk[] = [
   },
 ];
 
+/** The ts_rank row the mocked sparseSearch returns (keyed to corpus[0]). */
+const ftsRow = (rank = 0.9) => ({
+  id: 1,
+  parentId: null,
+  documentId: "doc-a",
+  sourceName: "doc-a",
+  sourceUrl: "https://a.example",
+  text: corpus[0].text,
+  rank,
+});
+
 describe("HybridRetriever (pgvector + BM25 + RRF)", () => {
   let retriever: HybridRetriever;
 
@@ -97,17 +108,7 @@ describe("HybridRetriever (pgvector + BM25 + RRF)", () => {
     );
     // The Postgres FTS sparse path (vectorQueries.sparseSearch) is what the
     // hybrid retriever calls now; it reads rows shaped for ts_rank.
-    mockedQueryRaw.mockResolvedValue([
-      {
-        id: 1,
-        parentId: null,
-        documentId: "doc-a",
-        sourceName: "doc-a",
-        sourceUrl: "https://a.example",
-        text: corpus[0].text,
-        rank: 0.9,
-      },
-    ] as never);
+    mockedQueryRaw.mockResolvedValue([ftsRow()] as never);
     mockedDenseRetrieve.mockResolvedValue([corpus[0]]);
 
     retriever = new HybridRetriever({
@@ -184,17 +185,7 @@ describe("HybridRetriever (pgvector + BM25 + RRF)", () => {
 
   it("wide mode fetches 2x dense/sparse candidates and widens the rerank window", async () => {
     mockedDenseRetrieve.mockResolvedValue([corpus[0]]);
-    mockedQueryRaw.mockResolvedValue([
-      {
-        id: 1,
-        parentId: null,
-        documentId: "doc-a",
-        sourceName: "doc-a",
-        sourceUrl: "https://a.example",
-        text: corpus[0].text,
-        rank: 0.9,
-      },
-    ] as never);
+    mockedQueryRaw.mockResolvedValue([ftsRow()] as never);
 
     await retriever.retrieve("Compare TU Berlin vs LMU vs FU Berlin", ["Compare TU Berlin"], 0, {
       wide: true,
@@ -212,36 +203,27 @@ describe("HybridRetriever (pgvector + BM25 + RRF)", () => {
       12,
     );
     // Telemetry records that wide retrieval ran.
-    const result = await retriever.retrieve("Compare TU Berlin vs LMU vs FU Berlin", ["Compare TU Berlin"], 0, {
-      wide: true,
-    });
+    const result = await retriever.retrieve(
+      "Compare TU Berlin vs LMU vs FU Berlin",
+      ["Compare TU Berlin"],
+      0,
+      {
+        wide: true,
+      },
+    );
     expect(result.telemetry.wideRetrieval).toBe(true);
   });
 
   it("default retrieval keeps the narrow 15/15/5 window and omits the wide telemetry flag", async () => {
     mockedDenseRetrieve.mockResolvedValue([corpus[0]]);
-    mockedQueryRaw.mockResolvedValue([
-      {
-        id: 1,
-        parentId: null,
-        documentId: "doc-a",
-        sourceName: "doc-a",
-        sourceUrl: "https://a.example",
-        text: corpus[0].text,
-        rank: 0.9,
-      },
-    ] as never);
+    mockedQueryRaw.mockResolvedValue([ftsRow()] as never);
 
     const result = await retriever.retrieve("blocked account visa", ["blocked account visa"]);
     expect(mockedDenseRetrieve).toHaveBeenCalledWith(
       expect.any(Array),
       expect.objectContaining({ topK: 15 }),
     );
-    expect(mockReranker.rerank).toHaveBeenCalledWith(
-      "blocked account visa",
-      expect.any(Array),
-      5,
-    );
+    expect(mockReranker.rerank).toHaveBeenCalledWith("blocked account visa", expect.any(Array), 5);
     expect(result.telemetry.wideRetrieval).toBeUndefined();
   });
 

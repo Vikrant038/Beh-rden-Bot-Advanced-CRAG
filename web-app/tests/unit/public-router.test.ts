@@ -1,6 +1,4 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { appRouter } from "@/server/trpc/router";
-import type { Context } from "@/server/trpc/context";
 
 vi.mock("@/server/db", () => ({
   prisma: {
@@ -20,19 +18,13 @@ vi.mock("@/server/db", () => ({
 
 import { prisma } from "@/server/db";
 import type { MockPrisma } from "../helpers/mock-prisma";
+import { makeGuestCaller } from "../helpers/caller";
 
 const prismaMock = prisma as unknown as MockPrisma & {
   documentParentChunk: { count: ReturnType<typeof vi.fn> };
 };
 
-function makeCaller() {
-  return appRouter.createCaller({
-    db: prismaMock as never,
-    session: null,
-    headers: new Headers(),
-    resHeaders: new Headers(),
-  } as unknown as Context);
-}
+const makeCaller = () => makeGuestCaller(prismaMock, undefined);
 
 describe("public router", () => {
   beforeEach(() => {

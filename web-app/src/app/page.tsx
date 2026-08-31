@@ -30,6 +30,7 @@ import { CountUp } from "@/components/ui/count-up";
 import { ChatMockup } from "@/components/landing/chat-mockup";
 import { ChangelogModal } from "@/components/ui/changelog-modal";
 import { api } from "@/lib/trpc/client";
+import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
   { href: "#features", label: "Features" },
@@ -37,6 +38,30 @@ const NAV_LINKS = [
   { href: "#corpus", label: "The corpus" },
   { href: "#faq", label: "FAQ" },
 ];
+
+/** Primary gradient CTA + its glass secondary, shared by both CTA rows. */
+const CTA_PRIMARY =
+  "cta-shimmer brand-gradient inline-block w-full max-w-xs rounded-xl px-8 py-3 text-sm font-semibold text-white shadow-[0_8px_28px_-8px_var(--color-primary)] transition hover:brightness-110 active:scale-[0.98] sm:w-auto";
+const CTA_SECONDARY =
+  "inline-block w-full max-w-xs rounded-xl border border-glass-border bg-glass px-8 py-3 text-sm font-medium shadow-glass backdrop-blur transition hover:bg-surface-hover sm:w-auto";
+
+/** Standard section heading + optional subtitle pair. */
+function SectionHeading({
+  title,
+  subtitle,
+  className,
+}: {
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <>
+      <h2 className={cn("type-title", className)}>{title}</h2>
+      {subtitle ? <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">{subtitle}</p> : null}
+    </>
+  );
+}
 
 /**
  * Real, DB-backed trust numbers (public.corpusStats) — no invented claims.
@@ -144,6 +169,19 @@ const SAMPLE_QUESTIONS = [
     title: "APS certificate",
     query: "How do I get my APS certificate and how long does it take?",
     icon: BadgeCheck,
+  },
+];
+
+// Static hero facts — only the three steps of "How it works" (mapped inline below).
+const HOW_IT_WORKS = [
+  { title: "Ask a question", body: "Type it in plain English — no forms, no jargon." },
+  {
+    title: "AI researches official sources",
+    body: "Hybrid retrieval + a research agent pull from verified documents.",
+  },
+  {
+    title: "Get a cited, verified answer",
+    body: "Every answer links the sources it was grounded on.",
   },
 ];
 
@@ -340,16 +378,10 @@ export default function LandingPage() {
             transition={{ duration: 0.55, delay: 0.18 }}
             className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row"
           >
-            <Link
-              href={startHref}
-              className="cta-shimmer brand-gradient inline-block w-full max-w-xs rounded-xl px-8 py-3 text-sm font-semibold text-white shadow-[0_8px_28px_-8px_var(--color-primary)] transition hover:brightness-110 active:scale-[0.98] sm:w-auto"
-            >
+            <Link href={startHref} className={CTA_PRIMARY}>
               Start asking →
             </Link>
-            <a
-              href="#demo"
-              className="inline-block w-full max-w-xs rounded-xl border border-glass-border bg-glass px-8 py-3 text-sm font-medium shadow-glass backdrop-blur transition hover:bg-surface-hover sm:w-auto"
-            >
+            <a href="#demo" className={CTA_SECONDARY}>
               See an example
             </a>
           </motion.div>
@@ -375,10 +407,10 @@ export default function LandingPage() {
           className="mt-20"
           aria-label="Sample questions"
         >
-          <h2 className="type-title">What can I ask?</h2>
-          <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
-            Tap a question to try it — it opens straight in the chat.
-          </p>
+          <SectionHeading
+            title="What can I ask?"
+            subtitle="Tap a question to try it — it opens straight in the chat."
+          />
           <div className="mx-auto mt-8 grid max-w-3xl gap-3 sm:grid-cols-3">
             {SAMPLE_QUESTIONS.map((sample) => {
               const Icon = sample.icon;
@@ -410,31 +442,15 @@ export default function LandingPage() {
           id="how-it-works"
           className="content-visibility-auto mt-24 scroll-mt-20 md:scroll-mt-24"
         >
-          <h2 className="type-title">How it works</h2>
-          <p className="mx-auto mt-3 max-w-2xl text-sm text-muted">
-            A three-agent pipeline turns your question into a cited, verified answer.
-          </p>
+          <SectionHeading
+            title="How it works"
+            subtitle="A three-agent pipeline turns your question into a cited, verified answer."
+          />
           <div className="mt-10 grid gap-4 sm:grid-cols-3">
-            {[
-              {
-                step: "1",
-                title: "Ask a question",
-                body: "Type it in plain English — no forms, no jargon.",
-              },
-              {
-                step: "2",
-                title: "AI researches official sources",
-                body: "Hybrid retrieval + a research agent pull from verified documents.",
-              },
-              {
-                step: "3",
-                title: "Get a cited, verified answer",
-                body: "Every answer links the sources it was grounded on.",
-              },
-            ].map((step) => (
-              <GlassCard key={step.step} className="flex items-start gap-4 p-6 text-left sm:block">
+            {HOW_IT_WORKS.map((step, index) => (
+              <GlassCard key={step.title} className="flex items-start gap-4 p-6 text-left sm:block">
                 <span className="brand-gradient grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold text-white shadow-[0_4px_14px_-4px_var(--color-primary)]">
-                  {step.step}
+                  {index + 1}
                 </span>
                 <div className="min-w-0">
                   <h3 className="mt-0 font-semibold sm:mt-3">{step.title}</h3>
@@ -542,10 +558,11 @@ export default function LandingPage() {
           id="features"
           className="content-visibility-auto mx-auto mt-24 max-w-3xl scroll-mt-20 text-left md:scroll-mt-24"
         >
-          <h2 className="type-title text-center">Why it&apos;s trustworthy</h2>
-          <p className="mx-auto mt-3 max-w-2xl text-center text-sm text-muted">
-            Every feature exists to earn your trust before you make a life-changing decision.
-          </p>
+          <SectionHeading
+            title="Why it's trustworthy"
+            subtitle="Every feature exists to earn your trust before you make a life-changing decision."
+            className="text-center"
+          />
           <div className="mt-10 space-y-3">
             {FEATURES.map((feature) => {
               const Icon = feature.icon;
@@ -653,7 +670,7 @@ export default function LandingPage() {
           id="faq"
           className="content-visibility-auto mx-auto mt-24 max-w-2xl scroll-mt-20 text-left md:scroll-mt-24"
         >
-          <h2 className="type-title text-center">Frequently asked questions</h2>
+          <SectionHeading title="Frequently asked questions" className="text-center" />
           <div className="mt-8 space-y-3">
             {FAQ_ITEMS.map((item, index) => {
               const open = openFaq === index;
@@ -694,16 +711,10 @@ export default function LandingPage() {
               seconds, for free.
             </p>
             <div className="relative mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Link
-                href={startHref}
-                className="cta-shimmer brand-gradient inline-block w-full rounded-xl px-8 py-3 text-sm font-semibold text-white shadow-[0_8px_28px_-8px_var(--color-primary)] transition hover:brightness-110 active:scale-[0.98] sm:w-auto"
-              >
+              <Link href={startHref} className={CTA_PRIMARY}>
                 Start asking →
               </Link>
-              <Link
-                href={browseHref}
-                className="inline-block w-full rounded-xl border border-glass-border bg-glass px-8 py-3 text-sm font-medium shadow-glass backdrop-blur transition hover:bg-surface-hover sm:w-auto"
-              >
+              <Link href={browseHref} className={CTA_SECONDARY}>
                 Browse the knowledge base
               </Link>
             </div>

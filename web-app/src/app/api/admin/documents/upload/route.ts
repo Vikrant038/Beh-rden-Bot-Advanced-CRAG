@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/server/auth";
 import { enqueuePdfJob } from "@/server/ingest/jobs";
-import { ACCEPTED_MIME, MAX_PDF_BYTES } from "@/server/ingest/pdf-parser";
+import { ACCEPTED_MIME, MAX_PDF_BYTES } from "@/config/app";
+import { toErrorMessage } from "@/server/lib/errors";
 
 export const runtime = "nodejs";
 // Enqueue-only: parse/chunk/embed now runs in the background cron worker, so
@@ -57,7 +58,6 @@ export async function POST(request: Request) {
     const { jobId } = await enqueuePdfJob(buffer, file.name, title);
     return NextResponse.json({ jobId, status: "QUEUED" }, { status: 202 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: message }, { status: 422 });
+    return NextResponse.json({ error: toErrorMessage(error) }, { status: 422 });
   }
 }

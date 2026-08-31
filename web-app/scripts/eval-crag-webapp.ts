@@ -1,7 +1,7 @@
 /**
  * eval-crag-webapp.ts — run the 30-question multilingual CRAG testset through
  * the REAL web-app (TypeScript) pipeline and score it on the same four axes as
- * tests/eval_ragas_30.py:
+ * mvp-python/tests/eval_ragas.py:
  *
  *   1. GROUNDEDNESS / FAITHFULNESS — LLM-as-judge (1-5)
  *   2. ANSWER RELEVANCE           — LLM judge (1-5) blended with BGE-M3 cosine
@@ -38,6 +38,7 @@ import { callLLM } from "@/server/llm/client";
 import { CRAG_THRESHOLD, RERANK_TOP_K, RERANK_TOP_K_WIDE } from "@/server/rag/types";
 import type { Chunk } from "@/server/rag/types";
 import { createLogger } from "@/server/lib/logger";
+import { withTimeout } from "./lib/stats";
 
 const logger = createLogger("eval-crag-webapp");
 
@@ -96,22 +97,6 @@ interface EvalResult {
   blocked_non_trap?: boolean;
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
-}
-
 async function judgeFaithfulnessRelevance(
   question: string,
   contextText: string,
@@ -139,17 +124,15 @@ async function judgeFaithfulnessRelevance(
 
   let faith = 3.0;
   let rel = 3.0;
+  const parseScore = (line: string): number => {
+    const parsed = Number.parseFloat(line.split(":")[1]?.trim() ?? "");
+    return Number.isNaN(parsed) ? 3.0 : parsed;
+  };
   for (const line of text.split("\n")) {
     if (line.includes("FAITHFULNESS:")) {
-      const parsed = Number.parseFloat(line.split(":")[1]?.trim() ?? "");
-      if (!Number.isNaN(parsed)) {
-        faith = parsed;
-      }
+      faith = parseScore(line);
     } else if (line.includes("RELEVANCE:")) {
-      const parsed = Number.parseFloat(line.split(":")[1]?.trim() ?? "");
-      if (!Number.isNaN(parsed)) {
-        rel = parsed;
-      }
+      rel = parseScore(line);
     }
   }
   return { faithfulness: faith, relevance: rel };
@@ -170,7 +153,10 @@ function contextRecall(chunks: Chunk[], expectedKeywords: string[]): number {
   if (chunks.length === 0) {
     return 0;
   }
-  const combined = chunks.map((c) => c.text ?? "").join(" ").toLowerCase();
+  const combined = chunks
+    .map((c) => c.text ?? "")
+    .join(" ")
+    .toLowerCase();
   const hits = expectedKeywords.filter((kw) => combined.includes(kw.toLowerCase())).length;
   return hits / expectedKeywords.length;
 }
@@ -198,31 +184,30 @@ async function runItem(
   const masked = maskPii(question).text;
 
   // Stage 0A guardrail — the web-app standard-mode entry guard.
-  const blocked = await withTimeout(
-    isQueryOutOfDomain(masked),
-    ITEM_TIMEOUT_MS,
-    "guardrail",
-  );
+  const blocked = await withTimeout(isQueryOutOfDomain(masked), ITEM_TIMEOUT_MS, "guardrail");
   if (blocked) {
     // Traps: a clean refusal is the CORRECT behavior → full marks.
     // Legit questions wrongly blocked: a guardrail false positive → 0 (failed
     // to answer), flagged for the report.
     const isTrap = Boolean(item.expected_refusal);
+    const score = isTrap ? 5.0 : 0.0;
     return {
       id: item.id,
       topic: item.topic,
       language: item.language ?? "en",
       trap: isTrap,
-      faithfulness: isTrap ? 5.0 : 0.0,
-      relevance_judge: isTrap ? 5.0 : 0.0,
+      faithfulness: score,
+      relevance_judge: score,
       relevance_bgem3: 0,
-      relevance_blend: isTrap ? 5.0 : 0.0,
+      relevance_blend: score,
       context_precision: 0,
       context_recall: 0,
       chunks_ok: false,
       retrieval_path: "GUARDRAIL_BLOCKED",
       latency_ms: Date.now() - t0,
-      answer_excerpt: isTrap ? "**Out of Domain Detected:** …" : "GUARDRAIL FALSE POSITIVE (blocked legit query)",
+      answer_excerpt: isTrap
+        ? "**Out of Domain Detected:** …"
+        : "GUARDRAIL FALSE POSITIVE (blocked legit query)",
       blocked_non_trap: !isTrap,
     };
   }
@@ -251,8 +236,7 @@ async function runItem(
   // the widened rerank window for flagged questions, else the default 5.
   const effectiveTopK = expansion.needsDeepRerank ? RERANK_TOP_K_WIDE : RERANK_TOP_K;
 
-  const needsWebFallback =
-    retrieval.bestCrossScore < CRAG_THRESHOLD || retrieval.needsWebFallback;
+  const needsWebFallback = retrieval.bestCrossScore < CRAG_THRESHOLD || retrieval.needsWebFallback;
   const filteredChunks = rawChunks.filter(
     (chunk) => (chunk.crossScore ?? chunk.similarityScore ?? 0) >= 0.2,
   );
@@ -358,24 +342,27 @@ async function main(): Promise<void> {
 
   const retriever = getHybridRetriever();
 
-  // Resume support — skip items already scored.
-  const completedIds = new Set<string>();
+  // Resume support — skip items already scored. `prior` doubles as the merge
+  // source for the final summary (checkpoint + fresh results, deduped by id).
+  let prior: EvalResult[] = [];
   if (fs.existsSync(CHECKPOINT_PATH)) {
     try {
-      const prior = JSON.parse(fs.readFileSync(CHECKPOINT_PATH, "utf-8")) as EvalResult[];
-      prior.forEach((r) => completedIds.add(r.id));
-      console.log(`Resume: ${completedIds.size} items already scored, skipping them.\n`);
+      prior = JSON.parse(fs.readFileSync(CHECKPOINT_PATH, "utf-8")) as EvalResult[];
+      console.log(`Resume: ${prior.length} items already scored, skipping them.\n`);
     } catch (error) {
       logger.warn({ error: String(error) }, "[EVAL] could not load checkpoint; starting fresh");
     }
   }
+  const completedIds = new Set(prior.map((r) => r.id));
 
   const results: EvalResult[] = [];
 
   for (let i = 0; i < questions.length; i++) {
     const item = questions[i];
     if (completedIds.has(item.id)) {
-      console.log(`[${String(i + 1).padStart(2, "0")}/${questions.length}] ${item.id} ... SKIP (scored)`);
+      console.log(
+        `[${String(i + 1).padStart(2, "0")}/${questions.length}] ${item.id} ... SKIP (scored)`,
+      );
       continue;
     }
     console.log(
@@ -400,8 +387,13 @@ async function main(): Promise<void> {
           const msg = String(error);
           if (attempt < 3) {
             const backoff = msg.includes("No working LLM provider") ? 70_000 : 15_000;
-            logger.warn({ error: msg }, `[EVAL] item ${item.id} attempt ${attempt} failed; backing off ${backoff}ms`);
-            console.log(`      FAILED attempt ${attempt} (${msg.slice(0, 90)}), backing off ${backoff / 1000}s…`);
+            logger.warn(
+              { error: msg },
+              `[EVAL] item ${item.id} attempt ${attempt} failed; backing off ${backoff}ms`,
+            );
+            console.log(
+              `      FAILED attempt ${attempt} (${msg.slice(0, 90)}), backing off ${backoff / 1000}s…`,
+            );
             await new Promise((resolve) => setTimeout(resolve, backoff));
           }
         }
@@ -431,12 +423,8 @@ async function main(): Promise<void> {
   }
 
   // Merge checkpoint (prior runs) so the summary covers the full testset.
-  const allResults = [...results];
-  if (fs.existsSync(CHECKPOINT_PATH)) {
-    const checkpoint = JSON.parse(fs.readFileSync(CHECKPOINT_PATH, "utf-8")) as EvalResult[];
-    const seen = new Set(results.map((r) => r.id));
-    allResults.push(...checkpoint.filter((r) => !seen.has(r.id)));
-  }
+  const seen = new Set(results.map((r) => r.id));
+  const allResults = [...results, ...prior.filter((r) => !seen.has(r.id))];
   const byNum = (r: EvalResult): number => {
     const m = /(\d+)$/.exec(r.id);
     return m ? Number.parseInt(m[1], 10) : 0;
@@ -478,7 +466,9 @@ async function main(): Promise<void> {
   for (const [label, actual, gate] of gates) {
     const passed = actual >= gate;
     allPass = allPass && passed;
-    console.log(`${label.padEnd(30)} | ${actual.toFixed(3)} | ${gate.toFixed(2)} | ${passed ? "PASS" : "FAIL"}`);
+    console.log(
+      `${label.padEnd(30)} | ${actual.toFixed(3)} | ${gate.toFixed(2)} | ${passed ? "PASS" : "FAIL"}`,
+    );
   }
   if (smokeMode) {
     console.log(
@@ -486,18 +476,16 @@ async function main(): Promise<void> {
     );
   }
 
-  const byLang = new Map<string, EvalResult[]>();
-  for (const r of allResults) {
-    const list = byLang.get(r.language) ?? [];
-    list.push(r);
-    byLang.set(r.language, list);
-  }
+  // ES2024 Object.groupBy — language features come from lib "esnext".
+  const byLang = Object.groupBy(allResults, (r) => r.language);
   console.log("\n--- By language ---");
-  for (const [lang, items] of byLang) {
-    const f = items.reduce((acc, r) => acc + r.faithfulness, 0) / items.length;
-    const p = items.reduce((acc, r) => acc + r.context_precision, 0) / items.length;
-    const c = items.reduce((acc, r) => acc + r.context_recall, 0) / items.length;
-    console.log(`  ${lang.toUpperCase().padEnd(4)} (n=${items.length})  Faith=${f.toFixed(2)}  Prec=${(p * 100).toFixed(0)}%  Rec=${(c * 100).toFixed(0)}%`);
+  for (const [lang, items] of Object.entries(byLang)) {
+    const list = items ?? [];
+    const mean = (pick: (r: EvalResult) => number): string =>
+      (list.reduce((acc, r) => acc + pick(r), 0) / list.length).toFixed(2);
+    console.log(
+      `  ${lang.toUpperCase().padEnd(4)} (n=${list.length})  Faith=${mean((r) => r.faithfulness)}  Prec=${(Number(mean((r) => r.context_precision)) * 100).toFixed(0)}%  Rec=${(Number(mean((r) => r.context_recall)) * 100).toFixed(0)}%`,
+    );
   }
 
   const traps = allResults.filter((r) => r.trap);

@@ -1,7 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { Prisma } from "@prisma/client";
-import { appRouter } from "@/server/trpc/router";
-import type { Context } from "@/server/trpc/context";
 
 vi.mock("@/server/db", () => ({
   prisma: {
@@ -13,19 +11,11 @@ vi.mock("@/server/db", () => ({
 
 import { prisma } from "@/server/db";
 import type { MockPrisma } from "../helpers/mock-prisma";
+import { makeGuestCaller } from "../helpers/caller";
 
 const prismaMock = prisma as unknown as MockPrisma;
 
-function makeCaller(overrides: Partial<Context> = {}) {
-  return appRouter.createCaller({
-    db: prismaMock as never,
-    session: null,
-    guestId: undefined,
-    headers: new Headers(),
-    resHeaders: new Headers(),
-    ...overrides,
-  } as unknown as Context);
-}
+const makeCaller = (guestId?: string) => makeGuestCaller(prismaMock, guestId);
 
 describe("guest admission (isAuthenticated)", () => {
   beforeEach(() => {
@@ -35,7 +25,7 @@ describe("guest admission (isAuthenticated)", () => {
 
   it("admits a valid guest cookie and provisions the guest User row lazily", async () => {
     prismaMock.user.create.mockResolvedValue({ id: "guest-1" } as never);
-    const caller = makeCaller({ guestId: "guest-1" } as Partial<Context>);
+    const caller = makeCaller("guest-1");
 
     await caller.conversation.list({ limit: 10 });
 
@@ -59,7 +49,7 @@ describe("guest admission (isAuthenticated)", () => {
         clientVersion: "test",
       }),
     );
-    const caller = makeCaller({ guestId: "guest-1" } as Partial<Context>);
+    const caller = makeCaller("guest-1");
 
     const result = await caller.conversation.list({ limit: 10 });
     expect(result.items).toEqual([]);
@@ -67,7 +57,7 @@ describe("guest admission (isAuthenticated)", () => {
 
   it("rejects with UNAUTHORIZED when guest provisioning fails for another reason", async () => {
     prismaMock.user.create.mockRejectedValue(new Error("db down"));
-    const caller = makeCaller({ guestId: "guest-1" } as Partial<Context>);
+    const caller = makeCaller("guest-1");
 
     await expect(caller.conversation.list({ limit: 10 })).rejects.toThrow("db down");
   });

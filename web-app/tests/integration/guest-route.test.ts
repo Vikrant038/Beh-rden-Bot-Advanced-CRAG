@@ -9,7 +9,7 @@ vi.mock("@/server/auth", () => ({
 // round-trip exercises the actual verify-then-reuse path in the route.
 import { POST } from "@/app/api/guest/route";
 import { createGuestCookieValue, createGuestId } from "@/server/guest";
-import { GUEST_COOKIE } from "@/lib/guest";
+import { GUEST_COOKIE } from "@/config/app";
 
 const session = {
   user: { id: "user-1", role: "USER" },

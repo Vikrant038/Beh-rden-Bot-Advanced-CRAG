@@ -48,51 +48,43 @@ export type ChatStage =
  * Extended pipeline stages with granular sub-stages for the in-chat status bar.
  * Kept in sync with server PipelineEvent stages.
  */
-export type PipelineStage =
-  | "idle"
-  | "guardrail"
-  | "disambiguation"
-  | "query_expansion"
-  | "retrieving"
-  | "dense_retrieval"
-  | "bm25_retrieval"
-  | "rrf_fusion"
-  | "rerank"
-  | "crag_gate"
-  | "research"
-  | "tool_calls"
-  | "analyst"
-  | "writer"
-  | "done";
+export const PIPELINE_STAGES = [
+  "idle",
+  "guardrail",
+  "disambiguation",
+  "query_expansion",
+  "retrieving",
+  "dense_retrieval",
+  "bm25_retrieval",
+  "rrf_fusion",
+  "rerank",
+  "crag_gate",
+  "research",
+  "tool_calls",
+  "analyst",
+  "writer",
+  "done",
+] as const;
 
+export type PipelineStage = (typeof PIPELINE_STAGES)[number];
+
+/**
+ * Maps a server stage id onto the PipelineStage the status bar renders.
+ * Stage ids shared by both spellings (guardrail, retrieving, disambiguation,
+ * query_expansion, …) pass through unchanged; legacy agent_* ids alias onto
+ * the newer research/analyst/writer stages. Unknown ids fall back to "idle".
+ */
 export function mapChatStageToPipeline(stage: string): PipelineStage {
+  if ((PIPELINE_STAGES as readonly string[]).includes(stage)) {
+    return stage as PipelineStage;
+  }
   switch (stage) {
-    case "retrieving":
-      return "retrieving";
     case "agent_research":
       return "research";
     case "agent_analyst":
       return "analyst";
     case "agent_writer":
       return "writer";
-    case "guardrail":
-      return "guardrail";
-    case "disambiguation":
-      return "disambiguation";
-    case "query_expansion":
-      return "query_expansion";
-    case "dense_retrieval":
-      return "dense_retrieval";
-    case "bm25_retrieval":
-      return "bm25_retrieval";
-    case "rrf_fusion":
-      return "rrf_fusion";
-    case "rerank":
-      return "rerank";
-    case "crag_gate":
-      return "crag_gate";
-    case "tool_calls":
-      return "tool_calls";
     default:
       return "idle";
   }

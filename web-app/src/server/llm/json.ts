@@ -76,81 +76,100 @@ function repairJson(text: string): string {
   return quoteBareIdentifiers(insertMissingCommas(convertSingleQuotes(text)));
 }
 
+/** Reads the identifier run starting at `i` (`[A-Za-z0-9_]+`); returns [word, nextIndex]. */
+function readWord(text: string, i: number): [string, number] {
+  let j = i;
+  while (j < text.length && /[A-Za-z0-9_]/.test(text[j]!)) {
+    j += 1;
+  }
+  return [text.slice(i, j), j];
+}
+
+/**
+ * Copies the double-quoted string starting at `i` (the opening `"`) to `out`,
+ * advancing `i` past the closing quote. Shared by the repair passes so each
+ * one skips string literals identically (prose like "visa questions, see: FAQ"
+ * survives untouched).
+ */
+function copyString(text: string, i: number, out: string[]): number {
+  out.push('"');
+  i += 1;
+  while (i < text.length) {
+    const ch = text[i]!;
+    out.push(ch);
+    i += 1;
+    if (ch === "\\") {
+      if (i < text.length) {
+        out.push(text[i]!);
+        i += 1;
+      }
+    } else if (ch === '"') {
+      break;
+    }
+  }
+  return i;
+}
+
 /**
  * Converts single-quoted strings to double-quoted ones (JSON has no single
  * quotes). Inside a single-quoted string, an inner double quote is escaped so
  * the result stays valid. Double-quoted strings and their contents are skipped.
  */
 function convertSingleQuotes(text: string): string {
-  let out = "";
-  let inDouble = false;
-  let escaped = false;
+  const out: string[] = [];
   let i = 0;
   while (i < text.length) {
     const ch = text[i]!;
-    if (inDouble) {
-      out += ch;
-      if (escaped) {
-        escaped = false;
-      } else if (ch === "\\") {
-        escaped = true;
-      } else if (ch === '"') {
-        inDouble = false;
-      }
-      i += 1;
-      continue;
-    }
     if (ch === '"') {
-      inDouble = true;
-      out += ch;
+      i = copyString(text, i, out);
+      continue;
+    }
+    if (ch !== "'") {
+      out.push(ch);
       i += 1;
       continue;
     }
-    if (ch === "'") {
-      out += '"';
-      i += 1;
-      while (i < text.length) {
-        const c = text[i]!;
-        if (c === "\\") {
-          const next = text[i + 1];
-          if (next === "'") {
-            // Escaped single quote: needs NO escape in JSON — drop the
-            // backslash, or `\'` becomes an invalid JSON escape.
-            out += "'";
-            i += 2;
-            continue;
-          }
-          if (next === '"') {
-            // Escaped double quote: keep it escaped for the JSON string.
-            out += '\\"';
-            i += 2;
-            continue;
-          }
-          // Other escapes (\\, \n, \t, \u…) are already valid JSON — keep.
-          out += c;
-          i += 1;
-          continue;
-        }
-        if (c === "'") {
-          out += '"';
-          i += 1;
-          break;
-        }
-        if (c === '"') {
-          // Inner double quote must be escaped for the JSON string.
-          out += '\\"';
-          i += 1;
-          continue;
-        }
-        out += c;
-        i += 1;
-      }
-      continue;
-    }
-    out += ch;
+    // Opening single quote → convert to a double-quoted JSON string.
+    out.push('"');
     i += 1;
+    while (i < text.length) {
+      const c = text[i]!;
+      if (c === "\\") {
+        const next = text[i + 1];
+        if (next === "'") {
+          // Escaped single quote: needs NO escape in JSON — drop the
+          // backslash, or `\'` becomes an invalid JSON escape.
+          out.push("'");
+          i += 2;
+          continue;
+        }
+        if (next === '"') {
+          // Escaped double quote: keep it escaped for the JSON string.
+          out.push('\\"');
+          i += 2;
+          continue;
+        }
+        // Other escapes (\\, \n, \t, \u…) are already valid JSON — keep.
+        out.push(c);
+        i += 1;
+        continue;
+      }
+      if (c === "'") {
+        out.push('"');
+        i += 1;
+        break;
+      }
+      if (c === '"') {
+        // Inner double quote must be escaped for the JSON string.
+        out.push('\\"');
+        i += 1;
+        continue;
+      }
+      out.push(c);
+      i += 1;
+    }
   }
-  return out;
+  return out.join("");
 }
 
 /**
@@ -162,94 +181,56 @@ function convertSingleQuotes(text: string): string {
  * strings are never mistaken for structure.
  */
 function insertMissingCommas(text: string): string {
-  let out = "";
-  let inString = false;
-  let escaped = false;
+  const out: string[] = [];
   let prevValueEnd = false;
   let i = 0;
   while (i < text.length) {
     const ch = text[i]!;
-    if (inString) {
-      out += ch;
-      if (escaped) {
-        escaped = false;
-      } else if (ch === "\\") {
-        escaped = true;
-      } else if (ch === '"') {
-        inString = false;
-      }
-      i += 1;
-      continue;
-    }
     if (ch === '"') {
       if (prevValueEnd) {
-        out += ",";
+        out.push(",");
       }
-      inString = true;
-      out += ch;
-      i += 1;
       // A string followed by ':' is a KEY, not a value — it does not end a
       // value for comma purposes (the ':' branch resets the state anyway).
       prevValueEnd = true;
+      i = copyString(text, i, out);
       continue;
     }
-    if (ch === ":") {
-      out += ch;
-      i += 1;
+    if (ch === ":" || ch === ",") {
       prevValueEnd = false;
-      continue;
-    }
-    if (ch === ",") {
-      out += ch;
-      i += 1;
-      prevValueEnd = false;
-      continue;
-    }
-    if (ch === "{" || ch === "[") {
-      if (prevValueEnd) {
-        out += ",";
-      }
-      out += ch;
-      i += 1;
-      prevValueEnd = false;
-      continue;
-    }
-    if (ch === "}" || ch === "]") {
-      out += ch;
-      i += 1;
+    } else if (ch === "}" || ch === "]") {
       prevValueEnd = true;
-      continue;
-    }
-    if (/[0-9-]/.test(ch)) {
+    } else if (ch === "{" || ch === "[") {
       if (prevValueEnd) {
-        out += ",";
+        out.push(",");
+      }
+      prevValueEnd = false;
+    } else if (/[0-9-]/.test(ch)) {
+      if (prevValueEnd) {
+        out.push(",");
       }
       let j = i;
       while (j < text.length && /[0-9.eE+-]/.test(text[j]!)) {
         j += 1;
       }
-      out += text.slice(i, j);
+      out.push(text.slice(i, j));
       i = j;
       prevValueEnd = true;
       continue;
-    }
-    if (/[A-Za-z_]/.test(ch)) {
+    } else if (/[A-Za-z_]/.test(ch)) {
       if (prevValueEnd) {
-        out += ",";
+        out.push(",");
       }
-      let j = i;
-      while (j < text.length && /[A-Za-z0-9_]/.test(text[j]!)) {
-        j += 1;
-      }
-      out += text.slice(i, j);
-      i = j;
+      const [word, next] = readWord(text, i);
+      out.push(word);
+      i = next;
       prevValueEnd = true;
       continue;
     }
-    out += ch;
+    out.push(ch);
     i += 1;
   }
-  return out;
+  return out.join("");
 }
 
 /**
@@ -261,48 +242,24 @@ function insertMissingCommas(text: string): string {
  * so prose like `"reasoning": "visa questions, see: FAQ"` survives untouched.
  */
 function quoteBareIdentifiers(text: string): string {
-  let out = "";
-  let inString = false;
-  let escaped = false;
+  const out: string[] = [];
   let i = 0;
   while (i < text.length) {
     const ch = text[i]!;
-    if (inString) {
-      out += ch;
-      if (escaped) {
-        escaped = false;
-      } else if (ch === "\\") {
-        escaped = true;
-      } else if (ch === '"') {
-        inString = false;
-      }
-      i += 1;
-      continue;
-    }
     if (ch === '"') {
-      inString = true;
-      out += ch;
-      i += 1;
+      i = copyString(text, i, out);
       continue;
     }
     if (/[A-Za-z_]/.test(ch)) {
-      let j = i;
-      while (j < text.length && /[A-Za-z0-9_]/.test(text[j]!)) {
-        j += 1;
-      }
-      const word = text.slice(i, j);
-      if (word === "true" || word === "false" || word === "null") {
-        out += word;
-      } else {
-        out += `"${word}"`;
-      }
-      i = j;
+      const [word, next] = readWord(text, i);
+      out.push(word === "true" || word === "false" || word === "null" ? word : `"${word}"`);
+      i = next;
       continue;
     }
-    out += ch;
+    out.push(ch);
     i += 1;
   }
-  return out;
+  return out.join("");
 }
 
 /**

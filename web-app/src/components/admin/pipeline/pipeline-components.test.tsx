@@ -20,26 +20,27 @@ const stepWithDuration: ResearchStep = {
 };
 
 describe("StageNode", () => {
-  it("renders title, index, and done status", () => {
+  /** StageNode is a list item — it must render inside an <ol>. */
+  const renderNode = (
+    props: { title: string; status: "done" | "running"; durationMs?: number },
+    ui: React.ReactNode,
+  ) =>
     render(
       <ol>
-        <StageNode index={0} title="Stage 0 — guardrail" status="done" durationMs={12}>
-          body
+        <StageNode index={0} {...props}>
+          {ui}
         </StageNode>
       </ol>,
     );
+
+  it("renders title, index, and done status", () => {
+    renderNode({ title: "Stage 0 — guardrail", status: "done", durationMs: 12 }, "body");
     expect(screen.getByText(/Stage 0 — guardrail/)).toBeInTheDocument();
     expect(screen.getByText("12ms")).toBeInTheDocument();
   });
 
   it("is closed by default — body hidden until the chevron is clicked", () => {
-    render(
-      <ol>
-        <StageNode index={0} title="Stage" status="done">
-          <p>expandable body</p>
-        </StageNode>
-      </ol>,
-    );
+    renderNode({ title: "Stage", status: "done" }, <p>expandable body</p>);
     // Closed by default: the admin trace must not reveal outputs up front.
     expect(screen.queryByText("expandable body")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button"));
@@ -47,11 +48,7 @@ describe("StageNode", () => {
   });
 
   it("shows a running indicator with pulse class", () => {
-    const { container } = render(
-      <StageNode index={1} title="Running" status="running">
-        body
-      </StageNode>,
-    );
+    const { container } = renderNode({ title: "Running", status: "running" }, "body");
     expect(container.querySelector(".status-pulse")).not.toBeNull();
     expect(container.querySelector(".animate-spin")).not.toBeNull();
   });
@@ -72,14 +69,13 @@ describe("ReactStep", () => {
   });
 
   it("maps web search, visa calculator, and sub-query actions to their icons", () => {
-    const web = render(<ReactStep step={{ ...step, action: "web_search" }} />);
-    expect(web.container.querySelector(".lucide-globe")).not.toBeNull();
-
-    const calc = render(<ReactStep step={{ ...step, action: "visa_calculator" }} />);
-    expect(calc.container.querySelector(".lucide-calculator")).not.toBeNull();
-
-    const sub = render(<ReactStep step={{ ...step, action: "sub_query" }} />);
-    expect(sub.container.querySelector(".lucide-mouse-pointer-click")).not.toBeNull();
+    const iconFor = (action: string, icon: string): Element | null => {
+      const { container } = render(<ReactStep step={{ ...step, action }} />);
+      return container.querySelector(`.lucide-${icon}`);
+    };
+    expect(iconFor("web_search", "globe")).not.toBeNull();
+    expect(iconFor("visa_calculator", "calculator")).not.toBeNull();
+    expect(iconFor("sub_query", "mouse-pointer-click")).not.toBeNull();
   });
 });
 

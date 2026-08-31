@@ -29,7 +29,7 @@ Why format is a gate, not a suggestion: the "CI broke on the latest push" incide
 
 ### Layer 2 — Unit + integration (Vitest)
 
-- **775 tests across 81 files**, run with `pnpm test` (branch coverage **85.04%**).
+- **840+ tests across 82 files**, run with `pnpm test` (branch coverage floor 85%).
 - **Unit:** pure logic — RAG stages (guardrail, sub-queries, RRF, rerank scoring), cache payload parsing, conversation policy, PII masking, sparse retriever dispatch, telemetry aggregation.
 - **Integration:** tRPC routers (conversation, admin, public) against **mocked Prisma** — fast, deterministic, no DB needed in CI (CI exports placeholder env for zod validation only).
 - **Component:** chat components with behavioral contracts — message bubbles, pipeline status, chat input (mode toggle, paste, char counter, MAX_QUERY_LENGTH), empty state (prompt cards + submit contract), source citations (pdf:// handling, favicons), theme toggle, UI primitives.
@@ -81,8 +81,8 @@ A normal test suite cannot answer "is the answer correct?" — only the pipeline
 
 ### The harnesses
 
-- **Python reference:** `mvp-python/tests/eval_ragas_30.py` — runs the 30 questions through `mvp-python/src/rag.py`, scores with BGE-M3 + LLM judge, and supports **resume via an atomic checkpoint** (rate limits can no longer kill a run — items time out individually and the run skips finished ones).
-- **Production TS pipeline:** `web-app/scripts/eval-crag-webapp.ts` — runs the *same 30 questions* through the real web-app CRAG (guardrail → English-first query expansion (`{ language, queries }`) → pgvector+BM25 hybrid → cross-encoder rerank → Groq), using the local embed/rerank servers when HF inference is unreachable.
+- **Python reference:** `mvp-python/tests/eval_ragas.py` — LLM-judges answers from `mvp-python/src/rag.py` on faithfulness, relevance, and precision.
+- **Production TS pipeline:** `web-app/scripts/eval-crag-webapp.ts` — runs the 30-question multilingual testset through the real web-app CRAG (guardrail → English-first query expansion (`{ language, queries }`) → pgvector+BM25 hybrid → cross-encoder rerank → Groq), using the local embed/rerank servers when HF inference is unreachable.
 
 ### What the evals found (and fixed)
 
@@ -91,7 +91,7 @@ A normal test suite cannot answer "is the answer correct?" — only the pipeline
 3. **No safety guardrail** → traps scored 0/2 (the bot wrote a recipe and offered a forged APS); the deterministic negative/safety term cache (fail-closed) brought traps to **2/2** with zero false positives.
 4. **Context recall on multi-entity items** → diagnosed as retrieval-width compression (verified: keywords exist in corpus *and* fused pool; a 5-chunk window can't enumerate 4–6 entities), not a hallucination defect.
 
-**Current scorecards (same 30 questions, both pipelines):**
+**Current scorecards (30-question testset; the TS harness scores all four axes):**
 
 | Metric | Python reference | Web-app (production TS) | Gate |
 |---|---|---|---|
@@ -112,7 +112,7 @@ The research side has its own suite (`pytest`):
 
 - `test_rag_quality.py` — **9 real queries** through the pipeline: in-scope questions must pass, out-of-scope and security-adjacent queries must be rejected. Behavior, not mocks.
 - `test_tracing.py` — Langfuse span typing and attribute propagation.
-- `test_embeddings.py`, `test_document_sync.py`, `test_hf_client.py`, `test_rag_triad.py`, `sparse-retriever` and eval-related unit tests.
+- `test_embeddings.py`, `test_document_sync.py`, `test_hf_client.py` and the eval scripts (`eval_ragas.py`, `src/generate_testset.py`, `src/run_comparative_benchmark.py`).
 
 > **Known environment note:** `test_rag_quality.py`'s in-scope cases currently hit a FAISS dimension mismatch (768-d default model vs. 1024-d BGE-M3 corpus) — proven pre-existing by stash-testing the base commit. The guardrail rejection tests pass; the in-scope cases await a model/index reconciliation.
 
@@ -144,7 +144,7 @@ pnpm test:e2e                                      # Playwright
 pnpm build                                         # production build
 
 # Python evals (repo root)
-.venv/bin/python -m tests.eval_ragas_30            # 30-question eval (resumable)
+.venv/bin/python -m tests.eval_ragas              # LLM-judged quality eval
 ```
 
 ---

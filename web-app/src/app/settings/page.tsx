@@ -5,8 +5,30 @@ import { signOut, useSession } from "next-auth/react";
 import { Contrast, LogIn, LogOut, MousePointer2, Type } from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { cn } from "@/lib/utils";
+import { RadioGroup } from "@/components/ui/radio-group";
 import { FONT_SCALE_OPTIONS, usePreferences } from "@/components/preferences/preference-provider";
+import type { LucideIcon } from "lucide-react";
+
+/** Carded settings block: icon + heading, then description and controls. */
+function SettingsSection({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="scroll-mt-20 rounded-2xl border border-border bg-surface p-4 sm:p-5">
+      <div className="mb-3 flex items-center gap-2">
+        <Icon className="h-4 w-4 text-muted" />
+        <h2 className="text-sm font-semibold">{title}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
 
 export default function SettingsPage() {
   const { data: session } = useSession();
@@ -32,46 +54,24 @@ export default function SettingsPage() {
         <ThemeToggle />
       </section>
 
-      <section className="scroll-mt-20 rounded-2xl border border-border bg-surface p-4 sm:p-5">
-        <div className="mb-3 flex items-center gap-2">
-          <Type className="h-4 w-4 text-muted" />
-          <h2 className="text-sm font-semibold">Text size</h2>
-        </div>
-        <p className="mb-3 text-sm text-muted">Scales the entire interface for easier reading.</p>
-        <div
-          role="radiogroup"
-          aria-label="Text size"
-          className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-border bg-surface p-1"
-        >
-          {FONT_SCALE_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={mounted && fontScale === option.value}
-              onClick={() => setFontScale(option.value)}
-              className={cn(
-                "grid min-h-11 place-items-center rounded-lg px-3 py-1.5 text-sm transition focus-visible:ring-2 focus-visible:ring-primary",
-                fontScale === option.value
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted hover:bg-surface-hover hover:text-foreground",
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </section>
+      <SettingsSection icon={Type} title="Text size">
+        Scales the entire interface for easier reading.
+        <RadioGroup
+          value={fontScale}
+          onValueChange={setFontScale}
+          label="Text size"
+          className="flex-wrap"
+          buttonClassName="min-h-11 px-3 py-1.5 text-sm"
+          options={FONT_SCALE_OPTIONS.map((option) => ({
+            value: option.value,
+            label: option.label,
+          }))}
+        />
+      </SettingsSection>
 
-      <section className="scroll-mt-20 rounded-2xl border border-border bg-surface p-4 sm:p-5">
-        <div className="mb-3 flex items-center gap-2">
-          <MousePointer2 className="h-4 w-4 text-muted" />
-          <h2 className="text-sm font-semibold">Motion</h2>
-        </div>
-        <p className="mb-3 text-sm text-muted">
-          Reduce animations and transitions regardless of your operating system setting.
-        </p>
-        <label className="flex cursor-pointer items-center gap-3">
+      <SettingsSection icon={MousePointer2} title="Motion">
+        Reduce animations and transitions regardless of your operating system setting.
+        <label className="mt-3 flex cursor-pointer items-center gap-3">
           <input
             type="checkbox"
             checked={mounted && forceReducedMotion}
@@ -80,17 +80,11 @@ export default function SettingsPage() {
           />
           <span className="text-sm">Reduce motion</span>
         </label>
-      </section>
+      </SettingsSection>
 
-      <section className="scroll-mt-20 rounded-2xl border border-border bg-surface p-4 sm:p-5">
-        <div className="mb-3 flex items-center gap-2">
-          <Contrast className="h-4 w-4 text-muted" />
-          <h2 className="text-sm font-semibold">Contrast</h2>
-        </div>
-        <p className="mb-3 text-sm text-muted">
-          Increase foreground contrast for better readability.
-        </p>
-        <label className="flex cursor-pointer items-center gap-3">
+      <SettingsSection icon={Contrast} title="Contrast">
+        Increase foreground contrast for better readability.
+        <label className="mt-3 flex cursor-pointer items-center gap-3">
           <input
             type="checkbox"
             checked={mounted && highContrast}
@@ -99,7 +93,7 @@ export default function SettingsPage() {
           />
           <span className="text-sm">High contrast</span>
         </label>
-      </section>
+      </SettingsSection>
 
       <section className="scroll-mt-20 rounded-2xl border border-border bg-surface p-4 sm:p-5">
         <h2 className="mb-3 text-sm font-semibold">Profile</h2>

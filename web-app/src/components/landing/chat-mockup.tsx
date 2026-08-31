@@ -57,6 +57,11 @@ export function ChatMockup() {
   }, [phase]);
 
   const typing = phase === "typing";
+  // Shared reveal props for the message bubbles that fade up into place.
+  const rise = {
+    initial: reduceMotion ? false : ({ opacity: 0, y: 8 } as const),
+    animate: { opacity: 1, y: 0 },
+  };
 
   return (
     <div
@@ -76,12 +81,7 @@ export function ChatMockup() {
 
       <div className="flex flex-col gap-3 px-4 py-5">
         {/* User message */}
-        <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="flex justify-end"
-        >
+        <motion.div {...rise} transition={{ delay: 0.1 }} className="flex justify-end">
           <div className="brand-gradient max-w-[80%] rounded-2xl rounded-br-sm px-3.5 py-2 text-xs text-white shadow-lg">
             What documents do I need for a German student visa?
           </div>
@@ -112,11 +112,7 @@ export function ChatMockup() {
 
         {/* Typing / finished answer — borderless block, matching the real chat */}
         {(phase === "typing" || phase === "done") && (
-          <motion.div
-            initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex justify-start"
-          >
+          <motion.div {...rise} className="flex justify-start">
             <div className="w-full text-xs">
               <p className="leading-relaxed text-foreground">
                 {typed}
@@ -144,8 +140,7 @@ export function ChatMockup() {
 
         {/* Composer */}
         <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
+          {...rise}
           transition={{ delay: reduceMotion ? 0 : 0.9 }}
           className="flex items-center gap-2 rounded-xl border border-glass-border bg-surface/80 px-3 py-2.5"
         >

@@ -97,16 +97,17 @@ async function main(): Promise<void> {
     take: Math.min(10, total),
     orderBy: { createdAt: "desc" },
   });
-  let germanSample = 0;
-  for (const sample of samples) {
-    const chunk = await prisma.documentChunk.findFirst({
-      where: { documentId: sample.id },
-      select: { text: true },
-    });
-    if (chunk && detectLanguage(chunk.text) === "de") {
-      germanSample += 1;
-    }
-  }
+  const sampleTexts = await Promise.all(
+    samples.map((sample) =>
+      prisma.documentChunk.findFirst({
+        where: { documentId: sample.id },
+        select: { text: true },
+      }),
+    ),
+  );
+  const germanSample = sampleTexts.filter(
+    (chunk) => chunk && detectLanguage(chunk.text) === "de",
+  ).length;
   const germanRatio = samples.length > 0 ? germanSample / samples.length : 0;
   const estimatedGerman = Math.round(total * germanRatio);
   logger.info(
@@ -141,23 +142,19 @@ async function main(): Promise<void> {
   const results = await syncAllDocuments(opts, { concurrency });
 
   // ── Step 5: Summary ───────────────────────────────────────────────────
-  const succeeded = results.filter((r) => r.status !== "failed").length;
-  const failed = results.filter((r) => r.status === "failed").length;
-  const skipped = results.filter((r) => r.status === "skipped").length;
+  const failed = results.filter((r) => r.status === "failed");
   const totalChunks = results.reduce((sum, r) => sum + r.chunkCount, 0);
 
   logger.info(
     "[MIGRATE] Done — %d succeeded, %d skipped, %d failed, %d total chunks",
-    succeeded,
-    skipped,
-    failed,
+    results.length - failed.length,
+    results.filter((r) => r.status === "skipped").length,
+    failed.length,
     totalChunks,
   );
 
-  if (failed > 0) {
-    for (const r of results.filter((r) => r.status === "failed")) {
-      logger.warn({ url: r.url, error: r.error }, "[MIGRATE] Failed document");
-    }
+  for (const r of failed) {
+    logger.warn({ url: r.url, error: r.error }, "[MIGRATE] Failed document");
   }
 
   // ── Step 6: Verify ────────────────────────────────────────────────────

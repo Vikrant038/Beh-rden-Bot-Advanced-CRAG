@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { installDomPolyfills } from "../../tests/helpers/dom-polyfills";
 import LandingPage from "./page";
 
 const { mockUseSession, mockCorpusStats, mockGuestStatus, mockUseReducedMotion } = vi.hoisted(
@@ -47,37 +48,8 @@ vi.mock("framer-motion", async () => {
   };
 });
 
-// jsdom lacks matchMedia (framer-motion's useReducedMotion) and
-// IntersectionObserver (motion's whileInView / CountUp's useInView). Polyfill
-// both so the full page renders.
-beforeAll(() => {
-  Object.defineProperty(window, "matchMedia", {
-    writable: true,
-    value: vi.fn().mockImplementation((query: string) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })),
-  });
-  class MockIntersectionObserver {
-    readonly root = null;
-    readonly rootMargin = "";
-    readonly thresholds: number[] = [];
-    observe = vi.fn();
-    unobserve = vi.fn();
-    disconnect = vi.fn();
-    takeRecords = vi.fn(() => []);
-  }
-  Object.defineProperty(window, "IntersectionObserver", {
-    writable: true,
-    value: MockIntersectionObserver,
-  });
-});
+// jsdom polyfills (matchMedia + IntersectionObserver) come from the shared helper.
+installDomPolyfills();
 
 function setSession(status: "loading" | "authenticated" | "unauthenticated") {
   mockUseSession.mockReturnValue({ data: status === "authenticated" ? {} : null, status });
@@ -91,12 +63,15 @@ const LOADED_STATS = {
   topSources: [],
 };
 
+/** Default mocks: signed-out visitor + loading stats + no guest cookie. */
+function stubDefaults() {
+  setSession("unauthenticated");
+  mockCorpusStats.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+  mockGuestStatus.mockReturnValue({ data: { hasGuest: false } });
+}
+
 describe("LandingPage session-aware CTAs", () => {
-  beforeEach(() => {
-    setSession("unauthenticated");
-    mockCorpusStats.mockReturnValue({ data: undefined, isLoading: true, isError: false });
-    mockGuestStatus.mockReturnValue({ data: { hasGuest: false } });
-  });
+  beforeEach(stubDefaults);
 
   it("routes unauthenticated visitors to /login", () => {
     render(<LandingPage />);
@@ -142,11 +117,7 @@ describe("LandingPage session-aware CTAs", () => {
 });
 
 describe("LandingPage interaction states", () => {
-  beforeEach(() => {
-    setSession("unauthenticated");
-    mockCorpusStats.mockReturnValue({ data: undefined, isLoading: true, isError: false });
-    mockGuestStatus.mockReturnValue({ data: { hasGuest: false } });
-  });
+  beforeEach(stubDefaults);
 
   it("renders a neutral placeholder while corpus stats are loading", () => {
     render(<LandingPage />);

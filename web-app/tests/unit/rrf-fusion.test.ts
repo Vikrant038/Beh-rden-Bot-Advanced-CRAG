@@ -1,9 +1,6 @@
 import { reciprocalRankFusion } from "@/server/rag/retrieval/rrf";
 import type { Chunk } from "@/server/rag/types";
-
-function makeChunk(id: string, sourceName = "doc"): Chunk {
-  return { id, sourceName, sourceUrl: `https://example.com/${sourceName}`, text: `text-${id}` };
-}
+import { makeChunk } from "../helpers/chunk";
 
 describe("RRFFusion", () => {
   it("should fuse dense + sparse rankings with k=60", () => {

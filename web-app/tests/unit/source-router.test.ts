@@ -1,6 +1,4 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { appRouter } from "@/server/trpc/router";
-import type { Context } from "@/server/trpc/context";
 
 vi.mock("@/server/db", () => ({
   prisma: {
@@ -22,22 +20,11 @@ vi.mock("@/server/db", () => ({
 
 import { prisma } from "@/server/db";
 import type { MockPrisma } from "../helpers/mock-prisma";
+import { makeUserCaller } from "../helpers/caller";
 
 const prismaMock = prisma as unknown as MockPrisma;
 
-function makeCaller() {
-  // isAuthenticated reads role + block status fresh from the DB.
-  prismaMock.user.findUnique.mockResolvedValue({ role: "USER", blockedAt: null } as never);
-  return appRouter.createCaller({
-    db: prismaMock as never,
-    session: {
-      user: { id: "user-1", role: "USER", name: "Test", email: "test@example.com" },
-      expires: "2099-01-01T00:00:00.000Z",
-    },
-    headers: new Headers(),
-    resHeaders: new Headers(),
-  } as unknown as Context);
-}
+const makeCaller = () => makeUserCaller(prismaMock);
 
 describe("source router", () => {
   beforeEach(() => {

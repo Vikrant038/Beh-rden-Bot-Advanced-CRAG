@@ -20,6 +20,7 @@ import { api } from "@/lib/trpc/client";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { PipelineVisualizer } from "@/components/admin/pipeline/pipeline-visualizer";
+import { RadioGroup } from "@/components/ui/radio-group";
 import { useToast } from "@/lib/toast";
 import { formatRelativeTime, formatUsd } from "@/lib/utils";
 import type { AgenticRagResponse } from "@/server/rag/agents/orchestrator";
@@ -38,6 +39,51 @@ function isTransportError(message: string): boolean {
     message.includes("Unexpected token") ||
     message.includes("Failed to fetch") ||
     message.includes("Network request failed")
+  );
+}
+
+/** Accessible on/off switch with its icon + label. */
+function ToggleSwitch({
+  checked,
+  onChange,
+  label,
+  icon,
+  iconActiveClassName,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  icon: React.ReactNode;
+  /** Extra classes applied to the icon while the switch is on. */
+  iconActiveClassName?: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={onChange}
+        className={`relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors focus-visible:ring-2 focus-visible:ring-primary ${
+          checked ? "border-primary/50 bg-primary/15" : "border-border bg-surface-hover"
+        }`}
+      >
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-foreground transition-transform ${
+            checked ? "translate-x-5" : "translate-x-1"
+          }`}
+        />
+      </button>
+      <span
+        className={`inline-flex items-center gap-1 text-xs ${checked ? "text-primary" : "text-muted"}`}
+      >
+        <span className={iconActiveClassName && checked ? iconActiveClassName : undefined}>
+          {icon}
+        </span>
+        {label}
+      </span>
+    </div>
   );
 }
 
@@ -66,6 +112,38 @@ const EXAMPLES: Array<{ label: string; prompt: string; icon: LucideIcon }> = [
     icon: Landmark,
   },
 ];
+
+/** Full-error panel for developer mode: raw message plus a retry action. */
+function DebugErrorPanel({
+  message,
+  detail,
+  onRetry,
+}: {
+  message: string;
+  detail: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="glass-card space-y-3 rounded-2xl border-destructive/40 p-5">
+      <p className="font-mono text-xs uppercase tracking-wide text-destructive">
+        Pipeline error — developer mode
+      </p>
+      <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-xl border border-border bg-background p-4 font-mono text-xs leading-relaxed text-foreground">
+        {message}
+      </pre>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted">{detail}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded-lg border border-border bg-surface px-4 py-2 text-sm transition hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          Try again
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function AdminPipelineTesterPage() {
   const { toast } = useToast();
@@ -228,80 +306,35 @@ export default function AdminPipelineTesterPage() {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 lg:ml-auto">
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted">Pipeline:</span>
-              <div
-                role="radiogroup"
-                aria-label="Pipeline"
-                className="inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1"
-              >
-                {(["agentic", "standard"] as const).map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    role="radio"
-                    aria-checked={pipeline === value}
-                    onClick={() => {
-                      setPipeline(value);
-                      testPipeline.reset();
-                    }}
-                    className={`min-h-9 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                      pipeline === value
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted hover:text-foreground"
-                    }`}
-                  >
-                    {value === "agentic" ? "Agentic" : "Standard CRAG"}
-                  </button>
-                ))}
-              </div>
+              <RadioGroup
+                label="Pipeline"
+                value={pipeline}
+                onValueChange={(value) => {
+                  setPipeline(value);
+                  testPipeline.reset();
+                }}
+                buttonClassName="min-h-9 px-3 py-1.5 font-medium"
+                options={[
+                  { value: "agentic", label: "Agentic" },
+                  { value: "standard", label: "Standard CRAG" },
+                ]}
+              />
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={debugMode}
-                aria-label="Toggle developer mode"
-                onClick={() => setDebugMode((v) => !v)}
-                className={`relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors focus-visible:ring-2 focus-visible:ring-primary ${
-                  debugMode ? "border-primary/50 bg-primary/15" : "border-border bg-surface-hover"
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-foreground transition-transform ${
-                    debugMode ? "translate-x-5" : "translate-x-1"
-                  }`}
-                />
-              </button>
-              <span
-                className={`inline-flex items-center gap-1 text-xs ${debugMode ? "text-primary" : "text-muted"}`}
-              >
-                <FlaskConical className="h-3.5 w-3.5" />
-                Developer mode
-              </span>
-            </div>
+            <ToggleSwitch
+              checked={debugMode}
+              onChange={() => setDebugMode((v) => !v)}
+              label="Developer mode"
+              icon={<FlaskConical className="h-3.5 w-3.5" />}
+            />
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={bypassCache}
-                aria-label="Toggle cache bypass"
-                onClick={() => setBypassCache((v) => !v)}
-                className={`relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors focus-visible:ring-2 focus-visible:ring-primary ${
-                  bypassCache ? "border-primary/50 bg-primary/15" : "border-border bg-surface-hover"
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-foreground transition-transform ${
-                    bypassCache ? "translate-x-5" : "translate-x-1"
-                  }`}
-                />
-              </button>
-              <span className="inline-flex items-center gap-1 text-xs text-muted">
-                <Zap className={`h-3.5 w-3.5 ${bypassCache ? "text-warning" : ""}`} />
-                Bypass cache
-              </span>
-            </div>
+            <ToggleSwitch
+              checked={bypassCache}
+              onChange={() => setBypassCache((v) => !v)}
+              label="Bypass cache"
+              icon={<Zap className="h-3.5 w-3.5" />}
+              iconActiveClassName="text-warning"
+            />
           </div>
         </div>
 
@@ -333,35 +366,15 @@ export default function AdminPipelineTesterPage() {
 
       {testPipeline.isError ? (
         debugMode ? (
-          <div className="glass-card space-y-3 rounded-2xl border-destructive/40 p-5">
-            <p className="font-mono text-xs uppercase tracking-wide text-destructive">
-              Pipeline error — developer mode
-            </p>
-            <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-xl border border-border bg-background p-4 font-mono text-xs leading-relaxed text-foreground">
-              {testPipeline.error.message}
-            </pre>
-            {isTransportError(testPipeline.error.message) ? (
-              <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
-                This is a transport or queuing failure: the run request itself is meant to return in
-                ~100ms (the pipeline executes in the background), so this error means the run could
-                not be queued — likely a network drop or a database error. Check Recent traces
-                below, then retry.
-              </p>
-            ) : null}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-muted">
-                Full error detail (name, message, cause, stack) — admin only. Copy it into the
-                trace-persistence bug report if the pipeline keeps failing.
-              </p>
-              <button
-                type="button"
-                onClick={run}
-                className="rounded-lg border border-border bg-surface px-4 py-2 text-sm transition hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                Try again
-              </button>
-            </div>
-          </div>
+          <DebugErrorPanel
+            message={testPipeline.error.message}
+            detail={
+              isTransportError(testPipeline.error.message)
+                ? "This is a transport or queuing failure: the run request itself is meant to return in ~100ms (the pipeline executes in the background), so this error means the run could not be queued — likely a network drop or a database error. Check Recent traces below, then retry."
+                : "Full error detail (name, message, cause, stack) — admin only. Copy it into the trace-persistence bug report if the pipeline keeps failing."
+            }
+            onRetry={run}
+          />
         ) : (
           <ErrorState
             message={testPipeline.error.message}
@@ -371,27 +384,11 @@ export default function AdminPipelineTesterPage() {
         )
       ) : runError ? (
         debugMode ? (
-          <div className="glass-card space-y-3 rounded-2xl border-destructive/40 p-5">
-            <p className="font-mono text-xs uppercase tracking-wide text-destructive">
-              Pipeline error — developer mode
-            </p>
-            <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-xl border border-border bg-background p-4 font-mono text-xs leading-relaxed text-foreground">
-              {runError}
-            </pre>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-muted">
-                Full error detail (name, message, cause, stack) recorded on the run — admin only.
-                Copy it into the trace-persistence bug report if the pipeline keeps failing.
-              </p>
-              <button
-                type="button"
-                onClick={run}
-                className="rounded-lg border border-border bg-surface px-4 py-2 text-sm transition hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                Try again
-              </button>
-            </div>
-          </div>
+          <DebugErrorPanel
+            message={runError}
+            detail="Full error detail (name, message, cause, stack) recorded on the run — admin only. Copy it into the trace-persistence bug report if the pipeline keeps failing."
+            onRetry={run}
+          />
         ) : (
           <ErrorState message={runError} retry={run} />
         )
@@ -455,22 +452,29 @@ export default function AdminPipelineTesterPage() {
             {recentRuns.data.items.map((run) => (
               <li key={run.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
                 <p className="min-w-0 flex-1 truncate text-sm">{run.prompt}</p>
-                {run.status === "RUNNING" ? (
-                  <span className="inline-flex items-center gap-1 text-xs text-primary">
-                    <span className="status-pulse h-2 w-2 rounded-full bg-primary" /> running
-                  </span>
-                ) : run.status === "SUCCESS" ? (
-                  <span className="inline-flex items-center gap-1 text-xs text-success">
-                    <CheckCircle2 className="h-3 w-3" /> success
-                  </span>
-                ) : (
-                  <span
-                    className="inline-flex items-center gap-1 text-xs text-warning"
-                    title={run.error ?? undefined}
-                  >
-                    <XCircle className="h-3 w-3" /> failed
-                  </span>
-                )}
+                <span
+                  className={`inline-flex items-center gap-1 text-xs ${
+                    run.status === "RUNNING"
+                      ? "text-primary"
+                      : run.status === "SUCCESS"
+                        ? "text-success"
+                        : "text-warning"
+                  }`}
+                  title={run.status === "FAILED" ? (run.error ?? undefined) : undefined}
+                >
+                  {run.status === "RUNNING" ? (
+                    <span className="status-pulse h-2 w-2 rounded-full bg-primary" />
+                  ) : run.status === "SUCCESS" ? (
+                    <CheckCircle2 className="h-3 w-3" />
+                  ) : (
+                    <XCircle className="h-3 w-3" />
+                  )}
+                  {run.status === "RUNNING"
+                    ? "running"
+                    : run.status === "SUCCESS"
+                      ? "success"
+                      : "failed"}
+                </span>
                 <span className="inline-flex items-center gap-1 text-xs text-muted">
                   <Clock className="h-3 w-3" /> {run.latencyMs}ms
                 </span>

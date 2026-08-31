@@ -13,12 +13,14 @@ function faviconImg(): HTMLImageElement | null {
   return document.querySelector("img");
 }
 
+/** One-source fixture — every case renders a single citation. */
+const oneSource = (name: string, url: string, score: number): ChatSource[] => [
+  { name, url, score },
+];
+
 describe("SourceCitation", () => {
   it("renders an http source as a clickable link with a favicon", () => {
-    const sources: ChatSource[] = [
-      { name: "BAMF Guide", url: "https://www.bamf.de/guide", score: 0.9 },
-    ];
-    render(<SourceCitation sources={sources} />);
+    render(<SourceCitation sources={oneSource("BAMF Guide", "https://www.bamf.de/guide", 0.9)} />);
     openList();
     const link = screen.getByRole("link", { name: /BAMF Guide/ });
     expect(link).toHaveAttribute("href", "https://www.bamf.de/guide");
@@ -30,10 +32,9 @@ describe("SourceCitation", () => {
   });
 
   it("renders a pdf:// source as a plain chip (not a link)", () => {
-    const sources: ChatSource[] = [
-      { name: "Local Brochure", url: "pdf://bamf/broschuere.pdf", score: 0.75 },
-    ];
-    render(<SourceCitation sources={sources} />);
+    render(
+      <SourceCitation sources={oneSource("Local Brochure", "pdf://bamf/broschuere.pdf", 0.75)} />,
+    );
     openList();
     expect(screen.getByText("Local Brochure")).toBeInTheDocument();
     expect(screen.getByText("75%")).toBeInTheDocument();
@@ -43,10 +44,7 @@ describe("SourceCitation", () => {
   });
 
   it("falls back to the leading host segment for non-URL strings", () => {
-    const sources: ChatSource[] = [
-      { name: "Plain Host", url: "make-it-in-germany.com/en", score: 0.5 },
-    ];
-    render(<SourceCitation sources={sources} />);
+    render(<SourceCitation sources={oneSource("Plain Host", "make-it-in-germany.com/en", 0.5)} />);
     openList();
     expect(faviconImg()).not.toBeNull();
     expect(faviconImg()).toHaveAttribute(
@@ -56,10 +54,7 @@ describe("SourceCitation", () => {
   });
 
   it("swaps to a globe icon when the favicon fails to load", () => {
-    const sources: ChatSource[] = [
-      { name: "Broken Favicon", url: "https://example.com/x", score: 0.6 },
-    ];
-    render(<SourceCitation sources={sources} />);
+    render(<SourceCitation sources={oneSource("Broken Favicon", "https://example.com/x", 0.6)} />);
     openList();
     const img = faviconImg();
     expect(img).not.toBeNull();
@@ -69,8 +64,7 @@ describe("SourceCitation", () => {
   });
 
   it("collapses and re-expands on toggle clicks", () => {
-    const sources: ChatSource[] = [{ name: "Doc", url: "https://example.com", score: 0.8 }];
-    render(<SourceCitation sources={sources} />);
+    render(<SourceCitation sources={oneSource("Doc", "https://example.com", 0.8)} />);
     const toggle = screen.getByRole("button", { name: /Sources \(/ });
     fireEvent.click(toggle);
     expect(screen.getByText("Doc")).toBeInTheDocument();

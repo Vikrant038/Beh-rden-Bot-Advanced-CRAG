@@ -10,14 +10,9 @@ import type { TranslationRateLimiter } from "./rate-limit";
 import { GroqRateLimiterPool } from "./rate-limit";
 import { cacheLookup, cacheStore, getOrCreateInflight } from "./cache";
 import { isHardModelError, isTpdExhaustion } from "./errors";
-import { detectLanguageLlm } from "./detect";
+import { detectLanguageLlm, estimateTokens } from "./detect";
 
 const logger = createLogger("translate");
-
-/** Estimate token count from character count (rough but conservative). */
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 3);
-}
 
 /**
  * Minimum output-token budget for a translated segment. Small inputs get a
@@ -158,13 +153,12 @@ export async function translateToEnglish(
       const translated = await translation;
       translatedSegments.push(translated);
     } catch (error) {
+      // Re-throwing lets the pipeline resume from the last checkpoint on the
+      // next run; the warn here records which segment failed.
       logger.warn(
         { error: String(error), segment: i + 1 },
         "[TRANSLATE] segment failed — will retry on next run",
       );
-      // Return what we have so far so the pipeline can be resumed.
-      // If this is the first segment and it fails, translations will be empty
-      // and the caller should treat this as a non-fatal error.
       throw error;
     }
   }

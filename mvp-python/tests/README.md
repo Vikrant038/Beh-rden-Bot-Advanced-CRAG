@@ -55,8 +55,8 @@ and Playwright browsers installed (`pnpm exec playwright install --with-deps chr
 cd mvp-python
 ../.venv/bin/python -m pytest tests/ -x -q
 
-# RAGAS quality evaluation (30-question multilingual harness + gate report)
-../.venv/bin/python -m tests.eval_ragas_30
+# RAGAS quality evaluation (LLM-judged gate report)
+../.venv/bin/python -m tests.eval_ragas
 ```
 
 Requires `mvp-python/requirements.txt` and `GROQ_API_KEY` / `HF_TOKEN` for
@@ -80,5 +80,5 @@ the LLM-judged metrics.
 - Web-app user flows → `web-app/tests/e2e` (Playwright; every spec also runs
   at a phone viewport via the `mobile-chromium` project).
 - Python retrieval/eval logic → `mvp-python/tests/test_*.py`; quality gates → extend
-  `mvp-python/tests/eval_ragas_30.py` (or the production harness
+  `mvp-python/tests/eval_ragas.py` (or the production harness
   `web-app/scripts/eval-crag-webapp.ts`).

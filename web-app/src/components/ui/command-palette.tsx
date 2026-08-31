@@ -19,7 +19,7 @@ import {
 import { api } from "@/lib/trpc/client";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/lib/toast";
-import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/lib/guest";
+import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/config/app";
 
 interface Command {
   id: string;
@@ -41,7 +41,9 @@ export function CommandPalette() {
   const createMutation = api.conversation.create.useMutation();
 
   const commands = useMemo<Command[]>(() => {
-    const base: Command[] = [
+    const isDark = resolvedTheme === "dark";
+    // Static nav + dynamic theme/sign-out commands in one literal.
+    return [
       {
         id: "home",
         label: "Go to Home",
@@ -107,28 +109,23 @@ export function CommandPalette() {
         keywords: "guides resources walkthroughs how to",
         run: () => router.push("/#resources"),
       },
+      {
+        id: "theme",
+        label: isDark ? "Switch to Light mode" : "Switch to Dark mode",
+        hint: "T",
+        icon: isDark ? Sun : Moon,
+        keywords: "theme dark light appearance color",
+        run: () => setTheme(isDark ? "light" : "dark"),
+      },
+      {
+        id: "sign-out",
+        label: "Sign out",
+        hint: "Q",
+        icon: LogOut,
+        keywords: "sign out logout exit account",
+        run: () => void signOut({ callbackUrl: "/" }),
+      },
     ];
-
-    const isDark = resolvedTheme === "dark";
-    base.push({
-      id: "theme",
-      label: isDark ? "Switch to Light mode" : "Switch to Dark mode",
-      hint: "T",
-      icon: isDark ? Sun : Moon,
-      keywords: "theme dark light appearance color",
-      run: () => setTheme(isDark ? "light" : "dark"),
-    });
-
-    base.push({
-      id: "sign-out",
-      label: "Sign out",
-      hint: "Q",
-      icon: LogOut,
-      keywords: "sign out logout exit account",
-      run: () => void signOut({ callbackUrl: "/" }),
-    });
-
-    return base;
   }, [createMutation, resolvedTheme, router, setTheme, toast]);
 
   const filtered = useMemo(() => {

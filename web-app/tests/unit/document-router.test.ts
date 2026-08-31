@@ -1,6 +1,4 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { appRouter } from "@/server/trpc/router";
-import type { Context } from "@/server/trpc/context";
 
 vi.mock("@/server/db", () => ({
   prisma: {
@@ -40,6 +38,7 @@ vi.mock("@/server/lib/security/url-validator", () => ({
 }));
 
 import { prisma } from "@/server/db";
+import type { MockPrisma } from "../helpers/mock-prisma";
 import {
   drainPendingJobs,
   enqueueUrlJob,
@@ -49,16 +48,14 @@ import {
 } from "@/server/ingest/jobs";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { assertSafeUrl } from "@/server/lib/security/url-validator";
+import { makeUserCaller } from "../helpers/caller";
 
-const prismaMock = prisma as unknown as {
+const prismaMock = prisma as unknown as Pick<MockPrisma, "user"> & {
   document: {
     findUnique: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
     findMany: ReturnType<typeof vi.fn>;
     deleteMany: ReturnType<typeof vi.fn>;
-  };
-  user: {
-    findUnique: ReturnType<typeof vi.fn>;
   };
 };
 const mockedDrainPendingJobs = vi.mocked(drainPendingJobs);
@@ -69,19 +66,7 @@ const mockedGetJobStats = vi.mocked(getJobStats);
 const mockedInvalidate = vi.mocked(semanticCache.invalidateForDocument);
 const mockedAssertSafeUrl = vi.mocked(assertSafeUrl);
 
-function makeCaller(role: "USER" | "ADMIN" = "ADMIN") {
-  // isAuthenticated reads role + block status fresh from the DB.
-  prismaMock.user.findUnique.mockResolvedValue({ role, blockedAt: null } as never);
-  return appRouter.createCaller({
-    db: prismaMock as never,
-    session: {
-      user: { id: "user-1", role, name: "Test", email: "test@example.com" },
-      expires: "2099-01-01T00:00:00.000Z",
-    },
-    headers: new Headers(),
-    resHeaders: new Headers(),
-  } as unknown as Context);
-}
+const makeCaller = (role: "USER" | "ADMIN" = "ADMIN") => makeUserCaller(prismaMock, role);
 
 describe("document router", () => {
   beforeEach(() => {

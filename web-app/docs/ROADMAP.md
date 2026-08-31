@@ -1,6 +1,6 @@
 # Behoerden-Bot — Roadmap & Consolidated Plans
 
-> **Source of truth:** `../../docs/WEB_APP_PLAN.md` (user-approved RFC), `../../mvp-python/docs/EXISTING_PROJECT_ANALYSIS.md`, `../../docs/basic-prompt/{GUARDRAILS,CODING_STANDARDS,PIPELINE_OPS,prompt_design}.md`
+> **Source of truth:** `../../docs/WEB_APP_PLAN.md` (user-approved RFC) and `../../docs/basic-prompt/{GUARDRAILS,CODING_STANDARDS,PIPELINE_OPS,prompt_design}.md`. (The original `mvp-python/docs/EXISTING_PROJECT_ANALYSIS.md` snapshot was removed in the docs cleanup; the analysis it carried now lives in `docs/ARCHITECTURE_SUMMARY.md`.)
 > **Risk tier:** Commercial/Production — all pillars/modules enforced.
 > **Purpose:** Single home for the still-open workstreams and the archived (completed) implementation/enhancement plans. Per-phase delivery records live in [`docs/status/`](./status/); the Phase-5 TDD design doc is kept at [`docs/TEST_DESIGN.md`](./TEST_DESIGN.md); quality strategy is in `../../docs/TESTING_AND_QUALITY.md`.
 > **Consolidated:** 2026-08-11 — folded in `PLAN_LANDING_MOBILE_GUEST_TESTS_PROMPTS.md` and archived `IMPLEMENTATION_PLAN.md`, `UI_UX_ENHANCEMENT_PLAN.md`, `TESTING_PHASE4.md`, `responsive-ui-upgrade-checklist.md`.

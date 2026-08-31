@@ -68,11 +68,10 @@ For local embedding and reranking (needed for full RAG pipeline in dev):
 ```bash
 # From the repo root — uses the .venv Python environment
 .venv/bin/python mvp-python/scripts/embed-server.py   # BGE-M3 on :8765
-.venv/bin/python scratch/rerank-server.py             # bge-reranker on :8766
 ```
 
-Set `EMBEDDING_URL=http://localhost:8765` and `RERANKER_URL=http://localhost:8766`
-in your `web-app/.env`.
+Set `EMBEDDING_URL=http://localhost:8765` in your `web-app/.env` (the
+reranker falls back to the Cloudflare worker when `RERANKER_URL` is unset).
 
 ### Python MVP (reference + evaluation)
 

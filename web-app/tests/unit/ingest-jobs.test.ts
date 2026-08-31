@@ -58,6 +58,34 @@ function stubClaim(candidate: unknown) {
   prismaMock.ingestJob.findUnique.mockResolvedValue(candidate ?? null);
 }
 
+/** Minimal claimed URL job rows — the fields runJob actually reads. */
+const urlJob = (id: string, url: string) => ({
+  id,
+  type: "URL",
+  url,
+  title: null,
+  filename: null,
+  payload: null,
+  force: false,
+});
+
+const pdfJob = (
+  id: string,
+  filename: string,
+  payload: Buffer,
+  title: string | null,
+  progress = 0,
+) => ({
+  id,
+  type: "PDF",
+  url: null,
+  title,
+  filename,
+  payload,
+  force: false,
+  progress,
+});
+
 describe("enqueueUrlJob", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -136,15 +164,7 @@ describe("processIngestJobs (cron worker)", () => {
   });
 
   it("claims, runs, and finalizes a URL job to DONE, syncing the document", async () => {
-    stubClaim({
-      id: "job-1",
-      type: "URL",
-      url: "https://example.com/a",
-      title: null,
-      filename: null,
-      payload: null,
-      force: false,
-    });
+    stubClaim(urlJob("job-1", "https://example.com/a"));
     mockedIngestUrl.mockResolvedValue({
       url: "https://example.com/a",
       title: "A",
@@ -181,15 +201,7 @@ describe("processIngestJobs (cron worker)", () => {
   });
 
   it("marks the job FAILED and the document FAILED when ingest fails", async () => {
-    stubClaim({
-      id: "job-2",
-      type: "URL",
-      url: "https://example.com/bad",
-      title: null,
-      filename: null,
-      payload: null,
-      force: false,
-    });
+    stubClaim(urlJob("job-2", "https://example.com/bad"));
     mockedIngestUrl.mockResolvedValue({
       url: "https://example.com/bad",
       title: "Bad",
@@ -222,16 +234,7 @@ describe("processIngestJobs (cron worker)", () => {
 
   it("runs PDF jobs through ingestPdf with the stored payload", async () => {
     const buffer = Buffer.from("%PDF-1.7 fake");
-    stubClaim({
-      id: "job-3",
-      type: "PDF",
-      url: null,
-      title: "Antrag",
-      filename: "antrag.pdf",
-      payload: buffer,
-      force: false,
-      progress: 0,
-    });
+    stubClaim(pdfJob("job-3", "antrag.pdf", buffer, "Antrag"));
     mockedIngestPdf.mockResolvedValue({
       url: "pdf://abc/antrag.pdf",
       title: "Antrag",
@@ -260,16 +263,7 @@ describe("processIngestJobs (cron worker)", () => {
 
   it("yields gracefully back to QUEUED when ingest returns progress status", async () => {
     const buffer = Buffer.from("%PDF-1.7 large");
-    stubClaim({
-      id: "job-progress",
-      type: "PDF",
-      url: null,
-      title: null,
-      filename: "large.pdf",
-      payload: buffer,
-      force: false,
-      progress: 5,
-    });
+    stubClaim(pdfJob("job-progress", "large.pdf", buffer, null, 5));
     mockedIngestPdf.mockResolvedValue({
       url: "pdf://abc/large.pdf",
       title: "Large",
@@ -308,15 +302,7 @@ describe("processIngestJobs (cron worker)", () => {
   });
 
   it("returns remaining queue depth when work is left", async () => {
-    stubClaim({
-      id: "job-4",
-      type: "URL",
-      url: "https://example.com/c",
-      title: null,
-      filename: null,
-      payload: null,
-      force: false,
-    });
+    stubClaim(urlJob("job-4", "https://example.com/c"));
     mockedIngestUrl.mockResolvedValue({
       url: "https://example.com/c",
       title: "C",
@@ -349,15 +335,7 @@ describe("drainPendingJobs (Hobby on-demand drain)", () => {
   });
 
   it("runs a bounded worker tick when jobs are pending", async () => {
-    stubClaim({
-      id: "job-drain",
-      type: "URL",
-      url: "https://example.com/drain",
-      title: null,
-      filename: null,
-      payload: null,
-      force: false,
-    });
+    stubClaim(urlJob("job-drain", "https://example.com/drain"));
     mockedIngestUrl.mockResolvedValue({
       url: "https://example.com/drain",
       title: "Drain",

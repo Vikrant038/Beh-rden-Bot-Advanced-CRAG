@@ -67,7 +67,7 @@ function getGroqClient(): OpenAI | null {
   return groqClient;
 }
 
-export interface HfTextGenerationRequest {
+interface HfTextGenerationRequest {
   model: string;
   inputs: string;
   parameters: { max_new_tokens: number; temperature: number };
@@ -158,6 +158,35 @@ function formatPromptForHf(messages: LlmMessage[]): string {
   return messages.map((message) => `${message.role}: ${message.content}`).join("\n");
 }
 
+/** Shared retry loop: semaphore-guarded attempts with linear backoff. */
+async function withRetry(
+  provider: LlmProvider,
+  maxRetries: number,
+  baseDelayMs: number,
+  signal: AbortSignal | undefined,
+  fn: () => Promise<LlmProviderResult>,
+): Promise<LlmProviderResult> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+    try {
+      await acquireSemaphore(signal);
+      try {
+        return await fn();
+      } finally {
+        releaseSemaphore();
+      }
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, baseDelayMs * attempt));
+      }
+    }
+  }
+  throw new LLMProviderError(
+    `${provider} API call failed after ${maxRetries} attempts: ${String(lastError)}`,
+  );
+}
+
 async function callGroqWithRetry(
   messages: LlmMessage[],
   maxTokens: number,
@@ -168,47 +197,30 @@ async function callGroqWithRetry(
   if (!client) {
     throw new LLMProviderError("Groq client unavailable (GROQ_API_KEY not configured)");
   }
-
   const model = env.GROQ_MODEL ?? DEFAULT_GROQ_MODEL;
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= GROQ_MAX_RETRIES; attempt += 1) {
-    try {
-      await acquireSemaphore(signal);
-      try {
-        const response = await client.chat.completions.create(
-          {
-            model,
-            messages: messages as unknown as OpenAI.Chat.ChatCompletionMessageParam[],
-            max_tokens: maxTokens,
-            temperature,
-          },
-          { signal },
-        );
-        const content = response.choices[0]?.message?.content;
-        if (!content) {
-          throw new LLMProviderError("Groq returned empty completion");
-        }
-        const promptText = messages.map((m) => m.content).join("\n");
-        return {
-          text: content.trim(),
-          provider: "groq",
-          model,
-          promptTokens: response.usage?.prompt_tokens ?? estimateTokensFromText(promptText),
-          completionTokens: response.usage?.completion_tokens ?? estimateTokensFromText(content),
-        };
-      } finally {
-        releaseSemaphore();
-      }
-    } catch (error) {
-      lastError = error;
-      if (attempt < GROQ_MAX_RETRIES) {
-        await new Promise((resolve) => setTimeout(resolve, GROQ_BASE_DELAY_MS * attempt));
-      }
+  return withRetry("groq", GROQ_MAX_RETRIES, GROQ_BASE_DELAY_MS, signal, async () => {
+    const response = await client.chat.completions.create(
+      {
+        model,
+        messages: messages as unknown as OpenAI.Chat.ChatCompletionMessageParam[],
+        max_tokens: maxTokens,
+        temperature,
+      },
+      { signal },
+    );
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new LLMProviderError("Groq returned empty completion");
     }
-  }
-  throw new LLMProviderError(
-    `Groq API call failed after ${GROQ_MAX_RETRIES} attempts: ${String(lastError)}`,
-  );
+    const promptText = messages.map((m) => m.content).join("\n");
+    return {
+      text: content.trim(),
+      provider: "groq",
+      model,
+      promptTokens: response.usage?.prompt_tokens ?? estimateTokensFromText(promptText),
+      completionTokens: response.usage?.completion_tokens ?? estimateTokensFromText(content),
+    };
+  });
 }
 
 async function callHfWithRetry(
@@ -217,33 +229,22 @@ async function callHfWithRetry(
   temperature: number,
   signal?: AbortSignal,
 ): Promise<LlmProviderResult> {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= HF_MAX_RETRIES; attempt += 1) {
-    try {
-      await acquireSemaphore(signal);
-      try {
-        const prompt = formatPromptForHf(messages);
-        const { text, usage } = await callHfRaw(prompt, maxTokens, temperature, signal);
-        return {
-          text,
-          provider: "huggingface",
-          model: env.HF_LLM_MODEL ?? DEFAULT_HF_MODEL,
-          promptTokens: usage.promptTokens,
-          completionTokens: usage.completionTokens,
-        };
-      } finally {
-        releaseSemaphore();
-      }
-    } catch (error) {
-      lastError = error;
-      if (attempt < HF_MAX_RETRIES) {
-        await new Promise((resolve) => setTimeout(resolve, HF_BASE_DELAY_MS * attempt));
-      }
-    }
-  }
-  throw new LLMProviderError(
-    `HuggingFace API call failed after ${HF_MAX_RETRIES} attempts: ${String(lastError)}`,
-  );
+  const model = env.HF_LLM_MODEL ?? DEFAULT_HF_MODEL;
+  return withRetry("huggingface", HF_MAX_RETRIES, HF_BASE_DELAY_MS, signal, async () => {
+    const { text, usage } = await callHfRaw(
+      formatPromptForHf(messages),
+      maxTokens,
+      temperature,
+      signal,
+    );
+    return {
+      text,
+      provider: "huggingface",
+      model,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+    };
+  });
 }
 
 /** Records a successful provider call into the active usage collector (if any). */
