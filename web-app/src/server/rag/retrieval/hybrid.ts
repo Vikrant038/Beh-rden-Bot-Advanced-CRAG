@@ -73,25 +73,35 @@ export class HybridRetriever {
     const sparseTopK = wide ? SPARSE_TOP_K_WIDE : SPARSE_TOP_K;
     const rerankTopK = wide ? RERANK_TOP_K_WIDE : RERANK_TOP_K;
 
-    const t0_dense = performance.now();
-    const queryVectors = await this.options.embeddingClient.embedTexts(
-      queries.map((subQuery) => `${QUERY_EMBEDDING_PREFIX}${subQuery.trim()}`),
-    );
-    const perQueryDense = await Promise.all(
-      queries.map(async (subQuery, index) => {
-        return await denseRetrieve(queryVectors[index], {
-          topK: denseTopK,
-          minSimilarity: DEFAULT_MIN_SIMILARITY,
-        });
-      }),
-    );
-    const denseDurationMs = performance.now() - t0_dense;
+    const densePromise = (async () => {
+      const t0 = performance.now();
+      const queryVectors = await this.options.embeddingClient.embedTexts(
+        queries.map((subQuery) => `${QUERY_EMBEDDING_PREFIX}${subQuery.trim()}`),
+      );
+      const perQuery = await Promise.all(
+        queries.map((_, index) =>
+          denseRetrieve(queryVectors[index], {
+            topK: denseTopK,
+            minSimilarity: DEFAULT_MIN_SIMILARITY,
+          }),
+        ),
+      );
+      return { perQuery, durationMs: performance.now() - t0 };
+    })();
 
-    const t0_sparse = performance.now();
-    const perQuerySparse = await Promise.all(
-      queries.map((subQuery) => sparseRetriever.search(subQuery, sparseTopK)),
-    );
-    const sparseBm25DurationMs = performance.now() - t0_sparse;
+    const sparsePromise = (async () => {
+      const t0 = performance.now();
+      const perQuery = await Promise.all(
+        queries.map((subQuery) => sparseRetriever.search(subQuery, sparseTopK)),
+      );
+      return { perQuery, durationMs: performance.now() - t0 };
+    })();
+
+    const [denseResult, sparseResult] = await Promise.all([densePromise, sparsePromise]);
+    const denseDurationMs = denseResult.durationMs;
+    const sparseBm25DurationMs = sparseResult.durationMs;
+    const perQueryDense = denseResult.perQuery;
+    const perQuerySparse = sparseResult.perQuery;
     // Queries fall back to BM25 independently, so engines can mix (FTS for
     // some sub-queries, in-process BM25 for others). Report the slowest engine
     // and sum corpus-load time across every query that needed it.

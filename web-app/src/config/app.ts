@@ -295,10 +295,9 @@ export const LLM_MAX_TOKENS_SUMMARY = 150;
 export const LLM_MAX_TOKENS_ANSWER = 600;
 
 /** Max response tokens for agentic analysis (analyst step).
- * 1600 gives sufficient room for a full 5-dimension Markdown comparison table,
- * structured executive summary, thinking process, and verified facts array
- * without truncating the JSON payload mid-string. */
-export const LLM_MAX_TOKENS_ANALYSIS = 1600;
+ * 1000 provides ample room for structured Markdown comparison tables,
+ * executive summary, thinking process, and verified facts while ensuring fast generation. */
+export const LLM_MAX_TOKENS_ANALYSIS = 1000;
 
 /** Max tokens for the guardrail JSON response. */
 export const LLM_MAX_TOKENS_GUARDRAIL = 150;

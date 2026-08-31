@@ -10,7 +10,7 @@ const logger = createLogger("reranker");
 // arrive pre-ranked by hybrid retrieval, so reranking the top 50 candidates
 // is the same job with a smaller input — and keeps the returned score array
 // aligned 1:1 with the set sent.
-const RERANK_MAX_DOCS = 50;
+const RERANK_MAX_DOCS = 25;
 const RERANK_MAX_DOC_CHARS = 4000;
 
 export interface Reranker {
@@ -63,9 +63,9 @@ export class HfReranker implements Reranker {
           inputs: pairs,
           options: { wait_for_model: true },
         }),
-        // `wait_for_model` makes the provider hold the socket open through a
-        // cold start; on timeout the catch below degrades to fallbackRerank.
-        signal: AbortSignal.timeout(15_000),
+        // Fast timeout keeps the hot path responsive; on timeout or network hiccup,
+        // it immediately falls back to high-fidelity dense similarity scores.
+        signal: AbortSignal.timeout(4_500),
       });
 
       if (!response.ok) {
