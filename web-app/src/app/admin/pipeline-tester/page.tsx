@@ -47,12 +47,15 @@ function ToggleSwitch({
   checked,
   onChange,
   label,
+  ariaLabel,
   icon,
   iconActiveClassName,
 }: {
   checked: boolean;
   onChange: () => void;
   label: string;
+  /** Accessible name override (defaults to `label`); e.g. "Toggle developer mode". */
+  ariaLabel?: string;
   icon: React.ReactNode;
   /** Extra classes applied to the icon while the switch is on. */
   iconActiveClassName?: string;
@@ -63,7 +66,7 @@ function ToggleSwitch({
         type="button"
         role="switch"
         aria-checked={checked}
-        aria-label={label}
+        aria-label={ariaLabel ?? label}
         onClick={onChange}
         className={`relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors focus-visible:ring-2 focus-visible:ring-primary ${
           checked ? "border-primary/50 bg-primary/15" : "border-border bg-surface-hover"
@@ -325,6 +328,7 @@ export default function AdminPipelineTesterPage() {
               checked={debugMode}
               onChange={() => setDebugMode((v) => !v)}
               label="Developer mode"
+              ariaLabel="Toggle developer mode"
               icon={<FlaskConical className="h-3.5 w-3.5" />}
             />
 
@@ -332,6 +336,7 @@ export default function AdminPipelineTesterPage() {
               checked={bypassCache}
               onChange={() => setBypassCache((v) => !v)}
               label="Bypass cache"
+              ariaLabel="Toggle cache bypass"
               icon={<Zap className="h-3.5 w-3.5" />}
               iconActiveClassName="text-warning"
             />
