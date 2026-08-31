@@ -21,10 +21,11 @@ import { ConversationItem } from "@/components/sidebar/conversation-item";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { useDebouncedValue } from "@/hooks/use-debounce";
+import { useDismissable } from "@/hooks/use-dismissable";
 import { groupConversationsByTime } from "@/lib/conversation-groups";
 import { APP_VERSION } from "@/lib/version";
 import { cn } from "@/lib/utils";
-import { GUEST_PROMPT_LIMIT } from "@/lib/guest";
+import { GUEST_PROMPT_LIMIT } from "@/config/app";
 
 const PINNED_KEY = "behoerden.pinnedConversations";
 
@@ -52,6 +53,41 @@ interface AppSidebarProps {
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
   onNavigate?: () => void;
+}
+
+/** Shared Settings/Theme/Sign-out menu body for the rail and expanded menus. */
+function ProfileMenuBody({
+  className,
+  onCloseThen,
+}: {
+  className: string;
+  onCloseThen: (path: string) => void;
+}) {
+  return (
+    <div role="menu" aria-label="Profile menu" className={className}>
+      <div className="flex items-center justify-between rounded-lg px-3 py-2">
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => onCloseThen("/settings")}
+          className="flex items-center gap-2 text-sm text-foreground"
+        >
+          <Settings className="h-4 w-4 text-muted" />
+          Settings
+        </button>
+        <ThemeToggle compact />
+      </div>
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => void signOut({ callbackUrl: "/" })}
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive transition hover:bg-destructive/10"
+      >
+        <LogOut className="h-4 w-4" />
+        Sign out
+      </button>
+    </div>
+  );
 }
 
 export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }: AppSidebarProps) {
@@ -147,28 +183,7 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
   // 6.8 — Profile dropdown (Settings / Theme / Sign out).
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!profileOpen) {
-      return;
-    }
-    const onPointerDown = (event: PointerEvent) => {
-      if (!profileRef.current?.contains(event.target as Node)) {
-        setProfileOpen(false);
-      }
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setProfileOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [profileOpen]);
+  useDismissable(profileRef, profileOpen, () => setProfileOpen(false));
 
   const bottomNavItems = [
     {
@@ -266,36 +281,13 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
                     "?"}
                 </button>
                 {profileOpen ? (
-                  <div
-                    role="menu"
-                    aria-label="Profile menu"
+                  <ProfileMenuBody
                     className="absolute bottom-0 left-full z-50 ml-2 w-44 overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-2xl"
-                  >
-                    <div className="flex items-center justify-between rounded-lg px-3 py-2">
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          setProfileOpen(false);
-                          go("/settings");
-                        }}
-                        className="flex items-center gap-2 text-sm text-foreground"
-                      >
-                        <Settings className="h-4 w-4 text-muted" />
-                        Settings
-                      </button>
-                      <ThemeToggle compact />
-                    </div>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => void signOut({ callbackUrl: "/" })}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive transition hover:bg-destructive/10"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Sign out
-                    </button>
-                  </div>
+                    onCloseThen={(path) => {
+                      setProfileOpen(false);
+                      go(path);
+                    }}
+                  />
                 ) : null}
               </div>
             ) : isDefinitelyGuest ? (
@@ -476,36 +468,13 @@ export function AppSidebar({ collapsed = false, onToggleCollapsed, onNavigate }:
                 <Settings className="h-3.5 w-3.5 shrink-0 text-muted" />
               </button>
               {profileOpen ? (
-                <div
-                  role="menu"
-                  aria-label="Profile menu"
+                <ProfileMenuBody
                   className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-[50vh] overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-2xl"
-                >
-                  <div className="flex items-center justify-between rounded-lg px-3 py-2">
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setProfileOpen(false);
-                        go("/settings");
-                      }}
-                      className="flex items-center gap-2 text-sm text-foreground"
-                    >
-                      <Settings className="h-4 w-4 text-muted" />
-                      Settings
-                    </button>
-                    <ThemeToggle compact />
-                  </div>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => void signOut({ callbackUrl: "/" })}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive transition hover:bg-destructive/10"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    Sign out
-                  </button>
-                </div>
+                  onCloseThen={(path) => {
+                    setProfileOpen(false);
+                    go(path);
+                  }}
+                />
               ) : null}
             </div>
           ) : isDefinitelyGuest ? (

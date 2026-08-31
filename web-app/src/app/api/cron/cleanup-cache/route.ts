@@ -1,6 +1,5 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/server/db";
-import { env } from "@/server/env";
+import { runCron } from "../_lib/cron";
 import { createLogger } from "@/server/lib/logger";
 
 export const runtime = "nodejs";
@@ -14,22 +13,12 @@ const logger = createLogger("cron");
  *
  * Scheduled via `vercel.json` crons (see `web-app/vercel.json`).
  */
-export async function GET(request: Request): Promise<NextResponse> {
-  const auth = request.headers.get("authorization");
-  if (!env.CRON_SECRET || auth !== `Bearer ${env.CRON_SECRET}`) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-  }
-
-  try {
-    const now = new Date();
+export async function GET(request: Request) {
+  return runCron(request, async () => {
     const result = await prisma.semanticCacheEntry.deleteMany({
-      where: { expiresAt: { lt: now } },
+      where: { expiresAt: { lt: new Date() } },
     });
     logger.info({ deleted: result.count }, "[CRON] semantic cache cleanup complete");
-    return NextResponse.json({ success: true, deleted: result.count });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.error({ error: message }, "[CRON] cache cleanup failed");
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
-  }
+    return { deleted: result.count };
+  });
 }

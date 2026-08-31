@@ -11,7 +11,7 @@ import {
   recentQueries,
   topQuestions,
 } from "@/server/db/analytics";
-import { DAILY_QUERY_MAX_DAYS, RECENT_QUERY_LIMIT } from "@/config/app";
+import { ADMIN_USER_FETCH_LIMIT, DAILY_QUERY_MAX_DAYS, RECENT_QUERY_LIMIT } from "@/config/app";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { createLogger } from "@/server/lib/logger";
 import { NotFoundError } from "@/server/lib/errors";
@@ -23,6 +23,17 @@ import { getHybridRetriever } from "@/server/rag/instance";
 import { runStageZero } from "@/server/rag/stage-zero";
 
 const logger = createLogger("admin-router");
+
+/**
+ * Degrades an admin aggregation/count to a fallback value on failure: warnings
+ * are logged and the dashboard renders zeros / empty lists instead of 500ing.
+ */
+function degrade<T>(label: string, fallback: T) {
+  return (error: unknown): T => {
+    logger.warn({ error: String(error) }, `[ADMIN] ${label} failed`);
+    return fallback;
+  };
+}
 
 export interface AdminMetrics {
   totalUsers: number;
@@ -241,12 +252,7 @@ export async function executePipelineTest(
           error: null,
         },
       })
-      .catch((persistError) => {
-        logger.warn(
-          { error: String(persistError) },
-          "[ADMIN] failed to persist successful pipeline run",
-        );
-      });
+      .catch(degrade("failed to persist successful pipeline run", undefined));
     logger.info(
       { runId, prompt: input.prompt, pipeline, latencyMs },
       "[ADMIN] pipeline test complete",
@@ -268,12 +274,7 @@ export async function executePipelineTest(
           error: detail.slice(0, 2000),
         },
       })
-      .catch((persistError) => {
-        logger.warn(
-          { error: String(persistError) },
-          "[ADMIN] failed to persist failed pipeline run",
-        );
-      });
+      .catch(degrade("failed to persist failed pipeline run", undefined));
     logger.warn(
       { runId, prompt: input.prompt, latencyMs, debug: input.debug },
       "[ADMIN] pipeline test failed",
@@ -281,9 +282,26 @@ export async function executePipelineTest(
   } finally {
     // Keep only the newest MAX_PIPELINE_RUNS terminal runs on disk; older
     // traceJson blobs are deleted best-effort so the table stays bounded.
-    await prunePipelineRuns().catch((error) => {
-      logger.warn({ error: String(error) }, "[ADMIN] failed to prune old pipeline runs");
-    });
+    await prunePipelineRuns().catch(degrade("failed to prune old pipeline runs", undefined));
+  }
+}
+
+/**
+ * Shared guard for the user-management mutations: the target must exist and
+ * must not be the acting admin. Self-targeting is rejected (demoting oneself
+ * would be a one-way door that could lock the app out of admin access; blocking
+ * or promoting oneself is meaningless — they are already admin).
+ */
+async function requireOtherUser(id: string, actorId: string): Promise<void> {
+  if (id === actorId) {
+    throw new NotFoundError("User", id);
+  }
+  const existing = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  if (!existing) {
+    throw new NotFoundError("User", id);
   }
 }
 
@@ -303,32 +321,14 @@ export const adminRouter = router({
 
       const [totalUsers, totalConversations, totalMessages, queriesToday, documentCount, stats] =
         await Promise.all([
-          prisma.user.count({ where: EXCLUDE_GUESTS_WHERE }).catch((error) => {
-            logger.warn({ error: String(error) }, "[ADMIN] user.count failed");
-            return 0;
-          }),
-          prisma.conversation.count().catch((error) => {
-            logger.warn({ error: String(error) }, "[ADMIN] conversation.count failed");
-            return 0;
-          }),
-          prisma.message.count().catch((error) => {
-            logger.warn({ error: String(error) }, "[ADMIN] message.count failed");
-            return 0;
-          }),
+          prisma.user.count({ where: EXCLUDE_GUESTS_WHERE }).catch(degrade("user.count", 0)),
+          prisma.conversation.count().catch(degrade("conversation.count", 0)),
+          prisma.message.count().catch(degrade("message.count", 0)),
           prisma.message
             .count({ where: { role: "USER", createdAt: { gte: startOfToday } } })
-            .catch((error) => {
-              logger.warn({ error: String(error) }, "[ADMIN] queriesToday.count failed");
-              return 0;
-            }),
-          prisma.document.count().catch((error) => {
-            logger.warn({ error: String(error) }, "[ADMIN] document.count failed");
-            return 0;
-          }),
-          messageStats(prisma, days).catch((error) => {
-            logger.warn({ error: String(error) }, "[ADMIN] message stats aggregation failed");
-            return undefined;
-          }),
+            .catch(degrade("queriesToday.count", 0)),
+          prisma.document.count().catch(degrade("document.count", 0)),
+          messageStats(prisma, days).catch(degrade("message stats aggregation", undefined)),
         ]);
 
       const assistantCount = stats?.assistantCount ?? 0;
@@ -365,7 +365,7 @@ export const adminRouter = router({
         _count: { select: { conversations: true } },
       },
       orderBy: { createdAt: "desc" },
-      take: 500,
+      take: ADMIN_USER_FETCH_LIMIT,
     });
 
     return rows.map((row) => ({
@@ -383,21 +383,7 @@ export const adminRouter = router({
     .input(z.object({ id: z.string().min(1), role: z.enum(["USER", "ADMIN"]) }))
     .mutation(async ({ ctx, input }) => {
       const actor = ctx.user as AuthedUser;
-      // Guardrails: an admin must not be able to demote themselves (that would
-      // be a one-way door that could lock the app out of admin access entirely
-      // if no other admin remains) or promote/block themselves (self-granting
-      // is meaningless — they are already admin).
-      if (input.id === actor.id) {
-        throw new NotFoundError("User", input.id);
-      }
-
-      const existing = await prisma.user.findUnique({
-        where: { id: input.id },
-        select: { id: true },
-      });
-      if (!existing) {
-        throw new NotFoundError("User", input.id);
-      }
+      await requireOtherUser(input.id, actor.id);
 
       await prisma.user.update({
         where: { id: input.id },
@@ -415,18 +401,7 @@ export const adminRouter = router({
     .input(z.object({ id: z.string().min(1), blocked: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
       const actor = ctx.user as AuthedUser;
-      // An admin must not be able to block themselves (self lock-out).
-      if (input.id === actor.id) {
-        throw new NotFoundError("User", input.id);
-      }
-
-      const existing = await prisma.user.findUnique({
-        where: { id: input.id },
-        select: { id: true },
-      });
-      if (!existing) {
-        throw new NotFoundError("User", input.id);
-      }
+      await requireOtherUser(input.id, actor.id);
 
       await prisma.user.update({
         where: { id: input.id },
@@ -443,10 +418,7 @@ export const adminRouter = router({
   dailyQueries: adminProcedure
     .input(z.object({ days: z.number().int().min(7).max(DAILY_QUERY_MAX_DAYS).default(14) }))
     .query(async ({ input }): Promise<DailyQueryPoint[]> => {
-      return dailyQueries(prisma, input.days).catch((error) => {
-        logger.warn({ error: String(error) }, "[ADMIN] dailyQueries aggregation failed");
-        return [];
-      });
+      return dailyQueries(prisma, input.days).catch(degrade("dailyQueries aggregation", []));
     }),
 
   modeSplit: adminProcedure
@@ -459,10 +431,7 @@ export const adminRouter = router({
     )
     .query(async ({ input }): Promise<ModeSplitPoint[]> => {
       const days = input?.days;
-      return modeSplit(prisma, days).catch((error) => {
-        logger.warn({ error: String(error) }, "[ADMIN] modeSplit aggregation failed");
-        return [];
-      });
+      return modeSplit(prisma, days).catch(degrade("modeSplit aggregation", []));
     }),
 
   recentQueries: adminProcedure
@@ -485,20 +454,16 @@ export const adminRouter = router({
         const limit = input?.limit ?? RECENT_QUERY_LIMIT;
         const days = input?.days;
         const cursor = input?.cursor;
-        return recentQueries(prisma, { limit, days, cursor }).catch((error) => {
-          logger.warn({ error: String(error) }, "[ADMIN] recentQueries aggregation failed");
-          return { items: [], nextCursor: null };
-        });
+        return recentQueries(prisma, { limit, days, cursor }).catch(
+          degrade("recentQueries aggregation", { items: [], nextCursor: null }),
+        );
       },
     ),
 
   topQuestions: adminProcedure
     .input(z.object({ days: z.number().int().min(1).max(DAILY_QUERY_MAX_DAYS).default(30) }))
     .query(async ({ input }): Promise<Array<{ query: string; count: number }>> => {
-      return topQuestions(prisma, input.days).catch((error) => {
-        logger.warn({ error: String(error) }, "[ADMIN] topQuestions aggregation failed");
-        return [];
-      });
+      return topQuestions(prisma, input.days).catch(degrade("topQuestions aggregation", []));
     }),
 
   failedQueries: adminProcedure
@@ -518,10 +483,9 @@ export const adminRouter = router({
       > => {
         const days = input?.days ?? 14;
         const limit = input?.limit ?? 10;
-        return failedQueries(prisma, { days, limit }).catch((error) => {
-          logger.warn({ error: String(error) }, "[ADMIN] failedQueries aggregation failed");
-          return [];
-        });
+        return failedQueries(prisma, { days, limit }).catch(
+          degrade("failedQueries aggregation", []),
+        );
       },
     ),
 

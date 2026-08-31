@@ -1,6 +1,4 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { appRouter } from "@/server/trpc/router";
-import type { Context } from "@/server/trpc/context";
 
 vi.mock("@/server/db", () => ({
   prisma: {
@@ -26,22 +24,20 @@ vi.mock("@/server/db", () => ({
 
 import { prisma } from "@/server/db";
 import type { MockPrisma } from "../helpers/mock-prisma";
+import { makeUserCaller } from "../helpers/caller";
 
 const prismaMock = prisma as unknown as MockPrisma;
 
-function makeCaller(role: "USER" | "ADMIN" = "ADMIN") {
-  // isAuthenticated reads role + block status fresh from the DB.
-  prismaMock.user.findUnique.mockResolvedValue({ role, blockedAt: null } as never);
-  return appRouter.createCaller({
-    db: prismaMock as never,
-    session: {
-      user: { id: "user-1", role, name: "Test", email: "test@example.com" },
-      expires: "2099-01-01T00:00:00.000Z",
-    },
-    headers: new Headers(),
-    resHeaders: new Headers(),
-  } as unknown as Context);
-}
+const makeCaller = (role: "USER" | "ADMIN" = "ADMIN") => makeUserCaller(prismaMock, role);
+
+/** Stubs the four count queries + the raw stats row that admin.metrics() reads. */
+const stubMetrics = (stats: unknown) => {
+  prismaMock.user.count.mockResolvedValue(1 as never);
+  prismaMock.conversation.count.mockResolvedValue(1 as never);
+  prismaMock.message.count.mockResolvedValue(1 as never);
+  prismaMock.document.count.mockResolvedValue(1 as never);
+  prismaMock.$queryRaw.mockResolvedValue([stats] as never);
+};
 
 describe("admin router", () => {
   beforeEach(() => {
@@ -299,13 +295,7 @@ describe("admin router", () => {
   });
 
   it("metrics: interpolates a days window into the stats query when provided", async () => {
-    prismaMock.user.count.mockResolvedValue(1 as never);
-    prismaMock.conversation.count.mockResolvedValue(1 as never);
-    prismaMock.message.count.mockResolvedValue(1 as never);
-    prismaMock.document.count.mockResolvedValue(1 as never);
-    prismaMock.$queryRaw.mockResolvedValue([
-      { assistantCount: 1, cacheHits: 0, avgLatencyMs: null },
-    ] as never);
+    stubMetrics({ assistantCount: 1, cacheHits: 0, avgLatencyMs: null });
 
     const caller = makeCaller();
     const result = await caller.admin.metrics({ days: 7 });
@@ -321,13 +311,8 @@ describe("admin router", () => {
   });
 
   it("metrics: treats a null avgLatencyMs as zero", async () => {
+    stubMetrics({ assistantCount: 0, cacheHits: 0, avgLatencyMs: null });
     prismaMock.user.count.mockResolvedValue(0 as never);
-    prismaMock.conversation.count.mockResolvedValue(0 as never);
-    prismaMock.message.count.mockResolvedValue(0 as never);
-    prismaMock.document.count.mockResolvedValue(0 as never);
-    prismaMock.$queryRaw.mockResolvedValue([
-      { assistantCount: 0, cacheHits: 0, avgLatencyMs: null },
-    ] as never);
 
     const caller = makeCaller();
     const result = await caller.admin.metrics();

@@ -28,8 +28,14 @@ import {
 /**
  * Shared rate limiter for background ingest jobs (admin upload / re-sync).
  * Multi-key when GROQ_API_KEYS is set — see createTranslationRateLimiter.
+ * Lazy singleton: built on the first job that needs it, not at import time.
  */
 let jobsRateLimiter: TranslationRateLimiter | undefined;
+function getJobsRateLimiter(): TranslationRateLimiter {
+  jobsRateLimiter ??= createTranslationRateLimiter();
+  return jobsRateLimiter;
+}
+
 import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("ingest-jobs");
@@ -257,15 +263,12 @@ async function runJob(
     if (!job.payload || !job.filename) {
       throw new Error("PDF job missing payload or filename");
     }
-    if (!jobsRateLimiter) {
-      jobsRateLimiter = createTranslationRateLimiter();
-    }
     const result = await ingestPdf(Buffer.from(job.payload), job.filename, {
       ...(job.title ? { title: job.title } : {}),
       resumeFrom: job.progress,
       isBudgetExhausted,
       normalizeEnglish: true,
-      rateLimiter: jobsRateLimiter,
+      rateLimiter: getJobsRateLimiter(),
     });
     await finalizeJob(job.id, result);
     return;
@@ -274,14 +277,11 @@ async function runJob(
   if (!job.url) {
     throw new Error("URL job missing url");
   }
-  if (!jobsRateLimiter) {
-    jobsRateLimiter = createTranslationRateLimiter();
-  }
   const result = await ingestUrl(job.url, {
     ...(job.title ? { title: job.title } : {}),
     force: job.force,
     normalizeEnglish: true,
-    rateLimiter: jobsRateLimiter,
+    rateLimiter: getJobsRateLimiter(),
   });
   await finalizeJob(job.id, result);
 }

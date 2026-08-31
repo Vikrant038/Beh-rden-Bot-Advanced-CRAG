@@ -54,6 +54,40 @@ export interface TraceOptions {
 }
 
 /**
+ * Opens a trace + top-level span and stores the context in AsyncLocalStorage
+ * so nested `observeGeneration` calls attach to it. Shared by `runWithTrace`
+ * and `runWithTraceGen`.
+ */
+function openTrace(client: Langfuse, options: TraceOptions): TraceContext {
+  const trace = client.trace({
+    name: options.name,
+    userId: options.userId,
+    sessionId: options.sessionId,
+    metadata: options.metadata,
+    input: options.input,
+  });
+  return {
+    trace,
+    span: trace.span({ name: options.name, metadata: options.metadata, input: options.input }),
+    name: options.name,
+  };
+}
+
+/** Ends a span (failed) and flushes — shared error path; caller rethrows. */
+async function endTraceWithError(
+  context: TraceContext,
+  client: Langfuse,
+  error: unknown,
+): Promise<never> {
+  context.span.end({
+    statusMessage: toErrorMessage(error),
+    output: String(error),
+  });
+  await flush(client);
+  throw error;
+}
+
+/**
  * Runs `fn` inside a Langfuse trace + top-level span. The trace context is
  * stored in AsyncLocalStorage so nested `observeGeneration` calls attach to it.
  */
@@ -63,32 +97,15 @@ export async function runWithTrace<T>(options: TraceOptions, fn: () => Promise<T
     return fn();
   }
 
-  const trace = client.trace({
-    name: options.name,
-    userId: options.userId,
-    sessionId: options.sessionId,
-    metadata: options.metadata,
-    input: options.input,
-  });
-  const span = trace.span({
-    name: options.name,
-    metadata: options.metadata,
-    input: options.input,
-  });
-  const context: TraceContext = { trace, span, name: options.name };
-
+  const context = openTrace(client, options);
   try {
     const result = await traceStorage.run(context, fn);
-    span.end({ output: summarizeOutput(result) });
+    context.span.end({ output: summarizeOutput(result) });
     await flush(client);
     return result;
   } catch (error) {
-    span.end({
-      statusMessage: toErrorMessage(error),
-      output: String(error),
-    });
-    await flush(client);
-    throw error;
+    await endTraceWithError(context, client, error);
+    throw error; // endTraceWithError rethrows, but TS needs an explicit return path.
   }
 }
 
@@ -116,30 +133,13 @@ export async function* runWithTraceGen<T>(
     return;
   }
 
-  const trace = client.trace({
-    name: options.name,
-    userId: options.userId,
-    sessionId: options.sessionId,
-    metadata: options.metadata,
-    input: options.input,
-  });
-  const span = trace.span({
-    name: options.name,
-    metadata: options.metadata,
-    input: options.input,
-  });
-  const context: TraceContext = { trace, span, name: options.name };
-
+  const context = openTrace(client, options);
   try {
     yield* traceStorage.run(context, () => create());
-    span.end();
+    context.span.end();
     await flush(client);
   } catch (error) {
-    span.end({
-      statusMessage: toErrorMessage(error),
-      output: String(error),
-    });
-    await flush(client);
+    await endTraceWithError(context, client, error);
     throw error;
   }
 }

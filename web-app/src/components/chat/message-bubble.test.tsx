@@ -113,57 +113,44 @@ describe("MessageBubble", () => {
     );
     expect(screen.getByText("Thinking…")).toBeInTheDocument();
   });
+  /** Stubs navigator.clipboard.writeText for the copy-button cases (auto-restored). */
+  const stubClipboard = (writeText: ReturnType<typeof vi.fn>) => {
+    vi.stubGlobal("navigator", Object.assign({}, navigator, { clipboard: { writeText } }));
+  };
+
   it("copies the answer via the clipboard and shows the copied state", async () => {
     const onCopied = vi.fn();
-    const originalNavigator = globalThis.navigator;
-    vi.stubGlobal(
-      "navigator",
-      Object.assign({}, navigator, {
-        clipboard: { writeText: vi.fn(async () => undefined) },
-      }),
+    stubClipboard(vi.fn(async () => undefined));
+    render(
+      <MessageBubble
+        message={message({ role: "ASSISTANT", content: "copyable answer" })}
+        streaming={false}
+        onCopied={onCopied}
+      />,
     );
-    try {
-      render(
-        <MessageBubble
-          message={message({ role: "ASSISTANT", content: "copyable answer" })}
-          streaming={false}
-          onCopied={onCopied}
-        />,
-      );
-      fireEvent.click(screen.getByRole("button", { name: "Copy answer" }));
-      await waitFor(() => expect(onCopied).toHaveBeenCalledTimes(1));
-      await waitFor(() =>
-        expect(
-          screen.getByRole("button", { name: "Copy answer" }).querySelector(".lucide-check"),
-        ).not.toBeNull(),
-      );
-    } finally {
-      vi.stubGlobal("navigator", originalNavigator);
-    }
+    fireEvent.click(screen.getByRole("button", { name: "Copy answer" }));
+    await waitFor(() => expect(onCopied).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Copy answer" }).querySelector(".lucide-check"),
+      ).not.toBeNull(),
+    );
+    vi.unstubAllGlobals();
   });
 
   it("reports a copy failure when the clipboard write is denied", async () => {
     const onCopyFailed = vi.fn();
-    const originalNavigator = globalThis.navigator;
-    vi.stubGlobal(
-      "navigator",
-      Object.assign({}, navigator, {
-        clipboard: { writeText: vi.fn(async () => Promise.reject(new Error("denied"))) },
-      }),
+    stubClipboard(vi.fn(async () => Promise.reject(new Error("denied"))));
+    render(
+      <MessageBubble
+        message={message({ role: "ASSISTANT", content: "copy me" })}
+        streaming={false}
+        onCopyFailed={onCopyFailed}
+      />,
     );
-    try {
-      render(
-        <MessageBubble
-          message={message({ role: "ASSISTANT", content: "copy me" })}
-          streaming={false}
-          onCopyFailed={onCopyFailed}
-        />,
-      );
-      fireEvent.click(screen.getByRole("button", { name: "Copy answer" }));
-      await waitFor(() => expect(onCopyFailed).toHaveBeenCalledTimes(1));
-    } finally {
-      vi.stubGlobal("navigator", originalNavigator);
-    }
+    fireEvent.click(screen.getByRole("button", { name: "Copy answer" }));
+    await waitFor(() => expect(onCopyFailed).toHaveBeenCalledTimes(1));
+    vi.unstubAllGlobals();
   });
 
   it("toggles feedback up/down and nulls on re-click", async () => {

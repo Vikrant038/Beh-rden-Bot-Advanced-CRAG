@@ -1,6 +1,6 @@
 """
 768-d Vector Embedding Pipeline (Disk + PostgreSQL pgvector Dual-Sync)
-Complies with AGENTS.md §2 & Gotcha #10, and CODING_STANDARDS.md.
+Follows AGENTS.md (MVP conventions) and docs/basic-prompt/CODING_STANDARDS.md.
 """
 
 import os

@@ -5,6 +5,7 @@ import { BookOpen, ChevronDown, Copy, Menu, MoreHorizontal, Trash2, Zap } from "
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
 import { ModeProvider, useMode } from "@/components/chat/mode-context";
 import { ChatActionsProvider, useChatActions } from "@/components/chat/chat-actions-context";
+import { useDismissable } from "@/hooks/use-dismissable";
 import { cn } from "@/lib/utils";
 
 /**
@@ -16,28 +17,7 @@ function MobileActionsMenu() {
   const { actions } = useChatActions();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const onPointerDown = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
+  useDismissable(menuRef, open, () => setOpen(false));
 
   if (!actions) {
     return null;
@@ -102,28 +82,7 @@ function MobileModeDropdown() {
   const { mode, setMode } = useMode();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const onPointerDown = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
+  useDismissable(menuRef, open, () => setOpen(false));
 
   const ModeIcon = mode === "agentic" ? Zap : BookOpen;
 

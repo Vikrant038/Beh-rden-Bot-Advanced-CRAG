@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { agentResearchReact } from "@/server/rag/agents/research";
 import type { HybridRetriever } from "@/server/rag/retrieval/hybrid";
-import type { Chunk, PipelineEvent } from "@/server/rag/types";
+import type { PipelineEvent } from "@/server/rag/types";
 
 vi.mock("@/server/rag/query-expansion", () => ({
   generateSubQueries: vi.fn(async () => ({
@@ -23,21 +23,11 @@ vi.mock("@/server/rag/tools/visa-calculator", () => ({
 import { webSearch } from "@/server/rag/tools/web-search";
 import { calculateVisaRequirements } from "@/server/rag/tools/visa-calculator";
 import { generateSubQueries } from "@/server/rag/query-expansion";
+import { makeChunk } from "../helpers/chunk";
 
 const mockedWebSearch = vi.mocked(webSearch);
 const mockedCalculator = vi.mocked(calculateVisaRequirements);
 const mockedGenerateSubQueries = vi.mocked(generateSubQueries);
-
-function makeChunk(overrides: Partial<Chunk> = {}): Chunk {
-  return {
-    id: "chunk-1",
-    documentId: "doc-1",
-    sourceName: "src",
-    sourceUrl: "https://example.com",
-    text: "German visa text about the Aufenthaltsgesetz.",
-    ...overrides,
-  };
-}
 
 function makeRetriever(overrides: Partial<HybridRetriever> = {}): HybridRetriever {
   return {

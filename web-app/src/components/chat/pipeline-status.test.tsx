@@ -4,13 +4,8 @@ import { render, screen } from "@testing-library/react";
 import { PipelineStatus } from "@/components/chat/pipeline-status";
 
 describe("PipelineStatus", () => {
-  it("renders nothing when idle", () => {
-    const { container } = render(<PipelineStatus status="idle" />);
-    expect(container.firstChild).toBeNull();
-  });
-
-  it("renders nothing when done", () => {
-    const { container } = render(<PipelineStatus status="done" />);
+  it.each(["idle", "done"] as const)("renders nothing when %s", (status) => {
+    const { container } = render(<PipelineStatus status={status} />);
     expect(container.firstChild).toBeNull();
   });
 

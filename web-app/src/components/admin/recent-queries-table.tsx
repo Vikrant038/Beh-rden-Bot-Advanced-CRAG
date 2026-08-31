@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { api } from "@/lib/trpc/client";
 
-interface RecentQueryRow {
+export interface RecentQueryRow {
   id: string;
   conversationId: string;
   query: string;
@@ -25,6 +25,21 @@ interface RecentQueryRow {
   isGrounded: boolean;
   retrievalPath: string | null;
   sourceCount: number;
+}
+
+/** Check/cross yes-no cell; a "no" renders muted or warning-toned. */
+function YesNoBadge({ value, mutedNo }: { value: boolean; mutedNo: boolean }) {
+  return value ? (
+    <span className="inline-flex items-center gap-1 text-xs text-success">
+      <CheckCircle2 className="h-3 w-3" /> yes
+    </span>
+  ) : (
+    <span
+      className={`inline-flex items-center gap-1 text-xs ${mutedNo ? "text-muted" : "text-warning"}`}
+    >
+      <XCircle className="h-3 w-3" /> no
+    </span>
+  );
 }
 
 /**
@@ -120,39 +135,51 @@ function QueryDetailDrawer({ id, onClose }: { id: string; onClose: () => void })
             </div>
 
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <div className="rounded-lg border border-border p-2.5">
-                <p className="text-[10px] text-muted">Mode</p>
-                <p className="mt-0.5 flex items-center gap-1 text-sm font-medium capitalize">
-                  <GitFork className="h-3 w-3 text-muted" /> {mode}
-                </p>
-              </div>
-              <div className="rounded-lg border border-border p-2.5">
-                <p className="text-[10px] text-muted">Latency</p>
-                <p className="mt-0.5 flex items-center gap-1 text-sm font-medium tabular-nums">
-                  <Clock className="h-3 w-3 text-muted" /> {Math.round(latencyMs)}ms
-                </p>
-              </div>
-              <div className="rounded-lg border border-border p-2.5">
-                <p className="text-[10px] text-muted">Cached</p>
-                <p
-                  className={`mt-0.5 flex items-center gap-1 text-sm font-medium ${
-                    isCached ? "text-success" : ""
-                  }`}
-                >
-                  {isCached ? (
-                    <CheckCircle2 className="h-3 w-3" />
-                  ) : (
-                    <XCircle className="h-3 w-3 text-muted" />
-                  )}
-                  {isCached ? "yes" : "no"}
-                </p>
-              </div>
-              <div className="rounded-lg border border-border p-2.5">
-                <p className="text-[10px] text-muted">When</p>
-                <p className="mt-0.5 text-sm font-medium">
-                  {formatRelativeTime(data.userMessage.createdAt)}
-                </p>
-              </div>
+              {(
+                [
+                  {
+                    label: "Mode",
+                    body: <>{mode}</>,
+                    icon: <GitFork className="h-3 w-3 text-muted" />,
+                    className: "capitalize",
+                  },
+                  {
+                    label: "Latency",
+                    body: <>{Math.round(latencyMs)}ms</>,
+                    icon: <Clock className="h-3 w-3 text-muted" />,
+                    className: "tabular-nums",
+                  },
+                  {
+                    label: "Cached",
+                    body: <>{isCached ? "yes" : "no"}</>,
+                    icon: isCached ? (
+                      <CheckCircle2 className="h-3 w-3" />
+                    ) : (
+                      <XCircle className="h-3 w-3 text-muted" />
+                    ),
+                    className: isCached ? "text-success" : "",
+                  },
+                  {
+                    label: "When",
+                    body: <>{formatRelativeTime(data.userMessage.createdAt)}</>,
+                    icon: null,
+                    className: "",
+                  },
+                ] as Array<{
+                  label: string;
+                  body: React.ReactNode;
+                  icon: React.ReactNode;
+                  className: string;
+                }>
+              ).map(({ label, body, icon, className }) => (
+                <div key={label} className="rounded-lg border border-border p-2.5">
+                  <p className="text-[10px] text-muted">{label}</p>
+                  <p className={`mt-0.5 flex items-center gap-1 text-sm font-medium ${className}`}>
+                    {icon}
+                    {body}
+                  </p>
+                </div>
+              ))}
             </div>
 
             <div className="rounded-lg border border-border p-2.5">
@@ -193,11 +220,7 @@ export function RecentQueriesTable({
     return (
       <div className="rounded-2xl border border-border bg-surface p-5">
         <h3 className="text-sm font-semibold">Recent queries</h3>
-        <div className="mt-4 space-y-3">
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-        </div>
+        <Skeleton className="mt-4 h-8 w-full" lines={3} />
       </div>
     );
   }
@@ -266,26 +289,10 @@ export function RecentQueriesTable({
                   </span>
                 </td>
                 <td className="py-2.5 pr-4">
-                  {query.isCached ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-success">
-                      <CheckCircle2 className="h-3 w-3" /> yes
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-xs text-muted">
-                      <XCircle className="h-3 w-3" /> no
-                    </span>
-                  )}
+                  <YesNoBadge value={query.isCached} mutedNo />
                 </td>
                 <td className="py-2.5 pr-4">
-                  {query.isGrounded ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-success">
-                      <CheckCircle2 className="h-3 w-3" /> yes
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-xs text-warning">
-                      <XCircle className="h-3 w-3" /> no
-                    </span>
-                  )}
+                  <YesNoBadge value={query.isGrounded} mutedNo={false} />
                 </td>
                 <td className="max-w-[140px] py-2.5 pr-4">
                   <span

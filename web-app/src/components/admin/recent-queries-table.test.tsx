@@ -25,7 +25,9 @@ function baseQueryDetail(data: unknown) {
   return { data, isLoading: false, error: null };
 }
 
-const row = {
+import type { RecentQueryRow } from "./recent-queries-table";
+
+const row: RecentQueryRow = {
   id: "q1",
   conversationId: "c1",
   query: "Test query",

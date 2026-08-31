@@ -1,6 +1,4 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { appRouter } from "@/server/trpc/router";
-import type { Context } from "@/server/trpc/context";
 
 vi.mock("@/server/db", () => ({
   prisma: {
@@ -20,20 +18,13 @@ vi.mock("@/server/db", () => ({
 
 import { prisma } from "@/server/db";
 import type { MockPrisma } from "../helpers/mock-prisma";
+import { makeGuestCaller } from "../helpers/caller";
 
 const prismaMock = prisma as unknown as MockPrisma & {
   documentParentChunk: { count: ReturnType<typeof vi.fn> };
 };
 
-function makeCaller(ctxOverrides: Partial<Context> = {}) {
-  return appRouter.createCaller({
-    db: prismaMock as never,
-    session: null,
-    headers: new Headers(),
-    resHeaders: new Headers(),
-    ...ctxOverrides,
-  } as unknown as Context);
-}
+const makeCaller = (guestId?: string) => makeGuestCaller(prismaMock, guestId);
 
 describe("public router", () => {
   beforeEach(() => {
@@ -46,7 +37,7 @@ describe("public router", () => {
   });
 
   it("guestStatus: reports true when a guestId is present in context", async () => {
-    const result = await makeCaller({ guestId: "test-guest-123" }).public.guestStatus();
+    const result = await makeCaller("test-guest-123").public.guestStatus();
     expect(result).toEqual({ hasGuest: true });
   });
 

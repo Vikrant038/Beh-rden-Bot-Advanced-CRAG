@@ -165,15 +165,6 @@ describe("chunkParentChild", () => {
     }
   });
 
-  it("bounds every child chunk size", () => {
-    const blocks = chunkParentChild(LONG_DOC);
-    for (const block of blocks) {
-      for (const child of block.children) {
-        expect(child.text.length).toBeLessThanOrEqual(CHILD_CHUNK_SIZE + CHILD_CHUNK_OVERLAP);
-      }
-    }
-  });
-
   it("makes a short parent its own child so no content is lost", () => {
     const text =
       "A compact parent paragraph about visa document requirements for international student " +

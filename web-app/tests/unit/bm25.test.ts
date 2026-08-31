@@ -1,9 +1,6 @@
 import { BM25Okapi, buildBm25, defaultTokenizer } from "@/server/rag/retrieval/bm25";
 import type { Chunk } from "@/server/rag/types";
-
-function makeChunk(id: string, text: string, sourceName = "doc"): Chunk {
-  return { id, sourceName, sourceUrl: `https://example.com/${sourceName}`, text };
-}
+import { makeChunk } from "../helpers/chunk";
 
 describe("BM25Okapi", () => {
   it("should score keyword overlap correctly", () => {

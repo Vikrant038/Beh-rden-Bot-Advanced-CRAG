@@ -36,6 +36,41 @@ export interface MemoryLike {
   clear(): Promise<void>;
 }
 
+/**
+ * Builds a stage array for a short-circuit path (cache hit / blocked):
+ * stages before `executedThrough` run, the rest are skipped with 0ms.
+ */
+function shortCircuitStages(
+  names: string[],
+  stage0DurationMs: number,
+  executedThrough = 0,
+): PipelineStage[] {
+  return names.map((name, index) => ({
+    index,
+    name,
+    durationMs: index === 0 ? stage0DurationMs : 0,
+    status: index <= executedThrough ? ("executed" as const) : ("skipped" as const),
+  }));
+}
+
+/** Writes one cache entry; returns the write duration. Shared by both pipelines. */
+export async function writeCacheEntry(
+  cache: SemanticCache,
+  query: string,
+  queryVector: number[],
+  answer: string,
+  sources: Source[],
+): Promise<number> {
+  const t0 = Date.now();
+  const parentDocIds = Array.from(
+    new Set(sources.map((source) => source.documentId).filter((id): id is string => Boolean(id))),
+  );
+  // Answers are always written in English (shared writer contract), so the
+  // cache records "en" as the answer language regardless of the query language.
+  await cache.addToCache(query, queryVector, { answer, sources }, parentDocIds, "en");
+  return Date.now() - t0;
+}
+
 export interface AgenticRagOptions {
   hybridRetriever: HybridRetriever;
   cache: SemanticCache;
@@ -53,9 +88,7 @@ export interface AgenticRagOptions {
 
 /** Per-stage timing recorded for the pipeline tracer. */
 export interface PipelineStage {
-  /** Stage index 0-3. */
   index: number;
-  /** Short display name. */
   name: string;
   durationMs: number;
   /** "executed" | "skipped" — short-circuit paths mark later stages skipped. */
@@ -97,6 +130,14 @@ function withStageZero(
   return { ...response, maskedQuery, guardrail };
 }
 
+/** Stage names for the agentic 4-stage trace, in execution order. */
+const AGENTIC_STAGE_NAMES = [
+  "Query disambiguation & guardrail",
+  "Research agent (ReAct)",
+  "Analyst (comparison matrix)",
+  "Writer (markdown synthesis)",
+];
+
 /**
  * Builds the 4-stage timing array. Short-circuit paths (cache hit / blocked)
  * mark downstream stages as skipped with 0ms so the trace stays honest.
@@ -105,17 +146,11 @@ function buildStages(
   durations: [number, number, number, number],
   executedThrough: 0 | 1 | 2 | 3,
 ): PipelineStage[] {
-  const names = [
-    "Query disambiguation & guardrail",
-    "Research agent (ReAct)",
-    "Analyst (comparison matrix)",
-    "Writer (markdown synthesis)",
-  ];
-  return names.map((name, index) => ({
+  return AGENTIC_STAGE_NAMES.map((name, index) => ({
     index,
     name,
     durationMs: index <= executedThrough ? durations[index] : 0,
-    status: index <= executedThrough ? "executed" : "skipped",
+    status: index <= executedThrough ? ("executed" as const) : ("skipped" as const),
   }));
 }
 
@@ -225,7 +260,7 @@ export async function runAgenticRag(
           retrievalTelemetry: undefined,
           toolCalls: [],
           totalLatencyMs: Date.now() - startTime,
-          stages: buildStages([Date.now() - stage0Start, 0, 0, 0], 0),
+          stages: shortCircuitStages(AGENTIC_STAGE_NAMES, Date.now() - stage0Start),
           llmCalls: collector.calls,
           totalCostUsd: collector.totalCostUsd,
           agentCosts: aggregateAgentCosts(collector.calls),
@@ -287,7 +322,7 @@ export async function runAgenticRag(
           retrievalTelemetry: undefined,
           toolCalls: [],
           totalLatencyMs: Date.now() - startTime,
-          stages: buildStages([Date.now() - stage0Start, 0, 0, 0], 0),
+          stages: shortCircuitStages(AGENTIC_STAGE_NAMES, Date.now() - stage0Start),
           llmCalls: collector.calls,
           totalCostUsd: collector.totalCostUsd,
           agentCosts: aggregateAgentCosts(collector.calls),
@@ -323,7 +358,6 @@ export async function runAgenticRag(
     for (const call of research.toolCalls) {
       onEvent?.({ type: "tool_call", telemetry: call, timestamp: Date.now() });
     }
-
     const stage1Duration = Date.now() - stage1Start;
     onEvent?.({
       type: "agent_end",
@@ -370,42 +404,26 @@ export async function runAgenticRag(
     let cacheWriteDurationMs = 0;
     let cacheWritten = false;
     if (!bypassCache && queryVector) {
-      const t_cacheWriteStart = Date.now();
-      const parentDocIds = Array.from(
-        new Set(
-          research.sources
-            .map((source) => source.documentId)
-            .filter((id): id is string => Boolean(id)),
-        ),
-      );
-      // Answers are always written in English (enforced by the shared writer
-      // prompt), so the cache records "en" as the answer language regardless
-      // of the query language. The canonical-English dual-write still lets
-      // German and English re-asks of the same question converge on one answer.
-      const ANSWER_LANGUAGE = "en";
-      await cache.addToCache(
+      cacheWriteDurationMs = await writeCacheEntry(
+        cache,
         maskedQuery,
         queryVector,
-        { answer: finalAnswer, sources: research.sources },
-        parentDocIds,
-        ANSWER_LANGUAGE,
+        finalAnswer,
+        research.sources,
       );
       // Also cache under the canonical English form so future German and
       // English re-asks of the same question converge on this answer. Skipped
-      // for English-only asks: the canonical English form IS the query itself
-      // (guaranteed by `expansion?.language !== "en"`), so writing a second
-      // key would duplicate the row for a reworded/truncated canonical with
-      // zero convergence benefit.
+      // for English-only asks: the canonical English form IS the query itself,
+      // so writing a second key would duplicate the row with zero benefit.
       if (englishQueryVector && expansion?.language !== "en") {
-        await cache.addToCache(
+        cacheWriteDurationMs += await writeCacheEntry(
+          cache,
           englishCanonical,
           englishQueryVector,
-          { answer: finalAnswer, sources: research.sources },
-          parentDocIds,
-          ANSWER_LANGUAGE,
+          finalAnswer,
+          research.sources,
         );
       }
-      cacheWriteDurationMs = Date.now() - t_cacheWriteStart;
       cacheWritten = true;
     }
     const t_memoryStart = Date.now();

@@ -19,6 +19,7 @@ import { api } from "@/lib/trpc/client";
 import { formatRelativeTime } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { RadioGroup } from "@/components/ui/radio-group";
 import { useToast } from "@/lib/toast";
 
 interface SourceListItem {
@@ -35,6 +36,10 @@ type ViewMode = "list" | "grid";
 
 function documentType(url: string): "pdf" | "web" {
   return url.startsWith("pdf://") || /\.pdf($|\?)/i.test(url) ? "pdf" : "web";
+}
+
+function typeIcon(type: "pdf" | "web") {
+  return type === "pdf" ? FileText : Globe;
 }
 
 function highlightMatches(text: string, terms: string): React.ReactNode {
@@ -64,6 +69,10 @@ async function copyText(text: string): Promise<boolean> {
     return false;
   }
 }
+
+/** Shared stepper-button styling for the document and chunk chevrons. */
+const STEP_BUTTON =
+  "grid min-h-11 min-w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40";
 
 /**
  * 8.11 — Honest relevance score for a chunk against the active within-document
@@ -133,42 +142,36 @@ export function SourceBrowser() {
   );
 
   const selectedIndex = selected ? items.findIndex((item) => item.id === selected.id) : -1;
-  const lastSynced = useMemo(() => {
-    const docs = documents.data ?? [];
-    if (docs.length === 0) return null;
-    let maxMs = 0;
-    let latestIso = "";
-    for (const doc of docs) {
-      const ms = new Date(doc.updatedAt).getTime();
-      if (ms > maxMs) {
-        maxMs = ms;
-        latestIso = doc.updatedAt;
-      }
-    }
-    return latestIso || null;
-  }, [documents.data]);
+  // ISO timestamps compare lexically, so max() picks the most recent sync.
+  const lastSynced = useMemo(
+    () =>
+      (documents.data ?? []).reduce<string | null>(
+        (latest, document) =>
+          !latest || document.updatedAt > latest ? document.updatedAt : latest,
+        null,
+      ),
+    [documents.data],
+  );
   const totalChunks = documents.data?.reduce((sum, doc) => sum + doc.chunkCount, 0) ?? 0;
 
-  const allChunks = chunks.data?.pages.flatMap((page) => page.items) ?? [];
-  const visibleChunks = allChunks.filter((chunk) =>
-    chunk.text.toLowerCase().includes(chunkSearch.trim().toLowerCase()),
+  const allChunks = useMemo(
+    () => chunks.data?.pages.flatMap((page) => page.items) ?? [],
+    [chunks.data],
   );
-  const chunkNavigator = useChunkNavigator(visibleChunks.length);
-  // Keep the navigator in bounds when search/filtering shrinks the list.
-  useEffect(() => {
-    if (chunkNavigator.index > Math.max(0, visibleChunks.length - 1)) {
-      chunkNavigator.select(Math.max(0, visibleChunks.length - 1));
-    }
-  }, [visibleChunks.length, chunkNavigator]);
-
   const scoredChunks = useMemo(
     () =>
-      visibleChunks.map((chunk) => ({
-        chunk,
-        score: chunkRelevanceScore(chunk.text, chunkSearch),
-      })),
-    [visibleChunks, chunkSearch],
+      allChunks
+        .filter((chunk) => chunk.text.toLowerCase().includes(chunkSearch.trim().toLowerCase()))
+        .map((chunk) => ({ chunk, score: chunkRelevanceScore(chunk.text, chunkSearch) })),
+    [allChunks, chunkSearch],
   );
+  const chunkNavigator = useChunkNavigator(scoredChunks.length);
+  // Keep the navigator in bounds when search/filtering shrinks the list.
+  useEffect(() => {
+    if (chunkNavigator.index > Math.max(0, scoredChunks.length - 1)) {
+      chunkNavigator.select(Math.max(0, scoredChunks.length - 1));
+    }
+  }, [scoredChunks.length, chunkNavigator]);
 
   const refresh = () => {
     void utils.source.list.invalidate();
@@ -180,21 +183,24 @@ export function SourceBrowser() {
     setSelected(next);
   };
 
-  const handleCopyUrl = async (url: string) => {
-    const ok = await copyText(url);
-    toast({
-      title: ok ? "URL copied" : "Could not copy URL",
-      variant: ok ? "success" : "error",
-    });
+  const copyWithToast = async (text: string, copied: string, failed: string) => {
+    const ok = await copyText(text);
+    toast({ title: ok ? copied : failed, variant: ok ? "success" : "error" });
   };
 
-  const handleCopyChunk = async (text: string) => {
-    const ok = await copyText(text);
-    toast({
-      title: ok ? "Chunk copied" : "Could not copy chunk",
-      variant: ok ? "success" : "error",
-    });
+  /** Step to an adjacent chunk, smooth-scrolling to it in list view. */
+  const goToChunk = (nextIndex: number) => {
+    chunkNavigator.clamp(nextIndex);
+    if (chunkViewMode !== "list") {
+      return;
+    }
+    const clamped = Math.min(Math.max(0, nextIndex), Math.max(0, scoredChunks.length - 1));
+    document
+      .getElementById(`chunk-item-${scoredChunks[clamped]?.chunk.id}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   };
+
+  const selectedType = selected ? documentType(selected.url) : null;
 
   return (
     <div className="space-y-4">
@@ -212,63 +218,27 @@ export function SourceBrowser() {
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-          <div
-            role="radiogroup"
-            aria-label="Filter by document type"
-            className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-border bg-surface p-1"
-          >
-            {(["all", "pdf", "web"] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                role="radio"
-                aria-checked={typeFilter === option}
-                onClick={() => setTypeFilter(option)}
-                className={`grid min-h-11 place-items-center rounded-lg px-3 py-1.5 text-xs capitalize transition focus-visible:ring-2 focus-visible:ring-primary ${
-                  typeFilter === option
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted hover:bg-surface-hover hover:text-foreground"
-                }`}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
+          <RadioGroup
+            label="Filter by document type"
+            value={typeFilter}
+            onValueChange={setTypeFilter}
+            buttonClassName="min-h-11 px-3 py-1.5 capitalize"
+            options={(["all", "pdf", "web"] as const).map((option) => ({
+              value: option,
+              label: option,
+            }))}
+          />
 
-          <div
-            role="radiogroup"
-            aria-label="View mode"
-            className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-border bg-surface p-1"
-          >
-            <button
-              type="button"
-              role="radio"
-              aria-checked={view === "list"}
-              onClick={() => setView("list")}
-              aria-label="List view"
-              className={`grid min-h-11 place-items-center rounded-lg p-2 transition ${
-                view === "list"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted hover:text-foreground"
-              }`}
-            >
-              <List className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={view === "grid"}
-              onClick={() => setView("grid")}
-              aria-label="Grid view"
-              className={`grid min-h-11 place-items-center rounded-lg p-2 transition ${
-                view === "grid"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted hover:text-foreground"
-              }`}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-          </div>
+          <RadioGroup
+            label="View mode"
+            value={view}
+            onValueChange={setView}
+            buttonClassName="min-h-11 p-2"
+            options={[
+              { value: "list", label: <List className="h-4 w-4" />, ariaLabel: "List view" },
+              { value: "grid", label: <LayoutGrid className="h-4 w-4" />, ariaLabel: "Grid view" },
+            ]}
+          />
 
           <button
             type="button"
@@ -291,10 +261,8 @@ export function SourceBrowser() {
       <div className="grid gap-6 md:grid-cols-[minmax(0,340px)_1fr]">
         <div className="space-y-3">
           {documents.isLoading ? (
-            <div className="space-y-2 px-1">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
+            <div className="px-1">
+              <Skeleton className="h-10 w-full" lines={3} />
             </div>
           ) : items.length === 0 ? (
             <EmptyState
@@ -322,8 +290,7 @@ export function SourceBrowser() {
           ) : view === "grid" ? (
             <div className="grid gap-2 sm:grid-cols-2">
               {items.map((document) => {
-                const type = documentType(document.url);
-                const TypeIcon = type === "pdf" ? FileText : Globe;
+                const TypeIcon = typeIcon(documentType(document.url));
                 return (
                   <button
                     key={document.id}
@@ -340,7 +307,7 @@ export function SourceBrowser() {
                       <span className="min-w-0 flex-1 truncate">{document.title}</span>
                     </span>
                     <span className="text-xs text-muted">
-                      {document.chunkCount} chunks · {type}
+                      {document.chunkCount} chunks · {documentType(document.url)}
                     </span>
                   </button>
                 );
@@ -349,8 +316,7 @@ export function SourceBrowser() {
           ) : (
             <ul className="space-y-1">
               {items.map((document) => {
-                const type = documentType(document.url);
-                const TypeIcon = type === "pdf" ? FileText : Globe;
+                const TypeIcon = typeIcon(documentType(document.url));
                 return (
                   <li key={document.id}>
                     <button
@@ -396,12 +362,12 @@ export function SourceBrowser() {
                   <div className="flex items-center gap-2">
                     <h2 className="truncate text-lg font-semibold">{selected.title}</h2>
                     <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface-hover px-2 py-0.5 text-[10px] font-medium text-muted">
-                      {documentType(selected.url) === "pdf" ? (
+                      {selectedType === "pdf" ? (
                         <FileText className="h-2.5 w-2.5" />
                       ) : (
                         <Globe className="h-2.5 w-2.5" />
                       )}
-                      {documentType(selected.url)}
+                      {selectedType}
                     </span>
                   </div>
                   <p className="mt-1 truncate text-xs text-muted">
@@ -409,7 +375,9 @@ export function SourceBrowser() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => void handleCopyUrl(selected.url)}
+                    onClick={() =>
+                      void copyWithToast(selected.url, "URL copied", "Could not copy URL")
+                    }
                     className="mt-1 inline-flex max-w-full items-center gap-1 truncate text-xs text-accent underline-offset-2 hover:underline"
                     title="Copy source URL"
                   >
@@ -418,32 +386,25 @@ export function SourceBrowser() {
                   </button>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (selectedIndex > 0 && items[selectedIndex - 1]) {
-                        goToDocument(items[selectedIndex - 1].id);
-                      }
-                    }}
-                    disabled={selectedIndex <= 0}
-                    aria-label="Previous document"
-                    className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (selectedIndex >= 0 && items[selectedIndex + 1]) {
-                        goToDocument(items[selectedIndex + 1].id);
-                      }
-                    }}
-                    disabled={selectedIndex < 0 || selectedIndex >= items.length - 1}
-                    aria-label="Next document"
-                    className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
+                  {([-1, 1] as const).map((delta) => {
+                    const target = selectedIndex >= 0 ? items[selectedIndex + delta] : undefined;
+                    return (
+                      <button
+                        key={delta}
+                        type="button"
+                        onClick={() => target && goToDocument(target.id)}
+                        disabled={!target}
+                        aria-label={delta < 0 ? "Previous document" : "Next document"}
+                        className={STEP_BUTTON}
+                      >
+                        {delta < 0 ? (
+                          <ChevronLeft className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -459,47 +420,21 @@ export function SourceBrowser() {
                     className="w-full rounded-xl border border-border bg-background py-2 pl-8 pr-3 text-sm outline-none transition placeholder:text-muted focus:border-primary"
                   />
                 </div>
-                <div
-                  role="radiogroup"
-                  aria-label="Chunk view mode"
-                  className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-border bg-surface p-1"
-                >
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={chunkViewMode === "list"}
-                    onClick={() => setChunkViewMode("list")}
-                    className={`rounded-lg px-2.5 py-1.5 text-xs transition ${
-                      chunkViewMode === "list"
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted hover:bg-surface-hover hover:text-foreground"
-                    }`}
-                  >
-                    List
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={chunkViewMode === "paginated"}
-                    onClick={() => setChunkViewMode("paginated")}
-                    className={`rounded-lg px-2.5 py-1.5 text-xs transition ${
-                      chunkViewMode === "paginated"
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted hover:bg-surface-hover hover:text-foreground"
-                    }`}
-                  >
-                    Paginated
-                  </button>
-                </div>
+                <RadioGroup
+                  label="Chunk view mode"
+                  value={chunkViewMode}
+                  onValueChange={setChunkViewMode}
+                  buttonClassName="px-2.5 py-1.5"
+                  options={[
+                    { value: "list", label: "List" },
+                    { value: "paginated", label: "Paginated" },
+                  ]}
+                />
               </div>
 
               {chunks.isLoading ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-20 w-full" />
-                  <Skeleton className="h-20 w-full" />
-                  <Skeleton className="h-20 w-full" />
-                </div>
-              ) : visibleChunks.length === 0 ? (
+                <Skeleton className="h-20 w-full" lines={3} />
+              ) : scoredChunks.length === 0 ? (
                 <EmptyState
                   title={chunkSearch ? "No matching chunks" : "No chunks"}
                   description={
@@ -535,7 +470,13 @@ export function SourceBrowser() {
                             </p>
                             <button
                               type="button"
-                              onClick={() => void handleCopyChunk(chunk.text)}
+                              onClick={() =>
+                                void copyWithToast(
+                                  chunk.text,
+                                  "Chunk copied",
+                                  "Could not copy chunk",
+                                )
+                              }
                               aria-label={`Copy chunk #${chunk.id}`}
                               className="shrink-0 rounded-lg p-2 text-muted opacity-100 transition hover:bg-surface-hover hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                             >
@@ -572,45 +513,26 @@ export function SourceBrowser() {
                         Chunk {chunkNavigator.index + 1} of {scoredChunks.length}
                       </p>
                       <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const nextIndex = chunkNavigator.index - 1;
-                            chunkNavigator.clamp(nextIndex);
-                            if (chunkViewMode === "list" && scoredChunks[Math.max(0, nextIndex)]) {
-                              const el = document.getElementById(
-                                `chunk-item-${scoredChunks[Math.max(0, nextIndex)].chunk.id}`,
-                              );
-                              el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                        {([-1, 1] as const).map((delta) => (
+                          <button
+                            key={delta}
+                            type="button"
+                            onClick={() => goToChunk(chunkNavigator.index + delta)}
+                            disabled={
+                              delta < 0
+                                ? chunkNavigator.index <= 0
+                                : chunkNavigator.index >= scoredChunks.length - 1
                             }
-                          }}
-                          disabled={chunkNavigator.index <= 0}
-                          aria-label="Previous chunk"
-                          className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const nextIndex = chunkNavigator.index + 1;
-                            chunkNavigator.clamp(nextIndex);
-                            if (
-                              chunkViewMode === "list" &&
-                              scoredChunks[Math.min(scoredChunks.length - 1, nextIndex)]
-                            ) {
-                              const el = document.getElementById(
-                                `chunk-item-${scoredChunks[Math.min(scoredChunks.length - 1, nextIndex)].chunk.id}`,
-                              );
-                              el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-                            }
-                          }}
-                          disabled={chunkNavigator.index >= scoredChunks.length - 1}
-                          aria-label="Next chunk"
-                          className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border text-muted transition hover:bg-surface-hover disabled:opacity-40"
-                        >
-                          <ChevronRight className="h-4 w-4" />
-                        </button>
+                            aria-label={delta < 0 ? "Previous chunk" : "Next chunk"}
+                            className={STEP_BUTTON}
+                          >
+                            {delta < 0 ? (
+                              <ChevronLeft className="h-4 w-4" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
+                          </button>
+                        ))}
                       </div>
                     </div>
                   ) : null}

@@ -1,6 +1,15 @@
 # WEB_APP_PLAN.md
 ## Behörden-Bot Web — Greenfield Full-Stack Architecture & Implementation Plan
 
+> **HISTORICAL (pre-build RFC, kept for lineage).** This is the original
+> user-approved plan the web app was built from. Its open questions were all
+> answered and several technology choices were superseded — the recorded
+> deltas (tRPC over REST, Cloudflare-worker embeddings over HF
+> Inference/Transformers.js, BGE-M3 1024-d over BGE-base 768-d) live in
+> [`web-app/docs/ROADMAP.md`](../web-app/docs/ROADMAP.md), which is the
+> authoritative plan-of-record. Section references from the phase status docs
+> still resolve here.
+
 > **Scope:** Build a production-grade modern web application from scratch that reimplements the core business logic of the existing Behörden-Bot (Repo-2) Python/Streamlit codebase. The original repository is **never modified**. This plan covers every architectural decision, technology choice, schema design, route map, and implementation phase.
 
 ---

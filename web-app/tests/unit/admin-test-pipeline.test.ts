@@ -1,6 +1,4 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { appRouter } from "@/server/trpc/router";
-import type { Context } from "@/server/trpc/context";
 
 vi.mock("@/server/db", () => ({
   prisma: {
@@ -45,24 +43,13 @@ vi.mock("@/server/rag/instance", () => ({
 
 import { prisma } from "@/server/db";
 import type { MockPrisma } from "../helpers/mock-prisma";
+import { makeUserCaller } from "../helpers/caller";
 import type { AgenticRagResponse } from "@/server/rag/agents/orchestrator";
 import { formatDebugError } from "@/server/routers/admin";
 
 const prismaMock = prisma as unknown as MockPrisma;
 
-function makeCaller(role: "USER" | "ADMIN" = "ADMIN") {
-  // isAuthenticated reads role + block status fresh from the DB.
-  prismaMock.user.findUnique.mockResolvedValue({ role, blockedAt: null } as never);
-  return appRouter.createCaller({
-    db: prismaMock as never,
-    session: {
-      user: { id: "user-1", role, name: "Test", email: "test@example.com" },
-      expires: "2099-01-01T00:00:00.000Z",
-    },
-    headers: new Headers(),
-    resHeaders: new Headers(),
-  } as unknown as Context);
-}
+const makeCaller = (role: "USER" | "ADMIN" = "ADMIN") => makeUserCaller(prismaMock, role);
 
 function fullTrace(): AgenticRagResponse {
   return {

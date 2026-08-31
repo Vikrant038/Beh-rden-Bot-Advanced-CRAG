@@ -20,11 +20,7 @@ export function TopQuestions({ queries, loading }: TopQuestionsProps) {
       <p className="mb-4 text-xs text-muted">Most-asked user questions in the selected period</p>
 
       {loading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-4 w-full" />
-        </div>
+        <Skeleton className="h-4 w-full" lines={3} />
       ) : queries.length === 0 ? (
         <p className="py-4 text-sm text-muted">No queries recorded yet.</p>
       ) : (

@@ -5,7 +5,7 @@ The production-quality gate for the **TypeScript** RAG pipeline. It runs a
 uses — guardrail → English-first query expansion → hybrid retrieval
 (pgvector dense + Postgres FTS sparse → RRF → cross-encoder rerank) → CRAG
 confidence gate → grounded LLM generation — and scores every answer on the
-same four axes the original Python eval (`tests/eval_ragas_30.py`) measured.
+same four axes the original Python eval (`mvp-python/tests/eval_ragas.py`) measured.
 
 This is the successor to the Python/Streamlit-era eval: it exercises the
 pipeline that actually ships, not the MVP.

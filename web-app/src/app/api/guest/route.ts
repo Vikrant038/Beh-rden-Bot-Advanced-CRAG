@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/server/auth";
 import { createGuestCookieValue, createGuestId, readGuestIdFromRequest } from "@/server/guest";
-import { GUEST_COOKIE, GUEST_MAX_AGE_SECONDS } from "@/lib/guest";
+import { GUEST_COOKIE, GUEST_MAX_AGE_SECONDS } from "@/config/app";
 
 export const runtime = "nodejs";
 
+/** Same attributes the signed cookie is verified against in src/server/guest.ts. */
 const COOKIE_OPTIONS = {
   httpOnly: true,
   sameSite: "lax" as const,
   secure: process.env.NODE_ENV === "production",
   path: "/",
-};
+} as const;
 
 /**
  * Guest admission (3.10): issues a signed device-scoped guest cookie.

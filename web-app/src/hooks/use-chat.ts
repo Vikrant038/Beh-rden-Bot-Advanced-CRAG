@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/trpc/client";
 import type { ChatMessage, ChatMode, ChatStreamEvent, PipelineStage } from "@/lib/chat/types";
 import { mapChatStageToPipeline } from "@/lib/chat/types";
-import { GUEST_LIMIT_REACHED_CODE } from "@/lib/guest";
+import { GUEST_LIMIT_REACHED_CODE } from "@/config/app";
 
 export const STREAMING_ID = "__streaming__";
 
@@ -43,6 +43,24 @@ export interface UseChatReturn {
 function nowIso(): string {
   return new Date().toISOString();
 }
+
+/** Maps the streaming placeholder (or no-ops when absent). */
+function updateStreaming(
+  messages: ChatMessage[],
+  transform: (message: ChatMessage) => ChatMessage,
+): ChatMessage[] {
+  return messages.map((message) => (message.id === STREAMING_ID ? transform(message) : message));
+}
+
+/** Clears the streaming placeholder's tokens (retry restart / error reset). */
+const clearStreamingContent = (prev: ChatMessage[]) =>
+  updateStreaming(prev, (message) => ({ ...message, content: "" }));
+
+/** Drops the trailing assistant message so regenerate can stream a new one. */
+const dropLastAssistant = (prev: ChatMessage[]) => {
+  const index = prev.findLastIndex((message) => message.role === "ASSISTANT");
+  return index === -1 ? prev : prev.toSpliced(index, 1);
+};
 
 /**
  * Returns true for errors that are worth retrying automatically:
@@ -158,11 +176,10 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
           break;
         case "token":
           setMessages((prev) =>
-            prev.map((message) =>
-              message.id === STREAMING_ID
-                ? { ...message, content: message.content + event.content }
-                : message,
-            ),
+            updateStreaming(prev, (message) => ({
+              ...message,
+              content: message.content + event.content,
+            })),
           );
           break;
         case "disambiguation":
@@ -188,18 +205,14 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
           break;
         case "done":
           setMessages((prev) =>
-            prev.map((message) =>
-              message.id === STREAMING_ID
-                ? {
-                    id: event.messageId,
-                    role: "ASSISTANT",
-                    content: message.content,
-                    sources: event.sources,
-                    metadata: event.metadata,
-                    createdAt: nowIso(),
-                  }
-                : message,
-            ),
+            updateStreaming(prev, (message) => ({
+              id: event.messageId,
+              role: "ASSISTANT",
+              content: message.content,
+              sources: event.sources,
+              metadata: event.metadata,
+              createdAt: nowIso(),
+            })),
           );
           setStatus("done");
           break;
@@ -208,11 +221,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
           // The server follows an `error` event with the same text as `token`
           // chunks, so clear the bubble here rather than writing the message in —
           // otherwise the apology is appended onto itself and shown twice.
-          setMessages((prev) =>
-            prev.map((message) =>
-              message.id === STREAMING_ID ? { ...message, content: "" } : message,
-            ),
-          );
+          setMessages(clearStreamingContent);
           break;
       }
     },
@@ -349,11 +358,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
           listRefreshedRef.current = false;
           // Reset the streaming placeholder content between retries so tokens
           // don't double-accumulate if a partial stream succeeded then failed.
-          setMessages((prev) =>
-            prev.map((message) =>
-              message.id === STREAMING_ID ? { ...message, content: "" } : message,
-            ),
-          );
+          setMessages(clearStreamingContent);
           await sleep(RETRY_BACKOFF_MS * attempt);
         }
 
@@ -380,11 +385,10 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
           lastErr.code === GUEST_LIMIT_REACHED_CODE;
         setError(message);
         setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === STREAMING_ID
-              ? { ...msg, content: limitHit ? message : "Streaming request failed." }
-              : msg,
-          ),
+          updateStreaming(prev, (msg) => ({
+            ...msg,
+            content: limitHit ? message : "Streaming request failed.",
+          })),
         );
       } else {
         setError(null);
@@ -413,16 +417,7 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
         return;
       }
 
-      setMessages((prev) => {
-        const next = [...prev];
-        for (let i = next.length - 1; i >= 0; i -= 1) {
-          if (next[i].role === "ASSISTANT") {
-            next.splice(i, 1);
-            break;
-          }
-        }
-        return next;
-      });
+      setMessages(dropLastAssistant);
 
       const lastUser = messages.filter((message) => message.role === "USER").at(-1);
       const effectiveMode = mode ?? lastUser?.metadata?.mode ?? "agentic";
@@ -458,11 +453,11 @@ export function useChat({ conversationId }: UseChatOptions): UseChatReturn {
     // Detach the streaming placeholder so the tokens received so far stay
     // visible for this session.
     setMessages((prev) =>
-      prev.map((message) =>
-        message.id === STREAMING_ID
-          ? { ...message, id: `stopped-${Date.now()}`, createdAt: nowIso() }
-          : message,
-      ),
+      updateStreaming(prev, (message) => ({
+        ...message,
+        id: `stopped-${Date.now()}`,
+        createdAt: nowIso(),
+      })),
     );
 
     setStatus("done");

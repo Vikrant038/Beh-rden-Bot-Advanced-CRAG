@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { api } from "@/lib/trpc/client";
-import { GUEST_PROMPT_LIMIT } from "@/lib/guest";
+import { GUEST_PROMPT_LIMIT } from "@/config/app";
 
 const BENEFITS = [
   { icon: Bookmark, text: "Save conversations" },

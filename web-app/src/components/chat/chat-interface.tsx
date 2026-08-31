@@ -53,6 +53,7 @@ const DEFAULT_FOLLOW_UPS = [
   "How do I get health insurance for Germany?",
 ];
 
+/** Group separator shown between messages of different days (Today/Yesterday/date). */
 function dayLabel(iso: string): string {
   const date = new Date(iso);
   const today = new Date();

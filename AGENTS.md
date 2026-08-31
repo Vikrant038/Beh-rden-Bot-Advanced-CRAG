@@ -37,7 +37,7 @@ Repo-2/
 │   ├── app.py / api.py             #   Streamlit UI / FastAPI+SSE backend
 │   ├── src/                        #   rag.py · agentic_rag.py · advanced_retrieval.py
 │   │                               #   finetune_embeddings.py · retrieval/embed/ingest
-│   ├── tests/                      #   pytest suite + eval_ragas_30.py (30-question eval)
+│   ├── tests/                      #   pytest suite + eval_ragas.py (quality eval)
 │   ├── scripts/                    #   embed-server (BGE-M3), launch helpers
 │   ├── models/                     #   Fine-tuned BGE embedding model (gitignored)
 │   ├── data/                       #   Python-side corpus artifacts (gitignored)
@@ -76,7 +76,6 @@ Local embedding/rerank during development (speak the exact production contracts)
 
 ```bash
 .venv/bin/python mvp-python/scripts/embed-server.py  # BGE-M3 on :8765
-.venv/bin/python scratch/rerank-server.py            # bge-reranker on :8766
 ```
 
 ### Quality gates (all enforced in CI)
@@ -153,7 +152,7 @@ Research/reference implementation; paths below are relative to `mvp-python/`.
 ```bash
 cd mvp-python
 ../.venv/bin/python -m pytest tests/ -x -q     # unit tests (venv lives at repo root)
-../.venv/bin/python -m tests.eval_ragas_30     # 30-question eval (resumes from checkpoint)
+../.venv/bin/python -m tests.eval_ragas       # LLM-judged quality eval
 ../.venv/bin/python src/run_comparative_benchmark.py   # Baseline vs CRAG benchmark
 ../.venv/bin/python src/finetune_embeddings.py         # MNRL + hard-negative fine-tuning
 

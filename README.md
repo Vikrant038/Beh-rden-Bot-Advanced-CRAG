@@ -259,7 +259,7 @@ The user-facing product: Next.js 15 + React 19 + tRPC + Prisma, with the **entir
 
 ### 2. `mvp-python/` — the research & evaluation reference (Python)
 
-The original Python implementation (FastAPI + Streamlit era): fine-tuned embeddings, FAISS + BM25 retrieval, the 3-Agent ReAct orchestrator, and — critically — **the RAGAS-style evaluation harness** (`mvp-python/tests/eval_ragas_30.py`) that scores a 30-question multilingual testset on faithfulness, relevance, precision, recall, and refusal safety.
+The original Python implementation (FastAPI + Streamlit era): fine-tuned embeddings, FAISS + BM25 retrieval, the 3-Agent ReAct orchestrator, and — critically — **the RAGAS-style evaluation harness** (`mvp-python/tests/eval_ragas.py`) that LLM-judges answers on faithfulness, relevance, and precision.
 
 > **Key point:** the web app does **not** call Python at runtime. The two sides share a design lineage (the TS pipeline is *ported from* the Python one, and hardening ports back) but share zero runtime code — which is exactly why each side also has its own evaluation.
 
@@ -274,7 +274,7 @@ The original Python implementation (FastAPI + Streamlit era): fine-tuned embeddi
 ┌───────────────────────────────▼─────────────────────────────┐
 │  REFERENCE & EVAL  (mvp-python/)                            │
 │  Python: ingest · fine-tune · FAISS/BM25 · 3-agent ReAct    │
-│  eval_ragas_30.py — 30-question multilingual eval           │
+│  eval_ragas.py — LLM-judged quality eval                    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -371,7 +371,7 @@ Repo-2/
 ├── mvp-python/                     # ★ Research & eval reference (Python MVP)
 │   ├── src/                        #   rag.py · agentic_rag.py · advanced_retrieval.py
 │   │                               #   finetune_embeddings.py · retrieval/embed/ingest
-│   ├── tests/                      #   pytest suite + eval_ragas_30.py (30-question eval)
+│   ├── tests/                      #   pytest suite + eval_ragas.py (quality eval)
 │   ├── scripts/                    #   embed-server, launch helpers
 │   ├── models/                     #   Fine-tuned BGE embedding model (gitignored)
 │   ├── data/                       #   Python-side corpus artifacts (gitignored)
@@ -391,8 +391,8 @@ We treat quality as a **four-layer system** — not a single test command (detai
 |---|---|---|
 | **Lint + format** | Style, unused code, secrets (Husky pre-commit + Gitleaks) | ✅ green |
 | **Typecheck** | `tsc --noEmit` across the whole app | ✅ clean |
-| **Unit + integration** | **898 tests** across 83 files (Vitest) — routers, RAG stages, components, admin pages | ✅ green |
-| **Coverage gate** | **85% coverage floor** across all 4 metrics enforced in CI (`vitest run --coverage`) | ✅ passing (Stmts: 92.9%, Branches: 85.0%, Funcs: 91.1%, Lines: 93.3%) |
+| **Unit + integration** | **840+ tests** across 82 files (Vitest) — routers, RAG stages, components, admin pages | ✅ green |
+| **Coverage gate** | **85% coverage floor** across all 4 metrics enforced in CI (`vitest run --coverage`) | ✅ passing (Stmts: 92.7%, Branches: 85.8%, Funcs: 90.8%, Lines: 92.8%) |
 | **E2E** | **7 Playwright specs** (54 tests) — chat, history, admin, landing, documents upload, pipeline tester, read-only admin view | ✅ green |
 | **Production build** | `next build` (turbopack + CSP nonce path) | ✅ succeeds |
 | **RAG evals** | RAGAS-style multilingual evaluation, both pipelines | see below |
@@ -401,7 +401,7 @@ We treat quality as a **four-layer system** — not a single test command (detai
 
 The eval harness is a **first-class product artifact**, not a script bolted on at the end:
 
-- **`mvp-python/tests/eval_ragas_30.py`** (Python reference) and **`web-app/scripts/eval-crag-webapp.ts`** (production TS pipeline) run the **same 30 questions** through both implementations.
+- **`web-app/scripts/eval-crag-webapp.ts`** (production TS pipeline) runs a **30-question multilingual testset** (`web-app/data/eval/crag_30_questions.json`); the Python reference keeps its own smaller evals (`mvp-python/tests/eval_ragas.py`).
 - **Resumable atomic checkpoint** — interrupted runs skip finished items, so Groq rate limits can no longer kill a multi-hour eval.
 - **Judge context fidelity** — the judge receives the *real* generator context (this was a bug: a truncated 5×400-char summary made perfect answers score 2.0; identical answers scored 2.0 → 5.0 once fixed).
 - **BGE-M3 + LLM-judge scoring** for answer relevance, with a bilingual judge.
@@ -457,9 +457,12 @@ pnpm dev                                      # → http://localhost:3000
 For local embedding/rerank during development, the repo ships two small servers that speak the exact contracts of the production embedding client and reranker:
 
 ```bash
-.venv/bin/python mvp-python/scripts/embed-server.py # BGE-M3 on :8765
-.venv/bin/python scratch/rerank-server.py            # bge-reranker on :8766
+.venv/bin/python mvp-python/scripts/embed-server.py # BGE-M3 on :8765 (optional local fallback)
 ```
+
+Both the embedding and reranker clients default to the Cloudflare worker
+(`RERANKER_URL`/`EMBED_TOKEN` in `web-app/.env.example`); the local servers are
+only needed to reproduce HF-style contracts offline.
 
 ### Quality commands
 
@@ -477,7 +480,7 @@ pnpm build               # production build
 
 ```bash
 cd mvp-python                              # MVP tree; the venv lives at the repo root
-../.venv/bin/python -m tests.eval_ragas_30         # 30-question eval (resumes from checkpoint)
+../.venv/bin/python -m tests.eval_ragas            # LLM-judged quality eval
 ../.venv/bin/python src/run_comparative_benchmark.py   # Baseline vs CRAG benchmark
 ../.venv/bin/python src/finetune_embeddings.py    # MNRL + hard-negative fine-tuning
 ```
@@ -497,7 +500,7 @@ The production-pipeline eval runs from `web-app/` — see `web-app/docs/EVALUATI
 | [`web-app/README.md`](web-app/README.md) | Web-app quickstart + DB role model |
 | [`web-app/docs/`](web-app/docs/) | Phase-by-phase design & status docs for the web app |
 | [`docs/`](docs/) | Project-level design + engineering docs — architecture summary, first principles, journey, testing & quality |
-| [`mvp-python/docs/`](mvp-python/docs/) | MVP (Python reference) docs — fine-tuning guide, 30-phase plan, feasibility, Postgres setup, existing-project analysis |
+| [`mvp-python/docs/`](mvp-python/docs/) | MVP (Python reference) docs — fine-tuning guide, first-time setup, Postgres/docker notes |
 
 ---
 

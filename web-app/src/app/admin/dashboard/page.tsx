@@ -8,6 +8,7 @@ import { DailyQueriesChart, CacheDonut, ModeSplitChart } from "@/components/admi
 import { RecentQueriesTable } from "@/components/admin/recent-queries-table";
 import { TopQuestions } from "@/components/admin/top-questions";
 import { FailedQueriesCard } from "@/components/admin/failed-queries-card";
+import { RadioGroup } from "@/components/ui/radio-group";
 
 const RANGES = [
   { days: 7, label: "Last 7 days" },
@@ -105,28 +106,13 @@ export default function AdminDashboardPage() {
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div
-            role="radiogroup"
-            aria-label="Dashboard time range"
-            className="inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1"
-          >
-            {RANGES.map((option) => (
-              <button
-                key={option.days}
-                type="button"
-                role="radio"
-                aria-checked={days === option.days}
-                onClick={() => setDays(option.days)}
-                className={`grid min-h-11 place-items-center rounded-lg px-3 py-1.5 text-xs transition focus-visible:ring-2 focus-visible:ring-primary ${
-                  days === option.days
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted hover:bg-surface-hover hover:text-foreground"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <RadioGroup
+            label="Dashboard time range"
+            value={days}
+            onValueChange={setDays}
+            buttonClassName="min-h-11 px-3 py-1.5"
+            options={RANGES.map((range) => ({ value: range.days, label: range.label }))}
+          />
           <button
             type="button"
             onClick={refresh}

@@ -234,7 +234,7 @@ pnpm tsx scripts/eval-crag-webapp.ts
 
 # Python reference pipeline
 cd mvp-python
-../.venv/bin/python -m tests.eval_ragas_30
+../.venv/bin/python -m tests.eval_ragas
 ```
 
 Full runbook with environment requirements and interpretation of scores:

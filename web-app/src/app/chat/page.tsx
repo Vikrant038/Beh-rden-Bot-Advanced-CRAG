@@ -11,7 +11,7 @@ import { ModeToggle } from "@/components/chat/mode-toggle";
 import { useMode } from "@/components/chat/mode-context";
 import { ChatInput } from "@/components/chat/chat-input";
 import type { ChatMode } from "@/lib/chat/types";
-import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/lib/guest";
+import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/config/app";
 
 /**
  * New-chat landing. Unlike the old eager auto-create (which spawned an empty

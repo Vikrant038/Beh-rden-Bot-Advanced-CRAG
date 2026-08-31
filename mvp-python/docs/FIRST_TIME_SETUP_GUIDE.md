@@ -22,7 +22,7 @@ Clone/navigate to the repository root directory and create the Python virtual en
 
 ```bash
 # Navigate to project root
-cd "/Users/vikranty/Documents/Project/OLD Lap Work/Repo-2"
+cd <repo-root>
 
 # Create Python 3.11+ virtual environment
 python3 -m venv .venv

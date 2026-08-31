@@ -31,6 +31,17 @@ describe("SemanticCache", () => {
   const now = new Date();
   const future = new Date(now.getTime() + 86_400_000);
 
+  /** A stored tier-1 cache row (responseJson + expiry are what checkCache reads). */
+  const tier1Row = (overrides: Record<string, unknown> = {}) => ({
+    queryHash: "abc",
+    queryText: "visa",
+    responseJson: { answer: "old", sources: [] },
+    parentDocIds: [],
+    createdAt: now,
+    expiresAt: future,
+    ...overrides,
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -43,15 +54,12 @@ describe("SemanticCache", () => {
   });
 
   it("should store and return an entry on hit", async () => {
-    mockedFindUnique.mockResolvedValue({
-      queryHash: "abc",
-      queryText: "visa",
-      responseJson: { answer: "Blocked account: 11904 EUR", sources: [] },
-      parentDocIds: [],
-      language: "en",
-      createdAt: now,
-      expiresAt: future,
-    } as never);
+    mockedFindUnique.mockResolvedValue(
+      tier1Row({
+        responseJson: { answer: "Blocked account: 11904 EUR", sources: [] },
+        language: "en",
+      }) as never,
+    );
 
     const result = await cache.checkCache("visa", makeVector());
     expect(result?.answer).toBe("Blocked account: 11904 EUR");
@@ -61,15 +69,7 @@ describe("SemanticCache", () => {
   });
 
   it("returns the stored language on a tier-1 hit with a null language", async () => {
-    mockedFindUnique.mockResolvedValue({
-      queryHash: "abc",
-      queryText: "visa",
-      responseJson: { answer: "old", sources: [] },
-      parentDocIds: [],
-      language: null,
-      createdAt: now,
-      expiresAt: future,
-    } as never);
+    mockedFindUnique.mockResolvedValue(tier1Row({ language: null }) as never);
 
     const result = await cache.checkCache("visa", makeVector());
     // Pre-migration rows have no language — the hit stays usable, just unlabeled.
@@ -100,14 +100,7 @@ describe("SemanticCache", () => {
 
   it("should return null for expired entries (TTL enforced)", async () => {
     const expired = new Date(now.getTime() - 86_400_000);
-    mockedFindUnique.mockResolvedValue({
-      queryHash: "abc",
-      queryText: "visa",
-      responseJson: { answer: "old", sources: [] },
-      parentDocIds: [],
-      createdAt: now,
-      expiresAt: expired,
-    } as never);
+    mockedFindUnique.mockResolvedValue(tier1Row({ expiresAt: expired }) as never);
 
     const result = await cache.checkCache("visa", makeVector());
     expect(result).toBeNull();
@@ -115,24 +108,8 @@ describe("SemanticCache", () => {
 
   it("should invalidate entries by parentDocIds", async () => {
     mockedFindMany.mockResolvedValue([
-      {
-        id: 1,
-        createdAt: now,
-        queryHash: "a",
-        queryText: "t",
-        responseJson: {},
-        parentDocIds: [],
-        expiresAt: future,
-      },
-      {
-        id: 2,
-        createdAt: now,
-        queryHash: "b",
-        queryText: "t",
-        responseJson: {},
-        parentDocIds: [],
-        expiresAt: future,
-      },
+      tier1Row({ id: 1, queryHash: "a" }),
+      tier1Row({ id: 2, queryHash: "b" }),
     ] as never);
     mockedDeleteMany.mockResolvedValue({ count: 2 });
 

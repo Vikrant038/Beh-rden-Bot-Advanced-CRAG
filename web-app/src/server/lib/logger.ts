@@ -41,7 +41,3 @@ export function createLogger(module: string, bindings?: LoggerBindings) {
     },
   }).child(bindings ?? {});
 }
-
-export function createRequestLogger(module: string, correlationId: string) {
-  return createLogger(module, { correlationId });
-}

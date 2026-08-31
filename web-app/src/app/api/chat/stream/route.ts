@@ -6,7 +6,7 @@ import { prisma } from "@/server/db";
 import { chatRateLimiter } from "@/server/lib/security/rate-limiter";
 import { runChatStream } from "@/server/rag/chat-pipeline";
 import { chatModeSchema } from "@/server/routers/conversation";
-import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/lib/guest";
+import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/config/app";
 import { MAX_QUERY_LENGTH } from "@/lib/chat/types";
 import { createLogger } from "@/server/lib/logger";
 import { countGuestPromptsUsed } from "@/server/lib/conversation-policy";

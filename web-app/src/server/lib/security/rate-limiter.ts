@@ -114,6 +114,4 @@ export class RateLimiter {
   }
 }
 
-export const authRateLimiter = new RateLimiter(5, 15 * 60);
-export const publicRateLimiter = new RateLimiter(100, 15 * 60);
 export const chatRateLimiter = new RateLimiter(60, 60);

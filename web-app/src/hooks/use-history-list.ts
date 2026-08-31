@@ -3,12 +3,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/trpc/client";
+import { inferRouterOutputs } from "@trpc/server";
+import type { AppRouter } from "@/server/trpc/router";
 import { useDebouncedValue } from "@/hooks/use-debounce";
 import { useToast } from "@/lib/toast";
 
 export type ModeFilter = "all" | "standard" | "agentic";
 export type DateRange = "all" | "7d" | "30d";
 export type SortKey = "updated" | "created" | "title";
+
+type RouterOutputs = inferRouterOutputs<AppRouter>;
+
+/** Exported for consumers (history-list); inferred from the tRPC list page shape. */
+export type ConversationItem = RouterOutputs["conversation"]["list"]["items"][number];
 
 function withinRange(iso: string, range: DateRange): boolean {
   if (range === "all") {
@@ -34,39 +41,6 @@ function downloadMarkdown(markdown: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-interface ConversationItem {
-  id: string;
-  title: string | null;
-  preview: string | null;
-  mode: "STANDARD" | "AGENTIC";
-  messageCount: number;
-  updatedAt: string;
-  createdAt: string;
-}
-
-interface Stats {
-  totalConversations: number;
-  totalMessages: number;
-  pinnedConversations: number;
-  deletedConversations: number;
-}
-
-interface PreviewConversation {
-  id: string;
-  title: string | null;
-  mode: "STANDARD" | "AGENTIC";
-  updatedAt: string;
-  messages: Array<{
-    id: string;
-    role: "USER" | "ASSISTANT" | "SYSTEM" | "DISAMBIGUATION";
-    createdAt: string;
-    content: string;
-    feedback?: "up" | "down" | null;
-    metadata?: { mode?: "standard" | "agentic"; [key: string]: unknown } | null;
-    sources?: Array<{ name: string; url: string; score: number; documentId?: string }>;
-  }>;
-  readOnly: boolean;
-}
 interface UseHistoryListReturn {
   // State
   searchInput: string;
@@ -93,14 +67,14 @@ interface UseHistoryListReturn {
   // Data
   items: ConversationItem[];
   selectedItems: ConversationItem[];
-  stats: { isLoading: boolean; data: Stats | undefined };
+  stats: { isLoading: boolean; data: RouterOutputs["conversation"]["stats"] | undefined };
   conversations: {
     isLoading: boolean;
     isFetchingNextPage: boolean;
     hasNextPage: boolean;
     fetchNextPage: () => Promise<unknown>;
   };
-  preview: { isLoading: boolean; data: PreviewConversation | undefined };
+  preview: { isLoading: boolean; data: RouterOutputs["conversation"]["getById"] | undefined };
 
   // Mutations
   deleteMutation: { mutateAsync: (args: { id: string }) => Promise<unknown>; isPending: boolean };
@@ -367,5 +341,3 @@ export function useHistoryList(): UseHistoryListReturn {
     exportSelected,
   };
 }
-
-export type { ConversationItem, Stats, PreviewConversation };

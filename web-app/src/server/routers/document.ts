@@ -16,6 +16,16 @@ import { createLogger } from "@/server/lib/logger";
 
 const logger = createLogger("document-router");
 
+/** Deletes a document's cached answers, then busts the in-memory corpus. */
+async function invalidateDocumentCaches(ids: string[]): Promise<number> {
+  let invalidated = 0;
+  for (const id of ids) {
+    invalidated += await semanticCache.invalidateForDocument(id);
+  }
+  await getCorpusProvider().invalidate();
+  return invalidated;
+}
+
 export const documentRouter = router({
   delete: adminProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
     const document = await prisma.document.findUnique({
@@ -27,8 +37,7 @@ export const documentRouter = router({
     }
 
     await prisma.document.delete({ where: { id: input.id } });
-    const invalidated = await semanticCache.invalidateForDocument(input.id);
-    await getCorpusProvider().invalidate();
+    const invalidated = await invalidateDocumentCaches([input.id]);
 
     logger.info(
       { documentId: input.id, invalidated },
@@ -100,10 +109,7 @@ export const documentRouter = router({
 
       if (ids.length > 0) {
         await prisma.document.deleteMany({ where: { id: { in: ids } } });
-        for (const id of ids) {
-          await semanticCache.invalidateForDocument(id);
-        }
-        await getCorpusProvider().invalidate();
+        await invalidateDocumentCaches(ids);
       }
 
       logger.info({ deleted: ids.length, totalChunks }, "[DOCUMENT] bulk deleted documents");

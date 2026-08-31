@@ -1,16 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { HfReranker } from "@/server/rag/retrieval/reranker";
-import type { Chunk } from "@/server/rag/types";
-
-function makeChunk(overrides: Partial<Chunk> = {}): Chunk {
-  return {
-    id: "chunk-1",
-    sourceName: "src",
-    sourceUrl: "https://example.com",
-    text: "Some German visa text about the Aufenthaltsgesetz.",
-    ...overrides,
-  };
-}
+import { makeChunk } from "../helpers/chunk";
 
 describe("HfReranker", () => {
   beforeEach(() => {

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { RadioGroup } from "@/components/ui/radio-group";
 
 const OPTIONS = [
   { value: "light", label: "Light", icon: Sun },
@@ -50,35 +51,21 @@ export function ThemeToggle({ compact = false, className }: ThemeToggleProps) {
   }
 
   return (
-    <div
-      role="radiogroup"
-      aria-label="Theme"
-      className={cn(
-        "inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1",
-        className,
-      )}
-    >
-      {OPTIONS.map((option) => {
-        const active = mounted ? resolvedTheme === option.value : option.value === "dark";
-        return (
-          <button
-            key={option.value}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            onClick={() => setTheme(option.value)}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition focus-visible:ring-2 focus-visible:ring-primary",
-              active
-                ? "brand-gradient text-white shadow-[0_4px_14px_-4px_var(--color-primary)]"
-                : "text-muted hover:bg-surface-hover hover:text-foreground",
-            )}
-          >
+    <RadioGroup
+      label="Theme"
+      value={mounted ? (resolvedTheme === "dark" ? "dark" : "light") : "dark"}
+      onValueChange={setTheme}
+      className={className}
+      buttonClassName="px-3 py-1.5 text-sm"
+      options={OPTIONS.map((option) => ({
+        value: option.value,
+        label: (
+          <>
             <option.icon className="h-3.5 w-3.5" />
             {option.label}
-          </button>
-        );
-      })}
-    </div>
+          </>
+        ),
+      }))}
+    />
   );
 }

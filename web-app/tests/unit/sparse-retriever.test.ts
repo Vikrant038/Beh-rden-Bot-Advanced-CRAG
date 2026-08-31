@@ -3,6 +3,7 @@ import { SparseRetriever } from "@/server/rag/retrieval/sparse";
 import { buildBm25, type Bm25Search } from "@/server/rag/retrieval/bm25";
 import { vectorQueries } from "@/server/db/vector-queries";
 import type { Chunk } from "@/server/rag/types";
+import { makeChunk } from "../helpers/chunk";
 
 vi.mock("@/server/db/vector-queries", () => ({
   vectorQueries: {
@@ -16,10 +17,6 @@ vi.mock("@/server/rag/retrieval/bm25", () => ({
 
 const mockedSparseSearch = vi.mocked(vectorQueries.sparseSearch);
 const mockedBuildBm25 = vi.mocked(buildBm25);
-
-function makeChunk(id: string, text: string, sourceName = "doc"): Chunk {
-  return { id, sourceName, sourceUrl: `https://example.com/${sourceName}`, text };
-}
 
 const corpus: Chunk[] = [
   makeChunk("1", "blocked account germany"),

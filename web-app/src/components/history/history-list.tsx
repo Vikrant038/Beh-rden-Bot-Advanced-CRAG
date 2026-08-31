@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/utils";
-import { useHistoryList, type ConversationItem } from "@/hooks/use-history-list";
+import { useHistoryList, type ConversationItem, type ModeFilter } from "@/hooks/use-history-list";
 import {
   BookOpen,
   CheckSquare,
@@ -18,6 +18,7 @@ import {
   Zap,
 } from "lucide-react";
 import { SkeletonList } from "@/components/ui/skeleton";
+import { RadioGroup } from "@/components/ui/radio-group";
 import {
   Dialog,
   DialogContent,
@@ -74,41 +75,26 @@ export function HistoryList() {
 
   const previewConversation = preview.data;
 
+  const statCards = [
+    { icon: MessageSquare, label: "Conversations", value: stats.data?.totalConversations },
+    { icon: MessagesSquare, label: "Messages", value: stats.data?.totalMessages },
+    { icon: Pin, label: "Pinned", value: stats.data?.pinnedConversations },
+    { icon: Trash2, label: "Deleted", value: stats.data?.deletedConversations },
+  ];
+
   return (
     <div className="mt-6">
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-border bg-surface p-3.5">
-          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
-            <MessageSquare className="h-3.5 w-3.5" /> Conversations
-          </p>
-          <p className="mt-1 text-lg font-semibold tabular-nums sm:text-xl">
-            {stats.isLoading ? "…" : (stats.data?.totalConversations ?? 0)}
-          </p>
-        </div>
-        <div className="rounded-xl border border-border bg-surface p-3.5">
-          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
-            <MessagesSquare className="h-3.5 w-3.5" /> Messages
-          </p>
-          <p className="mt-1 text-lg font-semibold tabular-nums sm:text-xl">
-            {stats.isLoading ? "…" : (stats.data?.totalMessages ?? 0)}
-          </p>
-        </div>
-        <div className="rounded-xl border border-border bg-surface p-3.5">
-          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
-            <Pin className="h-3.5 w-3.5" /> Pinned
-          </p>
-          <p className="mt-1 text-lg font-semibold tabular-nums sm:text-xl">
-            {stats.isLoading ? "…" : (stats.data?.pinnedConversations ?? 0)}
-          </p>
-        </div>
-        <div className="rounded-xl border border-border bg-surface p-3.5">
-          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
-            <Trash2 className="h-3.5 w-3.5" /> Deleted
-          </p>
-          <p className="mt-1 text-lg font-semibold tabular-nums sm:text-xl">
-            {stats.isLoading ? "…" : (stats.data?.deletedConversations ?? 0)}
-          </p>
-        </div>
+        {statCards.map(({ icon: Icon, label, value }) => (
+          <div key={label} className="rounded-xl border border-border bg-surface p-3.5">
+            <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
+              <Icon className="h-3.5 w-3.5" /> {label}
+            </p>
+            <p className="mt-1 text-lg font-semibold tabular-nums sm:text-xl">
+              {stats.isLoading ? "…" : (value ?? 0)}
+            </p>
+          </div>
+        ))}
       </div>
 
       <div className="space-y-3">
@@ -125,29 +111,17 @@ export function HistoryList() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div
-            role="radiogroup"
-            aria-label="Filter by engine mode"
-            className="inline-flex w-full items-center gap-1 rounded-xl border border-border bg-surface p-1 sm:w-auto"
-          >
-            {MODE_FILTERS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                role="radio"
-                aria-checked={modeFilter === option.value}
-                onClick={() => setModeFilter(option.value)}
-                className={cn(
-                  "grid min-h-11 flex-1 place-items-center rounded-lg px-3 py-1.5 text-xs transition focus-visible:ring-2 focus-visible:ring-primary sm:flex-none",
-                  modeFilter === option.value
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted hover:bg-surface-hover hover:text-foreground",
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <RadioGroup
+            label="Filter by engine mode"
+            value={modeFilter}
+            onValueChange={setModeFilter}
+            className="w-full sm:w-auto"
+            buttonClassName="min-h-11 flex-1 px-3 py-1.5 sm:flex-none"
+            options={MODE_FILTERS.map((option) => ({
+              value: option.value as ModeFilter,
+              label: option.label,
+            }))}
+          />
 
           <label className="sr-only" htmlFor="history-date-range">
             Date range
@@ -463,42 +437,48 @@ function ConversationListItem({
 
       {!selectMode ? (
         <div className="flex shrink-0 items-center gap-1 opacity-100 transition group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-          <button
-            type="button"
-            aria-label="Preview conversation"
-            title="Quick preview"
-            onClick={(event) => {
-              event.stopPropagation();
-              onPreview();
-            }}
-            className="grid min-h-11 min-w-11 place-items-center rounded-lg p-2 text-muted transition hover:bg-surface-hover hover:text-foreground"
-          >
-            <Eye className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            aria-label="Export conversation"
-            title="Export as Markdown"
-            onClick={(event) => {
-              event.stopPropagation();
-              onExport();
-            }}
-            className="grid min-h-11 min-w-11 place-items-center rounded-lg p-2 text-muted transition hover:bg-surface-hover hover:text-foreground"
-          >
-            <Download className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            aria-label="Delete conversation"
-            title="Delete"
-            onClick={(event) => {
-              event.stopPropagation();
-              onDelete();
-            }}
-            className="grid min-h-11 min-w-11 place-items-center rounded-lg p-2 text-muted transition hover:bg-surface-hover hover:text-destructive"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {(
+            [
+              {
+                label: "Preview conversation",
+                title: "Quick preview",
+                icon: Eye,
+                action: onPreview,
+                danger: false,
+              },
+              {
+                label: "Export conversation",
+                title: "Export as Markdown",
+                icon: Download,
+                action: onExport,
+                danger: false,
+              },
+              {
+                label: "Delete conversation",
+                title: "Delete",
+                icon: Trash2,
+                action: onDelete,
+                danger: true,
+              },
+            ] as const
+          ).map(({ label, title, icon: Icon, action, danger }) => (
+            <button
+              key={label}
+              type="button"
+              aria-label={label}
+              title={title}
+              onClick={(event) => {
+                event.stopPropagation();
+                action();
+              }}
+              className={cn(
+                "grid min-h-11 min-w-11 place-items-center rounded-lg p-2 text-muted transition hover:bg-surface-hover",
+                danger ? "hover:text-destructive" : "hover:text-foreground",
+              )}
+            >
+              <Icon className="h-4 w-4" />
+            </button>
+          ))}
         </div>
       ) : null}
     </li>

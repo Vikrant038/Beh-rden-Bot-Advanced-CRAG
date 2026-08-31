@@ -1,10 +1,7 @@
 import { PdfParseError } from "@/server/lib/errors";
 import type { PdfParseResult } from "pdf-parse/lib/pdf-parse.js";
 
-import { MAX_PDF_BYTES, ACCEPTED_MIME, MAX_PDF_PAGES } from "@/config/app";
-
-// Re-exported so files that import from pdf-parser keep working.
-export { MAX_PDF_BYTES, ACCEPTED_MIME, MAX_PDF_PAGES };
+import { MAX_PDF_PAGES } from "@/config/app";
 
 /**
  * Page-cap violations are parser-independent (a 250-page file is over the cap

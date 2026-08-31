@@ -1,6 +1,8 @@
 """
-CI/CD Quality Evaluation Suite (eval_ragas.py)
-Complies with AGENTS.md §2 & Gotcha #10, and CODING_STANDARDS.md.
+LLM-judged Quality Evaluation Suite (eval_ragas.py)
+Scores answers from the Python reference pipeline on faithfulness, relevance,
+and precision (RAGAS-style). Not CI-gated — the production gate lives in
+web-app/scripts/eval-crag-webapp.ts.
 """
 
 import os

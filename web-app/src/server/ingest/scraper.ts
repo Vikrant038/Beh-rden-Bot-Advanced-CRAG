@@ -107,9 +107,6 @@ function isRetryableStatus(status: number): boolean {
   return status === 429 || status === 403 || status >= 500;
 }
 
-/** Hard cap so a bad option value can't balloon wall time (per-attempt 20s timeout). */
-const MAX_RETRIES_CAP = 5;
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -154,10 +151,8 @@ async function fetchWithRedirectValidation(
  * immediately — retrying those would just produce the same result.
  */
 async function fetchWithTimeout(url: string, options: ScrapeOptions): Promise<Response> {
-  const maxRetries = Math.min(
-    MAX_RETRIES_CAP,
-    Math.max(0, options.maxRetries ?? SCRAPE_MAX_RETRIES),
-  );
+  // Cap retries so a bad option value can't balloon wall time (per-attempt 20s timeout).
+  const maxRetries = Math.min(5, Math.max(0, options.maxRetries ?? SCRAPE_MAX_RETRIES));
   const backoffMs = Math.max(0, options.backoffMs ?? SCRAPE_RETRY_BACKOFF_MS);
 
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
@@ -245,18 +240,12 @@ function extractBody(html: string): string {
   return match ? match[0] : html;
 }
 
+/** Non-content blocks removed before text extraction (script/style/noscript/svg/head, HTML comments, nav/footer/header/aside). */
+const NOISE_TAGS =
+  /<(script|style|noscript|svg|head|nav|footer|header|aside)\b[^>]*>[\s\S]*?<\/\1\s*[^>]*>|<!--[\s\S]*?-->/gi;
+
 function stripNoiseTags(html: string): string {
-  return html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*[^>]*>/gi, " ")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*[^>]*>/gi, " ")
-    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript\s*[^>]*>/gi, " ")
-    .replace(/<svg\b[^>]*>[\s\S]*?<\/svg\s*[^>]*>/gi, " ")
-    .replace(/<head\b[^>]*>[\s\S]*?<\/head\s*[^>]*>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<nav\b[^>]*>[\s\S]*?<\/nav\s*[^>]*>/gi, " ")
-    .replace(/<footer\b[^>]*>[\s\S]*?<\/footer\s*[^>]*>/gi, " ")
-    .replace(/<header\b[^>]*>[\s\S]*?<\/header\s*[^>]*>/gi, " ")
-    .replace(/<aside\b[^>]*>[\s\S]*?<\/aside\s*[^>]*>/gi, " ");
+  return html.replace(NOISE_TAGS, " ");
 }
 
 function stripTags(html: string): string {

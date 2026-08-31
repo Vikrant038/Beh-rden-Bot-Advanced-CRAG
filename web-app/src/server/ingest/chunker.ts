@@ -28,10 +28,7 @@ export class RecursiveChunker {
   }
 
   splitText(text: string): string[] {
-    if (!text) {
-      return [];
-    }
-    return this.recursiveSplit(text);
+    return text ? this.recursiveSplit(text) : [];
   }
 
   private recursiveSplit(text: string): string[] {
@@ -51,11 +48,7 @@ export class RecursiveChunker {
         goodSplits = [];
       }
 
-      if (separator === "") {
-        finalSplits.push(...this.recursiveSplit(piece));
-      } else {
-        finalSplits.push(...this.recursiveSplit(piece));
-      }
+      finalSplits.push(...this.recursiveSplit(piece));
     }
 
     if (goodSplits.length > 0) {

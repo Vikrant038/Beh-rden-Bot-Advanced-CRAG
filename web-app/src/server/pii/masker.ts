@@ -51,10 +51,7 @@ export interface MaskResult {
 }
 
 export function maskPii(input: string): MaskResult {
-  if (!input) {
-    return { text: input, wasPiiDetected: false };
-  }
-  if (typeof input !== "string") {
+  if (!input || typeof input !== "string") {
     return { text: input, wasPiiDetected: false };
   }
 

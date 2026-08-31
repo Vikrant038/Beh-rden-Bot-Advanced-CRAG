@@ -11,19 +11,11 @@ import type { PipelineEvent } from "@/server/rag/types";
 import { runWithTraceGen, setTraceInput } from "@/server/tracing";
 import { NotFoundError } from "@/server/lib/errors";
 import { createLogger } from "@/server/lib/logger";
-import type {
-  ChatMetadata,
-  ChatMode,
-  ChatSource,
-  ChatStage,
-  ChatStreamEvent,
-} from "@/lib/chat/types";
+import type { ChatMetadata, ChatMode, ChatSource, ChatStreamEvent } from "@/lib/chat/types";
 import { MAX_QUERY_LENGTH } from "@/lib/chat/types";
 import { WORDS_PER_CHUNK } from "@/config/app";
 
 const logger = createLogger("chat-stream");
-
-export type { ChatStage, ChatStreamEvent };
 
 export interface ChatStreamInput {
   conversationId: string;
@@ -232,15 +224,8 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
         mode,
         blocked: true,
       };
-      const persisted = await persistAssistant(
-        conversationId,
-        OUT_OF_DOMAIN_MESSAGE,
-        [],
-        blockedMetadata,
-      );
       yield { type: "status", stage: "agent_writer" };
-      yield* streamTokens(OUT_OF_DOMAIN_MESSAGE, signal);
-      yield { type: "done", messageId: persisted.id, sources: [], metadata: blockedMetadata };
+      yield* finishWithAnswer(conversationId, OUT_OF_DOMAIN_MESSAGE, [], blockedMetadata, signal);
       return;
     }
   }
@@ -317,21 +302,19 @@ async function* runChatStreamInner(input: ChatStreamInput): AsyncGenerator<ChatS
     }
   } catch (error) {
     logger.error({ error: String(error), conversationId }, "[CHAT STREAM] pipeline failed");
-    const persisted = await persistAssistant(conversationId, GENERIC_ERROR_MESSAGE, [], {
-      retrievalPath: "PIPELINE_ERROR",
-      isGrounded: false,
-      isCached: false,
-      mode,
-    });
     yield { type: "error", message: GENERIC_ERROR_MESSAGE };
-    yield { type: "status", stage: "agent_writer" };
-    yield* streamTokens(GENERIC_ERROR_MESSAGE, signal);
-    yield {
-      type: "done",
-      messageId: persisted.id,
-      sources: [],
-      metadata: { retrievalPath: "PIPELINE_ERROR", isGrounded: false, isCached: false, mode },
-    };
+    yield* finishWithAnswer(
+      conversationId,
+      GENERIC_ERROR_MESSAGE,
+      [],
+      {
+        retrievalPath: "PIPELINE_ERROR",
+        isGrounded: false,
+        isCached: false,
+        mode,
+      },
+      signal,
+    );
     return;
   }
 
@@ -389,6 +372,22 @@ async function persistAssistant(
     },
     select: { id: true },
   });
+}
+
+/**
+ * Terminal path for a pre-known answer (guardrail block / pipeline error):
+ * persists the message, streams it token-by-token, and closes with `done`.
+ */
+async function* finishWithAnswer(
+  conversationId: string,
+  content: string,
+  sources: ChatSource[],
+  metadata: ChatMetadata,
+  signal?: AbortSignal,
+): AsyncGenerator<ChatStreamEvent, void, undefined> {
+  const persisted = await persistAssistant(conversationId, content, sources, metadata);
+  yield* streamTokens(content, signal);
+  yield { type: "done", messageId: persisted.id, sources, metadata };
 }
 
 async function* streamTokens(

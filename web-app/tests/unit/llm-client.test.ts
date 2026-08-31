@@ -26,10 +26,21 @@ describe("LLM client", () => {
     vi.resetModules();
   });
 
-  it("should call Groq via OpenAI SDK and return trimmed content", async () => {
+  /** Standard Groq-success response: `content` returned trimmed. */
+  const groqOk = (content: string) =>
     mockCreate.mockResolvedValue({
-      choices: [{ message: { content: "  hello world  " } }],
+      choices: [{ message: { content } }],
     });
+  /** Groq throws; the (optional) fetch mock handles the HF fallback path. */
+  const groqDown = (fetchResponse?: object) => {
+    mockCreate.mockRejectedValue(new Error("Groq down"));
+    if (fetchResponse) {
+      globalThis.fetch = vi.fn().mockResolvedValue(fetchResponse);
+    }
+  };
+
+  it("should call Groq via OpenAI SDK and return trimmed content", async () => {
+    groqOk("  hello world  ");
 
     const { callLLM } = await import("@/server/llm/client");
     const result = await callLLM([{ role: "user", content: "hi" }]);
@@ -41,7 +52,7 @@ describe("LLM client", () => {
     mockCreate.mockResolvedValue({
       choices: [{ message: { content: "answer" } }],
       usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
-    });
+    }); // usage-bearing response stays explicit
 
     const { callLLM } = await import("@/server/llm/client");
     const { LlmUsageCollector, withLlmUsageCollector } = await import("@/server/llm/usage");
@@ -67,10 +78,7 @@ describe("LLM client", () => {
   });
 
   it("does not record usage when no collector is active", async () => {
-    mockCreate.mockResolvedValue({
-      choices: [{ message: { content: "answer" } }],
-      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-    });
+    groqOk("answer");
 
     const { callLLM } = await import("@/server/llm/client");
     await callLLM([{ role: "user", content: "hi" }]);
@@ -86,9 +94,7 @@ describe("LLM client", () => {
   });
 
   it("should fall back to HuggingFace when Groq fails", async () => {
-    mockCreate.mockRejectedValue(new Error("Groq 503"));
-    const hfResponse = { ok: true, json: async () => ({ generated_text: "hf answer" }) };
-    globalThis.fetch = vi.fn().mockResolvedValue(hfResponse);
+    groqDown({ ok: true, json: async () => ({ generated_text: "hf answer" }) });
 
     const { callLLM } = await import("@/server/llm/client");
     const result = await callLLM([{ role: "user", content: "hi" }], { maxTokens: 100 });
@@ -97,10 +103,7 @@ describe("LLM client", () => {
   }, 20000);
 
   it("should throw when both providers fail", async () => {
-    mockCreate.mockRejectedValue(new Error("Groq down"));
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValue({ ok: false, status: 500, text: async () => "err" });
+    groqDown({ ok: false, status: 500, text: async () => "err" });
 
     const { callLLM } = await import("@/server/llm/client");
     await expect(callLLM([{ role: "user", content: "hi" }])).rejects.toThrow(
@@ -109,7 +112,7 @@ describe("LLM client", () => {
   }, 20000);
 
   it("should throw HF raw error when HF_TOKEN missing", async () => {
-    mockCreate.mockRejectedValue(new Error("Groq down"));
+    groqDown();
     delete process.env.HF_TOKEN;
 
     const { callLLM } = await import("@/server/llm/client");
@@ -137,8 +140,9 @@ describe("LLM client", () => {
 
   it("callLLMStream should fall back to non-streamed when Groq unavailable", async () => {
     delete process.env.GROQ_API_KEY;
-    const hfResponse = { ok: true, json: async () => ({ generated_text: "fallback" }) };
-    globalThis.fetch = vi.fn().mockResolvedValue(hfResponse);
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ generated_text: "fallback" }) });
 
     const { callLLMStream } = await import("@/server/llm/client");
     const parts: string[] = [];
@@ -149,8 +153,7 @@ describe("LLM client", () => {
   }, 20000);
 
   it("handles a HuggingFace array response shape", async () => {
-    mockCreate.mockRejectedValue(new Error("Groq down"));
-    globalThis.fetch = vi.fn().mockResolvedValue({
+    groqDown({
       ok: true,
       headers: new Headers(),
       json: async () => [{ generated_text: "first" }, { generated_text: "second" }],
@@ -162,8 +165,7 @@ describe("LLM client", () => {
   }, 20000);
 
   it("fails when HuggingFace returns an empty completion", async () => {
-    mockCreate.mockRejectedValue(new Error("Groq down"));
-    globalThis.fetch = vi.fn().mockResolvedValue({
+    groqDown({
       ok: true,
       headers: new Headers(),
       json: async () => ({ generated_text: "" }),
@@ -176,8 +178,7 @@ describe("LLM client", () => {
   }, 20000);
 
   it("prefers the X-Usage header token counts from HuggingFace", async () => {
-    mockCreate.mockRejectedValue(new Error("Groq down"));
-    globalThis.fetch = vi.fn().mockResolvedValue({
+    groqDown({
       ok: true,
       headers: new Headers({ "x-usage": JSON.stringify({ input_tokens: 50, output_tokens: 20 }) }),
       json: async () => ({ generated_text: "hf answer" }),
@@ -188,8 +189,7 @@ describe("LLM client", () => {
   }, 20000);
 
   it("ignores a malformed X-Usage header and keeps the estimate", async () => {
-    mockCreate.mockRejectedValue(new Error("Groq down"));
-    globalThis.fetch = vi.fn().mockResolvedValue({
+    groqDown({
       ok: true,
       headers: new Headers({ "x-usage": "not-json" }),
       json: async () => ({ generated_text: "hf answer" }),
@@ -200,14 +200,10 @@ describe("LLM client", () => {
   }, 20000);
 
   it("fails when Groq returns an empty completion on every attempt", async () => {
-    mockCreate.mockResolvedValue({
-      choices: [{ message: { content: "" } }],
-    });
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 500,
-      text: async () => "err",
-    });
+    groqOk("");
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: false, status: 500, text: async () => "err" });
 
     const { callLLM } = await import("@/server/llm/client");
     await expect(callLLM([{ role: "user", content: "hi" }])).rejects.toThrow(
@@ -236,8 +232,7 @@ describe("LLM client", () => {
   });
 
   it("callLLMStream falls back to non-streamed when Groq streaming fails before the first token", async () => {
-    mockCreate.mockRejectedValue(new Error("stream setup failed"));
-    globalThis.fetch = vi.fn().mockResolvedValue({
+    groqDown({
       ok: true,
       headers: new Headers(),
       json: async () => ({ generated_text: "fallback" }),

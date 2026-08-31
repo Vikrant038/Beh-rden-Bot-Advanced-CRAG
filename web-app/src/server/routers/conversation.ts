@@ -6,7 +6,7 @@ import { GuestLimitReachedError, NotFoundError } from "@/server/lib/errors";
 import { createLogger } from "@/server/lib/logger";
 import type { AuthedUser } from "@/server/trpc/t";
 import type { ChatMessage, ChatSource } from "@/lib/chat/types";
-import { GUEST_PROMPT_LIMIT } from "@/lib/guest";
+import { GUEST_PROMPT_LIMIT } from "@/config/app";
 import {
   countGuestPromptsUsed,
   ensureConversationOwnership,
@@ -47,6 +47,16 @@ function parseSourcesJson(value: unknown): ChatSource[] {
 
 export const chatModeSchema = z.enum(["standard", "agentic"]);
 
+/** Wire mode ("standard" | "agentic") to the Conversation.mode DB enum. */
+function toDbMode(mode: "standard" | "agentic"): "STANDARD" | "AGENTIC" {
+  return mode === "standard" ? "STANDARD" : "AGENTIC";
+}
+
+/** Insensitive title-search fragment shared by list / clearAll / count. */
+function titleFilter(search: string): Prisma.ConversationWhereInput {
+  return { title: { contains: search, mode: Prisma.QueryMode.insensitive } };
+}
+
 const paginationSchema = z.object({
   cursor: z.object({ updatedAt: z.coerce.date(), id: z.string() }).optional(),
   limit: z.number().int().min(1).max(100).default(20),
@@ -55,16 +65,6 @@ const paginationSchema = z.object({
   includeDeleted: z.boolean().default(false),
   pinnedOnly: z.boolean().default(false),
 });
-
-export interface ConversationListItem {
-  id: string;
-  title: string | null;
-  mode: "STANDARD" | "AGENTIC";
-  updatedAt: Date;
-  createdAt: Date;
-  preview: string;
-  messageCount: number;
-}
 
 export interface ConversationWithMessages {
   id: string;
@@ -138,7 +138,7 @@ export const conversationRouter = router({
         data: {
           userId: user.id,
           title: input.title?.trim() || "New conversation",
-          mode: input.mode === "standard" ? "STANDARD" : "AGENTIC",
+          mode: toDbMode(input.mode),
         },
         select: { id: true, title: true, mode: true, createdAt: true, updatedAt: true },
       });
@@ -153,10 +153,8 @@ export const conversationRouter = router({
       userId: user.id,
       deletedAt: input.includeDeleted ? { not: null } : null,
       ...(input.pinnedOnly ? { pinned: true } : {}),
-      ...(input.search
-        ? { title: { contains: input.search, mode: Prisma.QueryMode.insensitive } }
-        : {}),
-      ...(input.mode ? { mode: input.mode === "standard" ? "STANDARD" : "AGENTIC" } : {}),
+      ...(input.search ? titleFilter(input.search) : {}),
+      ...(input.mode ? { mode: toDbMode(input.mode) } : {}),
       ...(input.cursor
         ? {
             OR: [
@@ -325,10 +323,8 @@ export const conversationRouter = router({
         userId: user.id,
         deletedAt: null,
         ...(input?.ids ? { id: { in: input.ids } } : {}),
-        ...(input?.search
-          ? { title: { contains: input.search, mode: Prisma.QueryMode.insensitive } }
-          : {}),
-        ...(input?.mode ? { mode: input.mode === "standard" ? "STANDARD" : "AGENTIC" } : {}),
+        ...(input?.search ? titleFilter(input.search) : {}),
+        ...(input?.mode ? { mode: toDbMode(input.mode) } : {}),
       };
       const result = await prisma.conversation.updateMany({
         where,
@@ -456,10 +452,8 @@ export const conversationRouter = router({
           userId: user.id,
           deletedAt: null,
           ...(input?.pinnedOnly ? { pinned: true } : {}),
-          ...(input?.search
-            ? { title: { contains: input.search, mode: Prisma.QueryMode.insensitive } }
-            : {}),
-          ...(input?.mode ? { mode: input.mode === "standard" ? "STANDARD" : "AGENTIC" } : {}),
+          ...(input?.search ? titleFilter(input.search) : {}),
+          ...(input?.mode ? { mode: toDbMode(input.mode) } : {}),
         },
       });
       return { count };

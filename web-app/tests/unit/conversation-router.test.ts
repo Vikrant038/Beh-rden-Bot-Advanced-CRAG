@@ -1,6 +1,4 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { appRouter } from "@/server/trpc/router";
-import type { Context } from "@/server/trpc/context";
 
 vi.mock("@/server/db", () => ({
   prisma: {
@@ -29,38 +27,14 @@ vi.mock("@/server/db", () => ({
 
 import { prisma } from "@/server/db";
 import type { MockPrisma } from "../helpers/mock-prisma";
+import { makeGuestCaller as makeGuestCallerOf, makeUserCaller } from "../helpers/caller";
 import { GuestLimitReachedError } from "@/server/lib/errors";
-import { GUEST_PROMPT_LIMIT } from "@/lib/guest";
+import { GUEST_PROMPT_LIMIT } from "@/config/app";
 
 const prismaMock = prisma as unknown as MockPrisma;
 
-function makeCaller(role: "USER" | "ADMIN" = "USER") {
-  // isAuthenticated reads role + block status fresh from the DB.
-  prismaMock.user.findUnique.mockResolvedValue({ role, blockedAt: null } as never);
-  return appRouter.createCaller({
-    db: prismaMock as never,
-    session: {
-      user: { id: "user-1", role, name: "Test", email: "test@example.com" },
-      expires: "2099-01-01T00:00:00.000Z",
-    },
-    headers: new Headers(),
-    resHeaders: new Headers(),
-  } as unknown as Context);
-}
-
-/**
- * A caller that goes through the guest admission path (no session, signed
- * device cookie). `isAuthenticated` lazily provisions the guest User row.
- */
-function makeGuestCaller(guestId = "guest-1") {
-  return appRouter.createCaller({
-    db: prismaMock as never,
-    session: null,
-    guestId,
-    headers: new Headers(),
-    resHeaders: new Headers(),
-  } as unknown as Context);
-}
+const makeCaller = (role: "USER" | "ADMIN" = "USER") => makeUserCaller(prismaMock, role);
+const makeGuestCaller = (guestId = "guest-1") => makeGuestCallerOf(prismaMock, guestId);
 
 const ownerConversation = {
   id: "conv-1",

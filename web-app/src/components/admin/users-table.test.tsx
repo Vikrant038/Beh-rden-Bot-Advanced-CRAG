@@ -27,17 +27,9 @@ vi.mock("@/lib/toast", () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));
 
-interface UserRow {
-  id: string;
-  name: string | null;
-  email: string;
-  role: "USER" | "ADMIN";
-  createdAt: string;
-  conversationCount: number;
-  blockedAt: string | null;
-}
+import type { AdminUserRow } from "./users-table";
 
-function makeUser(overrides: Partial<UserRow> = {}): UserRow {
+function makeUser(overrides: Partial<AdminUserRow> = {}): AdminUserRow {
   return {
     id: "u1",
     name: "Alice",

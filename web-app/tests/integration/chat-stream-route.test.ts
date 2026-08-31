@@ -30,7 +30,7 @@ vi.mock("@/server/db", () => ({
 }));
 
 import { POST } from "@/app/api/chat/stream/route";
-import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/lib/guest";
+import { GUEST_LIMIT_REACHED_CODE, GUEST_PROMPT_LIMIT } from "@/config/app";
 
 const session = {
   user: { id: "user-1", role: "USER" },

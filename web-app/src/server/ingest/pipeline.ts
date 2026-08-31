@@ -32,7 +32,6 @@ import { createDefaultEmbeddingClient, type EmbeddingClient } from "@/server/emb
 import { toVectorLiteral } from "@/server/db/vector-queries";
 import { semanticCache } from "@/server/rag/cache/semantic-cache";
 import { getCorpusProvider } from "@/server/rag/instance";
-import { ExternalApiError } from "@/server/lib/errors";
 import { runWithTrace } from "@/server/tracing";
 import { createLogger } from "@/server/lib/logger";
 import { translateToEnglish, type TranslationRateLimiter } from "@/server/ingest/translate";
@@ -655,5 +654,3 @@ export class IngestQueue {
     }
   }
 }
-
-export { ExternalApiError };

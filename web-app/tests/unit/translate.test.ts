@@ -84,6 +84,20 @@ describe("splitIntoChunks", () => {
   });
 });
 
+/** Clears the segment's on-disk checkpoint so the API call is actually exercised. */
+const clearSegmentCache = (text: string): void =>
+  rmSync(
+    join(
+      process.cwd(),
+      "data",
+      "translation-cache",
+      `${createHash("sha256").update(text).digest("hex")}.json`,
+    ),
+    {
+      force: true,
+    },
+  );
+
 const PRIMARY = {
   model: "openai/gpt-oss-120b",
   rpm: 1000,
@@ -338,10 +352,7 @@ describe("translateToEnglish parallel dedupe", () => {
     const germanText = "Die Aufenthaltserlaubnis ist eine Aufenthaltsgenehmigung für Studierende.";
     // Remove any checkpoint-cache entry from a previous run so the API call
     // is actually exercised (the cache would short-circuit the spy).
-    const segmentHash = createHash("sha256").update(germanText).digest("hex");
-    rmSync(join(process.cwd(), "data", "translation-cache", `${segmentHash}.json`), {
-      force: true,
-    });
+    clearSegmentCache(germanText);
 
     const [r1, r2] = await Promise.all([
       translateToEnglish(germanText, limiter),
@@ -377,10 +388,7 @@ describe("translateToEnglish parallel dedupe", () => {
     } as never);
 
     const germanText = "Die Aufenthaltserlaubnis ist eine Aufenthaltsgenehmigung für Studierende.";
-    const segmentHash = createHash("sha256").update(germanText).digest("hex");
-    rmSync(join(process.cwd(), "data", "translation-cache", `${segmentHash}.json`), {
-      force: true,
-    });
+    clearSegmentCache(germanText);
 
     const result = await translateToEnglish(germanText, pool);
     expect(result.englishText).toBe("Translated by fallback.");
@@ -403,10 +411,7 @@ describe("translateToEnglish parallel dedupe", () => {
     } as never);
 
     const germanText = "Die Anmeldung muss bei der Meldebehörde erfolgen.";
-    const segmentHash = createHash("sha256").update(germanText).digest("hex");
-    rmSync(join(process.cwd(), "data", "translation-cache", `${segmentHash}.json`), {
-      force: true,
-    });
+    clearSegmentCache(germanText);
 
     // A transient error is surfaced to the caller (which falls back to the
     // original text) — the chain must NOT burn the next model's budget on it.
@@ -434,10 +439,7 @@ describe("translateToEnglish parallel dedupe", () => {
     } as never);
 
     const germanText = "Die Aufenthaltserlaubnis wird für das Studium benötigt.";
-    const segmentHash = createHash("sha256").update(germanText).digest("hex");
-    rmSync(join(process.cwd(), "data", "translation-cache", `${segmentHash}.json`), {
-      force: true,
-    });
+    clearSegmentCache(germanText);
 
     const result = await translateToEnglish(germanText, pool);
     expect(result.englishText).toBe("Translated by fallback.");
@@ -447,8 +449,7 @@ describe("translateToEnglish parallel dedupe", () => {
     // A second call must skip the primary entirely (its budget is marked spent)
     // and go straight to the fallback.
     const germanText2 = "Die Anmeldung muss bei der Meldebehörde erfolgen.";
-    const hash2 = createHash("sha256").update(germanText2).digest("hex");
-    rmSync(join(process.cwd(), "data", "translation-cache", `${hash2}.json`), { force: true });
+    clearSegmentCache(germanText2);
     const second = await translateToEnglish(germanText2, pool);
     expect(second.englishText).toBe("Translated by fallback.");
     expect(primary.client.chat.completions.create).toHaveBeenCalledTimes(1);

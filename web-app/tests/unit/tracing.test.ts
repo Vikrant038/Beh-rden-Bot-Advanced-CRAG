@@ -19,20 +19,6 @@ vi.mock("@/server/env", () => ({
 const traceSpies = vi.hoisted(() => ({ trace: vi.fn(), flush: vi.fn() }));
 
 vi.mock("langfuse", () => {
-  class FakeSpan {
-    end = vi.fn();
-    update = vi.fn();
-  }
-  class FakeGeneration {
-    end = vi.fn();
-    update = vi.fn();
-  }
-  class FakeTrace {
-    span = vi.fn(() => new FakeSpan());
-    generation = vi.fn(() => new FakeGeneration());
-    update = vi.fn();
-  }
-  void FakeTrace;
   class FakeLangfuse {
     trace = traceSpies.trace;
     flushAsync = traceSpies.flush;

@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/lib/toast";
 import { formatRelativeTime } from "@/lib/utils";
 
-interface AdminUserRow {
+export interface AdminUserRow {
   id: string;
   name: string | null;
   email: string;
@@ -59,11 +59,7 @@ export function UsersTable({ users, loading }: UsersTableProps) {
     return (
       <div className="rounded-2xl border border-border bg-surface p-5">
         <h3 className="text-sm font-semibold">User accounts</h3>
-        <div className="mt-4 space-y-3">
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-        </div>
+        <Skeleton className="mt-4 h-8 w-full" lines={3} />
       </div>
     );
   }

@@ -12,7 +12,8 @@ vi.mock("pdfjs-dist/legacy/build/pdf.js", () => ({
   getDocument: (...args: unknown[]) => mockPdfJsGetDocument(...args),
 }));
 
-import { parsePdf, MAX_PDF_BYTES, MAX_PDF_PAGES, ACCEPTED_MIME } from "@/server/ingest/pdf-parser";
+import { parsePdf } from "@/server/ingest/pdf-parser";
+import { MAX_PDF_BYTES, MAX_PDF_PAGES, ACCEPTED_MIME } from "@/config/app";
 
 function validResult(overrides: Record<string, unknown> = {}) {
   return {
