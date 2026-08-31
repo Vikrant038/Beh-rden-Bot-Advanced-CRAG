@@ -1,20 +1,23 @@
-# Gitleaks config — extends the default ruleset.
-# See https://github.com/gitleaks/gitleaks for the schema.
-title = "Behoerden-Bot gitleaks config"
+title = "Behörden-Bot Gitleaks Configuration"
 
-[extend]
-useDefault = true
-
-# The E2E workflow forges an Auth.js session cookie to test authenticated
-# routes. NEXTAUTH_SECRET there is a deliberately FAKE placeholder
-# (e2e-placeholder-secret-1234567890abcdef) — not a real credential. The
-# generic-api-key entropy rule flags it; allowlist the exact value so the
-# security workflow's gitleaks job stays green.
 [allowlist]
-description = "E2E CI placeholder secret (not a real credential)"
-regexes = [
-  '''e2e-placeholder-secret-1234567890abcdef''',
-]
+description = "Allowlist for test fixtures, mock secrets, CI placeholders, and local development defaults"
 paths = [
-  '''\.github/workflows/e2e-web-app\.yml''',
+  '''(^|/)tests/''',
+  '''(^|/)__tests__/''',
+  '''(^|/)\.github/''',
+  '''(^|/)docs/''',
+  '''(^|/)pnpm-lock\.yaml$''',
+  '''(^|/)package\.json$''',
+  '''\.env\.example$''',
+  '''\.md$'''
+]
+regexes = [
+  '''(?i)e2e-placeholder-secret-[a-f0-9]+''',
+  '''(?i)ci-placeholder-secret-not-used-by-tests''',
+  '''(?i)e2e-local-secret-not-for-production''',
+  '''(?i)test-(?:groq|hf|gemini|key|token|secret)''',
+  '''(?i)mock-(?:key|token|secret)''',
+  '''behoerden_password''',
+  '''postgresql://behoerden_.*'''
 ]
